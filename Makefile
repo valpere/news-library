@@ -1,6 +1,6 @@
 .PHONY: check spec-check
 
-check: spec-check test
+check: spec-check build test
 	python3 scripts/check_project.py
 
 spec-check:
@@ -11,3 +11,11 @@ spec-check:
 test:
 	go test -race ./...
 	go vet ./...
+
+.PHONY: build run
+build:
+	mkdir -p build
+	go build -o build/news-library ./cmd/news-library
+
+run: build
+	./build/news-library

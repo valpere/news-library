@@ -39,5 +39,5 @@ jobs:
           persist-credentials: false
       - name: Build specification checker
         run: go build -C .build/tumanomir-src -o "$GITHUB_WORKSPACE/.build/tumanomir" ./cmd/tumanomir
-      - name: Validate preparation package offline
+      - name: Validate specification, build and application tests
         run: make check
