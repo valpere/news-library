@@ -14,14 +14,16 @@ some older proposals were superseded. Do not treat proposals as user decisions.
 
 ## Project Structure
 
-M1 and the digest part of M2 are implemented in `cmd/news-library/` and `internal/library/`: one Go
+M1 and the core M2 workflow are implemented in `cmd/news-library/` and `internal/library/`: one Go
 service, a web interface, SQLite metadata, separate immutable text/digest files,
 a shared HTTP cache, and a persistent background queue. Runtime settings live
 in private `.env`; `.env.example` documents defaults. Backup needs DB + primary files. Python
 validation and optional browser smoke live in `scripts/`; private evaluation
 scripts and pilot artifacts remain local. The upstream license is preserved.
 
-Continue with milestone M2 in `docs/BACKLOG.md`. See `docs/TRACEABILITY.md`
+See remaining M2 integration work and M3 in `docs/BACKLOG.md`.
+Rules default to empty; predictions require an explicit current interest profile.
+Digest-quality feedback must not alter human usefulness ratings. See `docs/TRACEABILITY.md`
 for passed M1 tests and requirements still awaiting M2–M4. Preserve existing
 experiments; do not publish private corpus data automatically.
 The shared tool library is documented at `~/wrk/common_codex/ONBOARDING.md`.

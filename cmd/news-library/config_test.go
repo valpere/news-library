@@ -36,3 +36,21 @@ func TestConfigPrecedenceAndPrivateErrors(t *testing.T) {
 		t.Fatal("explicit missing config silently ignored")
 	}
 }
+
+func TestM2ConfigAndRuleValidation(t *testing.T) {
+	t.Setenv("NEWS_LIBRARY_INTERESTS", "Fixture profile")
+	t.Setenv("NEWS_LIBRARY_FILTER_THRESHOLD", "0.8")
+	t.Setenv("NEWS_LIBRARY_FILTER_RULES", `[{"id":"test","reason":"test","field":"text","contains":"fixture","probability":0.9}]`)
+	c, e := readConfig([]string{"-env-file", ""})
+	if e != nil || c.Interests != "Fixture profile" || c.FilterThreshold != .8 {
+		t.Fatal("M2 config", e)
+	}
+	t.Setenv("NEWS_LIBRARY_FILTER_RULES", "private-fixture-invalid")
+	if _, e = readConfig([]string{"-env-file", ""}); e == nil || strings.Contains(e.Error(), "private-fixture-invalid") {
+		t.Fatal("rule error leaked configuration", e)
+	}
+	c, e = readConfig([]string{"-env-file", "", "-filter-rules", "[]", "-interests", ""})
+	if e != nil || c.Interests != "" {
+		t.Fatal("M2 flag override", e)
+	}
+}

@@ -10,10 +10,13 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/valpere/news-library/internal/library"
 )
 
 type config struct {
 	Data, Bind, Model, OllamaURL, OllamaKey               string
+	Interests, FilterRules                                string
+	FilterThreshold                                       float64
 	FetchTimeout, DigestTimeout, Lease, Backoff, CacheTTL time.Duration
 	Attempts, InputLimit                                  int
 	MaxBytes                                              int64
@@ -48,6 +51,7 @@ func readConfig(args []string) (config, error) {
 	// Resolve supplied values before parsing defaults: an invalid lower-priority
 	// setting must not reject a valid command-line override.
 	flagNames := map[string]string{
+		"interests": "NEWS_LIBRARY_INTERESTS", "filter-rules": "NEWS_LIBRARY_FILTER_RULES", "filter-threshold": "NEWS_LIBRARY_FILTER_THRESHOLD",
 		"data": "NEWS_LIBRARY_DATA", "bind": "NEWS_LIBRARY_BIND", "model": "OLLAMA_MODEL", "ollama-url": "OLLAMA_API_URL",
 		"fetch-timeout": "NEWS_LIBRARY_FETCH_TIMEOUT", "digest-timeout": "NEWS_LIBRARY_DIGEST_TIMEOUT", "lease": "NEWS_LIBRARY_LEASE",
 		"backoff": "NEWS_LIBRARY_BACKOFF", "cache-ttl": "NEWS_LIBRARY_CACHE_TTL", "attempts": "NEWS_LIBRARY_ATTEMPTS",
@@ -108,7 +112,12 @@ func readConfig(args []string) (config, error) {
 		}
 		return v, nil
 	}
-	c := config{Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
+	c := config{Interests: get("NEWS_LIBRARY_INTERESTS", ""), FilterRules: get("NEWS_LIBRARY_FILTER_RULES", "[]"), Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
+	var thresholdErr error
+	c.FilterThreshold, thresholdErr = strconv.ParseFloat(get("NEWS_LIBRARY_FILTER_THRESHOLD", "0.8"), 64)
+	if thresholdErr != nil {
+		return c, errors.New("некоректний NEWS_LIBRARY_FILTER_THRESHOLD")
+	}
 	for _, entry := range []struct {
 		name, value string
 		target      *time.Duration
@@ -146,6 +155,9 @@ func readConfig(args []string) (config, error) {
 	}
 	flags := flag.NewFlagSet("news-library", flag.ContinueOnError)
 	flags.StringVar(&path, "env-file", path, "локальний файл конфігурації; порожньо = без файлу")
+	flags.StringVar(&c.Interests, "interests", c.Interests, "поточні інтереси для прогнозу; порожньо = без прогнозу")
+	flags.StringVar(&c.FilterRules, "filter-rules", c.FilterRules, "JSON-масив правил відсіву")
+	flags.Float64Var(&c.FilterThreshold, "filter-threshold", c.FilterThreshold, "поріг відсіву R > T")
 	flags.StringVar(&c.Data, "data", c.Data, "каталог SQLite, текстів, дайджестів та HTTP-кешу")
 	flags.StringVar(&c.Bind, "bind", c.Bind, "loopback host:port")
 	flags.StringVar(&c.Model, "model", c.Model, "Ollama cloud модель дайджесту")
@@ -168,6 +180,12 @@ func readConfig(args []string) (config, error) {
 	}
 	if c.FetchTimeout <= 0 || c.DigestTimeout <= 0 || c.Lease < time.Second || c.Backoff <= 0 || c.CacheTTL < 0 || c.Attempts < 1 || c.Attempts > 100 || c.MaxBytes < 1024 || c.MaxBytes > 64<<20 || c.InputLimit < 1024 || c.InputLimit > 4<<20 {
 		return c, errors.New("некоректні таймаути/ліміти конфігурації")
+	}
+	if len(c.Interests) > 8000 {
+		return c, errors.New("профіль інтересів завеликий")
+	}
+	if _, e = library.NewRuleSet(c.FilterThreshold, c.FilterRules); e != nil {
+		return c, e
 	}
 	return c, nil
 }

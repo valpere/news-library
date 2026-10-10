@@ -180,19 +180,31 @@ func (o *Ollama) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, er
 	if j.InputLimit <= 0 || len(snap.Text) > j.InputLimit {
 		return Digest{}, &SourceError{Message: "текст перевищує ліміт дайджесту; весь текст збережено, збільште ліміт або подайте коротшу версію"}
 	}
-	if j.PromptVersion != DigestPromptVersion {
+	if j.PromptVersion != DigestPromptVersion && j.PromptVersion != DigestPredictionPromptVersion {
 		return Digest{}, &SourceError{Message: "версія промпту не підтримується; потрібен явний повтор із поточною конфігурацією"}
 	}
 	model, err := o.cloudAlias(ctx, j.Model)
 	if err != nil {
 		return Digest{}, err
 	}
+	system := digestSystem
+	if j.PromptVersion == DigestPredictionPromptVersion {
+		if strings.TrimSpace(j.Interests) == "" {
+			return Digest{}, &SourceError{Message: "для прогнозу потрібен профіль поточних інтересів"}
+		}
+		system = strings.Replace(system, "Поверни тільки Markdown без обгортки у code fence.", "Створи Markdown для поля markdown у JSON.", 1) + "\n\n" + predictionInstruction
+	}
 	payload := struct {
 		Model    string              `json:"model"`
 		Messages []map[string]string `json:"messages"`
 		Stream   bool                `json:"stream"`
 		Options  map[string]float64  `json:"options"`
-	}{Model: model, Messages: []map[string]string{{"role": "system", "content": digestSystem}, {"role": "user", "content": fmt.Sprintf("Назва: %s\nURL: %s\nПовнота: %s\nПопередження: %s\n\nТЕКСТ ДЖЕРЕЛА:\n%s", snap.Title, j.URL, snap.Completeness, snap.Warning, snap.Text)}}, Options: map[string]float64{"temperature": 0.3}}
+	}{Model: model, Messages: []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": fmt.Sprintf("Назва: %s\nURL: %s\nПовнота: %s\nПопередження: %s\n\nТЕКСТ ДЖЕРЕЛА:\n%s", snap.Title, j.URL, snap.Completeness, snap.Warning, snap.Text) + func() string {
+		if j.Interests != "" {
+			return "\n\nПОТОЧНІ ІНТЕРЕСИ КОРИСТУВАЧА:\n" + j.Interests
+		}
+		return ""
+	}()}}, Options: map[string]float64{"temperature": 0.3}}
 	data, _ := json.Marshal(payload)
 	body, err := o.request(ctx, "POST", o.URL, data)
 	if err != nil {
@@ -211,11 +223,18 @@ func (o *Ollama) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, er
 		return Digest{}, &SourceError{Message: "неповна або некоректна відповідь Ollama"}
 	}
 	markdown := strings.TrimSpace(response.Message.Content)
+	var prediction *InterestPrediction
+	if j.PromptVersion == DigestPredictionPromptVersion {
+		markdown, prediction, err = parsePredictedDigest(markdown, j.Interests)
+		if err != nil {
+			return Digest{}, &SourceError{Message: err.Error()}
+		}
+	}
 	if strings.HasPrefix(markdown, "```markdown\n") && strings.HasSuffix(markdown, "\n```") {
 		markdown = strings.TrimSuffix(strings.TrimPrefix(markdown, "```markdown\n"), "\n```")
 	}
 	if _, err = SplitDigest(markdown); err != nil {
 		return Digest{}, &SourceError{Message: err.Error()}
 	}
-	return Digest{Markdown: markdown, Model: j.Model, ActualModel: model, Provider: "ollama-cloud", PromptVersion: j.PromptVersion, InputTokens: response.Input, OutputTokens: response.Output}, nil
+	return Digest{Markdown: markdown, Model: j.Model, ActualModel: model, Provider: "ollama-cloud", PromptVersion: j.PromptVersion, InputTokens: response.Input, OutputTokens: response.Output, Prediction: prediction}, nil
 }

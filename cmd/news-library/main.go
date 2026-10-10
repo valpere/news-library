@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -53,13 +54,24 @@ func run() error {
 		return err
 	}
 	defer s.Close()
+	rules, err := library.NewRuleSet(c.FilterThreshold, c.FilterRules)
+	if err != nil {
+		return err
+	}
+	if err = s.ConfigureRules(rules); err != nil {
+		return err
+	}
 	var generator *library.Ollama
 	if !c.NoDigests {
 		generator, err = library.NewOllama(c.OllamaURL, c.OllamaKey, c.DigestTimeout)
 		if err != nil {
 			return err
 		}
-		if err = s.EnableDigests(library.DigestConfig{Model: c.Model, PromptVersion: library.DigestPromptVersion, MaxInputBytes: c.InputLimit}); err != nil {
+		prompt := library.DigestPromptVersion
+		if strings.TrimSpace(c.Interests) != "" {
+			prompt = library.DigestPredictionPromptVersion
+		}
+		if err = s.EnableDigests(library.DigestConfig{Model: c.Model, PromptVersion: prompt, MaxInputBytes: c.InputLimit, Interests: c.Interests}); err != nil {
 			return err
 		}
 	}

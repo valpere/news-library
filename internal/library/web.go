@@ -52,6 +52,11 @@ type pageData struct {
 	CanRetryDigest  bool
 	ExportScript    template.JS
 	ExportCSP       string
+	FilterDecisions []FilterDecision
+	Feedback        []DigestFeedback
+	Digests         []Digest
+	CanRegenerate   bool
+	DigestError     string
 	Pending         bool
 	RateWithoutText bool
 }
@@ -66,8 +71,40 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 		return nil, errors.New("invalid local UI origin")
 	}
 	funcs := template.FuncMap{
+		"probability": func(p float64) string { return strconv.FormatFloat(p, 'g', -1, 64) },
+		"percent":     func(p float64) string { return strconv.FormatFloat(p*100, 'f', 0, 64) + "%" },
+		"confidence": func(p sql.NullFloat64) string {
+			if !p.Valid {
+				return "відсутній"
+			}
+			return strconv.FormatFloat(p.Float64*100, 'f', 0, 64) + "%"
+		},
+		"filterLabel": func(v string) string {
+			switch v {
+			case "passed":
+				return "Пропущено до обробки"
+			case "rejected":
+				return "Відсіяно правилами"
+			case "overridden":
+				return "Повернуто користувачем"
+			}
+			return "Не перевірено"
+		},
+		"quality": func(v string) string {
+			switch v {
+			case "good":
+				return "Вдалий"
+			case "inaccurate":
+				return "Є помилки"
+			case "incomplete":
+				return "Пропущено важливе"
+			case "unclear":
+				return "Незрозумілий"
+			}
+			return v
+		},
 		"state": func(s string) string {
-			labels := map[string]string{"queued": "У черзі", "fetching": "Отримання тексту", "ready": "Готово", "enriching": "Створення дайджесту", "digest_retry_wait": "Очікує повтору дайджесту", "digest_failed": "Дайджест не створено", "needs_input": "Потрібен текст", "retry_wait": "Очікує повтору", "failed": "Не вдалося", "running": "Виконується", "done": "Завершено", "cancelled": "Скасовано"}
+			labels := map[string]string{"filtered": "Обробку пропущено за правилами", "queued": "У черзі", "fetching": "Отримання тексту", "ready": "Готово", "enriching": "Створення дайджесту", "digest_retry_wait": "Очікує повтору дайджесту", "digest_failed": "Дайджест не створено", "needs_input": "Потрібен текст", "retry_wait": "Очікує повтору", "failed": "Не вдалося", "running": "Виконується", "done": "Завершено", "cancelled": "Скасовано"}
 			if label, ok := labels[s]; ok {
 				return label
 			}
@@ -84,7 +121,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 			}
 			return s
 		}, "states": func() []string {
-			return []string{"queued", "fetching", "ready", "needs_input", "retry_wait", "failed", "enriching", "digest_retry_wait", "digest_failed"}
+			return []string{"queued", "fetching", "ready", "needs_input", "retry_wait", "failed", "enriching", "digest_retry_wait", "digest_failed", "filtered"}
 		}, "quickScores": func() []int { return []int{0, 1, 2} }, "date": func(raw string) string {
 			t, err := time.Parse(time.RFC3339Nano, raw)
 			if err != nil {
@@ -176,7 +213,7 @@ func (w *Web) render(rw http.ResponseWriter, name string, data pageData) {
 }
 func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := Filters{Query: q.Get("q"), Placement: q.Get("placement"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction")}
+	f := Filters{Query: q.Get("q"), Placement: q.Get("placement"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
 	for _, tag := range strings.Split(q.Get("tags"), ",") {
 		if tag = strings.TrimSpace(tag); tag != "" {
 			f.Tags = append(f.Tags, tag)
@@ -254,28 +291,67 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 	}
 	var digest *Digest
 	var sections []DigestSection
+	var digests []Digest
+	var feedback []DigestFeedback
 	if snap != nil {
 		digest, err = w.Store.DigestForSnapshot(snap.ID)
+		if raw := r.URL.Query().Get("digest"); raw != "" {
+			did, e := strconv.ParseInt(raw, 10, 64)
+			if e != nil {
+				http.Error(rw, "некоректна версія дайджесту", 400)
+				return
+			}
+			d, e := w.Store.Digest(did, id)
+			if errors.Is(e, sql.ErrNoRows) || (e == nil && d.SnapshotID != snap.ID) {
+				http.NotFound(rw, r)
+				return
+			}
+			digest = &d
+			err = e
+		}
 		if err == nil && digest != nil {
 			sections, err = SplitDigest(digest.Markdown)
+		}
+		if err == nil {
+			digests, err = w.Store.DigestsForSnapshot(snap.ID)
+		}
+		if err == nil && digest != nil {
+			feedback, err = w.Store.FeedbackHistory(id, digest.ID)
 		}
 		if err != nil {
 			http.Error(rw, "дайджест недоступний; перевірте сховище", 500)
 			return
 		}
+	} else if r.URL.Query().Get("digest") != "" {
+		http.NotFound(rw, r)
+		return
+	}
+	decisions, err := w.Store.FilterDecisions(id)
+	if err != nil {
+		http.Error(rw, "історія правил недоступна", 500)
+		return
 	}
 	pending := snap == nil && (i.State == "queued" || i.State == "fetching" || i.State == "retry_wait")
-	if snap != nil && digest == nil && w.Store.DigestConfig != nil {
+	digestError := ""
+	if snap != nil && w.Store.DigestConfig != nil {
 		for _, job := range jobs {
-			if job.Stage != "digest" {
+			if job.Stage != "digest" || job.SnapshotID.Int64 != snap.ID {
 				continue
 			}
-			if job.SnapshotID.Int64 == snap.ID && (job.State == "queued" || job.State == "running" || job.State == "retry_wait") {
+			if job.State == "queued" || job.State == "running" || job.State == "retry_wait" {
 				pending = true
+			}
+			if digestError == "" && job.State == "failed" {
+				digestError = job.Error
+			}
+			// The newest job determines whether an old regeneration error is relevant.
+			if job.State == "done" || job.State == "failed" {
+				break
 			}
 		}
 	}
-	w.render(rw, "detail", pageData{Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: snap != nil && snap.ID == i.Selected.Int64 && w.Store.DigestConfig != nil, Ratings: ratings, Jobs: jobs, Pending: pending, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
+	current := snap != nil && snap.ID == i.Selected.Int64
+	w.render(rw, "detail", pageData{Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))
@@ -310,6 +386,22 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 			err = errors.New("текст перевищує ліміт")
 		} else {
 			err = w.Store.Manual(id, text)
+		}
+	case "filter-override":
+		err = w.Store.OverrideFilter(id)
+	case "feedback":
+		did, e := strconv.ParseInt(form.Get("digest"), 10, 64)
+		if e != nil || did <= 0 {
+			err = errors.New("некоректний дайджест")
+		} else {
+			err = w.Store.Feedback(id, did, form.Get("quality"), form.Get("note"))
+		}
+	case "digest-regenerate":
+		sid, e := strconv.ParseInt(form.Get("source"), 10, 64)
+		if e != nil || sid <= 0 {
+			err = errors.New("некоректна версія тексту")
+		} else {
+			err = w.Store.RegenerateDigest(id, sid)
 		}
 	case "digest-retry":
 		err = w.Store.RetryDigest(id)
@@ -363,7 +455,14 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "зміну не збережено: "+err.Error(), 400)
 		return
 	}
-	http.Redirect(rw, r, "/items/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	target := "/items/" + strconv.FormatInt(id, 10)
+	if r.PathValue("action") == "feedback" {
+		d, e := w.Store.Digest(func() int64 { v, _ := strconv.ParseInt(form.Get("digest"), 10, 64); return v }(), id)
+		if e == nil {
+			target += "?source=" + strconv.FormatInt(d.SnapshotID, 10) + "&digest=" + strconv.FormatInt(d.ID, 10)
+		}
+	}
+	http.Redirect(rw, r, target, http.StatusSeeOther)
 }
 
 func (w *Web) exportDigest(rw http.ResponseWriter, r *http.Request) {

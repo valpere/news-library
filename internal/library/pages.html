@@ -7,9 +7,11 @@
 <label>Оцінка <input name="rating" value="{{.Filters.Rating}}" placeholder="число або unrated"></label><label>Теги (через кому) <input name="tags" value="{{range $k,$v := .Filters.Tags}}{{if $k}}, {{end}}{{$v}}{{end}}"></label>
 <label>Читання <select name="read"><option value="">Усі</option><option value="0" {{if eq .Filters.Read "0"}}selected{{end}}>Непрочитано</option><option value="1" {{if eq .Filters.Read "1"}}selected{{end}}>Прочитано</option></select></label>
 <label>Стан <select name="state"><option value="">Усі</option>{{range $v := (states)}}<option value="{{$v}}" {{if eq $.Filters.State $v}}selected{{end}}>{{state $v}}</option>{{end}}</select></label>
-<label>Сортування <select name="sort"><option value="added">Час додавання</option><option value="rating" {{if eq .Filters.Sort "rating"}}selected{{end}}>Власна оцінка</option><option value="relevance" {{if eq .Filters.Sort "relevance"}}selected{{end}}>Релевантність</option></select></label>
+<label>Правила <select name="filter"><option value="">Усі</option><option value="rejected" {{if eq .Filters.Filter "rejected"}}selected{{end}}>Відсіяне</option><option value="passed" {{if eq .Filters.Filter "passed"}}selected{{end}}>Пропущене</option><option value="overridden" {{if eq .Filters.Filter "overridden"}}selected{{end}}>Повернуте</option></select></label>
+<label>Confidence від, % <input type="number" name="confidence_min" min="0" max="100" value="{{.Filters.ConfidenceMin}}"></label><label>до, % <input type="number" name="confidence_max" min="0" max="100" value="{{.Filters.ConfidenceMax}}"></label>
+<label>Сортування <select name="sort"><option value="added">Час додавання</option><option value="rating" {{if eq .Filters.Sort "rating"}}selected{{end}}>Власна оцінка</option><option value="confidence" {{if eq .Filters.Sort "confidence"}}selected{{end}}>Confidence моделі</option><option value="relevance" {{if eq .Filters.Sort "relevance"}}selected{{end}}>Релевантність</option></select></label>
 <label>Напрямок <select name="direction"><option value="desc">Спадання</option><option value="asc" {{if eq .Filters.Direction "asc"}}selected{{end}}>Зростання</option></select></label><button>Знайти</button></form>
-{{range .Items}}<article><h2><a href="/items/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a></h2><p>{{placement .Placement}} · {{state .State}} · оцінка: {{score .Score}} · {{if .Read}}прочитано{{else}}непрочитано{{end}}</p><small>{{date .AddedAt}} · {{.Tags}}</small>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}</article>{{else}}<p>Матеріалів поки немає або жоден не відповідає фільтрам.</p>{{end}}{{template "bottom" .}}{{end}}
+{{range .Items}}<article><h2><a href="/items/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a></h2><p>{{placement .Placement}} · {{state .State}} · оцінка: {{score .Score}} · прогноз: {{confidence .Confidence}} · {{filterLabel .FilterState}} · {{if .Read}}прочитано{{else}}непрочитано{{end}}</p><small>{{date .AddedAt}} · {{.Tags}}</small>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}</article>{{else}}<p>Матеріалів поки немає або жоден не відповідає фільтрам.</p>{{end}}{{template "bottom" .}}{{end}}
 {{define "rating"}}
 <form method="post" action="/items/{{.Item.ID}}/rating"><h2>Власна оцінка користі</h2><input type="hidden" name="csrf" value="{{.CSRF}}">{{if .Selected}}<input type="hidden" name="source" value="{{.Selected.ID}}">{{end}}{{if .Digest}}<input type="hidden" name="digest" value="{{.Digest.ID}}">{{end}}<label>Невід’ємне ціле <input name="score" type="number" min="0" step="1" required></label><label>Причина <input name="reason"></label><p><label>Дата рішення (порожньо = зараз) <input name="assessed_at" type="datetime-local"></label><label><input type="checkbox" name="unknown_date" value="1"> Історична дата невідома</label></p><button>Додати оцінку</button></form>
 <div class="row">{{range $n := (quickScores)}}<form method="post" action="/items/{{$.Item.ID}}/rating"><input type="hidden" name="csrf" value="{{$.CSRF}}">{{if $.Selected}}<input type="hidden" name="source" value="{{$.Selected.ID}}">{{end}}{{if $.Digest}}<input type="hidden" name="digest" value="{{$.Digest.ID}}">{{end}}<button name="score" value="{{$n}}">Оцінити {{$n}}</button></form>{{end}}</div>
@@ -24,8 +26,11 @@
 <h2>{{if .Item.Title}}{{.Item.Title}}{{else}}{{.Item.URL}}{{end}}</h2>
 <p><a href="{{.Item.URL}}" rel="noreferrer">Відкрити джерело</a> · {{date .Item.AddedAt}}</p>
 <p>{{placement .Item.Placement}} · {{if .Item.Read}}прочитано{{else}}непрочитано{{end}} · оцінка: {{score .Item.Score}}</p>
+{{if eq .Item.FilterState "rejected"}}<article id="filter-result"><h2>Відсіяно правилами</h2><p>Генерацію пропущено. Посилання, доступний текст і власні рішення збережені.</p><form method="post" action="/items/{{.Item.ID}}/filter-override"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повернути до обробки</button></form></article>{{end}}
+{{if .FilterDecisions}}<details id="filter-history"><summary>Рішення правил</summary>{{range .FilterDecisions}}<p>#{{.ID}} · {{filterLabel .Result}} · {{date .CreatedAt}} · {{if .SnapshotID.Valid}}текст #{{.SnapshotID.Int64}}{{else}}URL{{end}}<br>R={{probability .Probability}}, поріг T={{probability .Threshold}} · версія {{.RulesVersion}}{{if .OverrideOf.Valid}} · повернення після рішення #{{.OverrideOf.Int64}}{{end}}</p>{{range .Contributions}}<p>{{.Reason}}: {{percent .Probability}} · правила {{range .RuleIDs}}{{.}} {{end}}</p>{{else}}<p>Збігів правил немає.</p>{{end}}{{end}}</details>{{end}}
 <section id="processing" data-pending="{{.Pending}}" aria-live="polite">
 {{if .Digest}}
+{{if .Pending}}<article><p id="processing-message">Оновлюється дайджест. Нижче показано збережену версію #{{.Digest.ID}}.</p><a id="processing-refresh" href="" hidden>Показати результат обробки</a></article>{{else if .DigestError}}<p class="error">Оновлення дайджесту не вдалося: {{.DigestError}}. Попередня версія збережена.</p>{{end}}
 {{template "digestContent" .}}<script src="/static/digest.js" defer></script>
 {{else if .Pending}}
 <article><h2>Посилання збережено</h2>
@@ -33,6 +38,8 @@
 {{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
 <p><a id="processing-refresh" href="" hidden>Показати результат обробки</a></p>
 <noscript><p>Щоб побачити результат, натисніть «Оновити стан».</p></noscript></article>
+{{else if eq .Item.FilterState "rejected"}}
+<p>Пояснення відсіву доступне в «Рішення правил».</p>
 {{else if .Selected}}
 <article><h2>Дайджест недоступний</h2><p>{{if .DigestEnabled}}Генерацію не завершено. Збережений текст доступний нижче.{{else}}Генерацію вимкнено в конфігурації. Збережений текст доступний нижче.{{end}}</p>{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
 {{if .CanRetryDigest}}<form method="post" action="/items/{{.Item.ID}}/digest-retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повторити генерацію дайджесту</button></form>{{end}}</article>
@@ -47,6 +54,11 @@
 <p class="muted">{{.Selected.Warning}}</p><pre>{{.Selected.Text}}</pre></details>
 {{end}}
 </section>
+{{if .Digest}}
+{{if .Digest.Prediction}}<article id="interest-prediction"><h2>Прогноз інтересу моделі · Confidence {{percent .Digest.Prediction.Probability}}</h2><p>{{.Digest.Prediction.Reason}}</p><p class="muted">Це оцінка ймовірності інтересу, без перевіреної калібровки. Власна оцінка користі зберігається окремо.</p><details><summary>Профіль на момент прогнозу</summary><pre>{{.Digest.Prediction.Profile}}</pre></details></article>{{else}}<p class="muted">Прогноз інтересу відсутній для цієї версії. Поточні інтереси можна задати в конфігурації.</p>{{end}}
+<details><summary>Якість дайджесту</summary><form method="post" action="/items/{{.Item.ID}}/feedback"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="digest" value="{{.Digest.ID}}"><label>Як передано зміст <select name="quality" required><option value="">Оберіть</option><option value="good">Вдалий</option><option value="inaccurate">Є помилки</option><option value="incomplete">Пропущено важливе</option><option value="unclear">Незрозумілий</option></select></label><label>Коментар <textarea name="note" maxlength="4000" rows="3"></textarea></label><p><button>Зберегти відгук</button></p><p class="muted">Відгук стосується дайджесту #{{.Digest.ID}} і не змінює оцінку користі матеріалу.</p></form>{{range .Feedback}}<p>{{quality .Quality}} · {{date .RecordedAt}} · дайджест #{{.DigestID}}<br>{{.Note}}</p>{{else}}<p>Відгуків ще немає.</p>{{end}}</details>
+{{if .CanRegenerate}}<form method="post" action="/items/{{.Item.ID}}/digest-regenerate"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="source" value="{{.Selected.ID}}"><button>Створити нову версію дайджесту</button><p class="muted">Використати поточну модель і профіль інтересів; попередні версії та відгуки залишаться.</p></form>{{end}}
+{{end}}
 {{if or .Digest (and .Selected (not .DigestEnabled))}}
 {{template "rating" .}}
 {{template "libraryActions" .}}
@@ -60,6 +72,7 @@
 {{if not .RateWithoutText}}<p><a href="/items/{{.Item.ID}}?rate_without_text=1">Я вже ознайомився з матеріалом — оцінити</a></p>{{end}}
 </details>
 {{end}}
+{{if .Digests}}<details><summary>Версії дайджесту ({{len .Digests}})</summary>{{range .Digests}}<p><a href="/items/{{$.Item.ID}}?source={{.SnapshotID}}&digest={{.ID}}">#{{.ID}} · {{.ActualModel}} · {{date .CreatedAt}}</a></p>{{end}}</details>{{end}}
 <details><summary>Історія оцінок ({{len .Ratings}})</summary>{{range .Ratings}}<p>#{{.ID}} · оцінка {{.Score}} · записано {{date .RecordedAt}} · рішення: {{if .AssessedAt.Valid}}{{date .AssessedAt.String}}{{else}}дата невідома{{end}} · текст: {{if .SourceVersionID.Valid}}#{{.SourceVersionID.Int64}}{{else}}невідомий{{end}} · дайджест: {{if .DigestID.Valid}}#{{.DigestID.Int64}}{{else}}невідомий{{end}}<br>{{.Reason}}</p>{{else}}<p>Власної оцінки немає.</p>{{end}}</details>
 <details><summary>Версії тексту ({{len .Snapshots}})</summary>{{range .Snapshots}}<p><a href="/items/{{$.Item.ID}}?source={{.ID}}">#{{.ID}} · {{.Origin}} · {{date .RetrievedAt}} · {{.Completeness}}</a></p>{{end}}</details>
 
