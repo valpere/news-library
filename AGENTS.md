@@ -23,7 +23,9 @@ scripts and pilot artifacts remain local. The upstream license is preserved.
 
 See remaining M2 integration work and M3 in `docs/BACKLOG.md`.
 Rules default to empty; predictions require an explicit current interest profile.
-Digest-quality feedback must not alter human usefulness ratings. See `docs/TRACEABILITY.md`
+Digest-quality feedback must not alter human usefulness ratings.
+Long sources use persisted digest checkpoints; cache cleanup must preserve
+primary texts/digests and never follow cache-directory symlinks. See `docs/TRACEABILITY.md`
 for passed M1 tests and requirements still awaiting M2–M4. Preserve existing
 experiments; do not publish private corpus data automatically.
 The shared tool library is documented at `~/wrk/common_codex/ONBOARDING.md`.

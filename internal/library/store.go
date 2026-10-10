@@ -27,6 +27,9 @@ var schemaV2 string
 //go:embed schema_v4.sql
 var schemaV4 string
 
+//go:embed schema_v5.sql
+var schemaV5 string
+
 type Store struct {
 	DB           *sql.DB
 	DigestConfig *DigestConfig
@@ -65,6 +68,7 @@ type Job struct {
 	Refresh                                    bool
 	FilterOverride                             bool
 	Interests                                  string
+	ChunkLimit, ChunkMaxParts                  int
 }
 type Filters struct {
 	Query, Placement, Rating, Read, State, Sort, Direction string
@@ -89,7 +93,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 4 {
+	if version > 5 {
 		db.Close()
 		return nil, errors.New("database schema is newer than this application")
 	}
@@ -106,6 +110,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 4 {
 			_, err = tx.Exec(schemaV4)
+		}
+		if err == nil && version < 5 {
+			_, err = tx.Exec(schemaV5)
 		}
 		if err == nil {
 			err = tx.Commit()
@@ -214,7 +221,7 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 		}
 	}
 	var j Job
-	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot,j.stage,j.snapshot_id,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests FROM jobs j JOIN items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests)
+	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot,j.stage,j.snapshot_id,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests,j.chunk_limit,j.chunk_max_parts FROM jobs j JOIN items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests, &j.ChunkLimit, &j.ChunkMaxParts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}

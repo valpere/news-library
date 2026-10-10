@@ -512,7 +512,7 @@ func (w *Web) exportDigest(rw http.ResponseWriter, r *http.Request) {
 	case "markdown":
 		rw.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		rw.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".md"}))
-		fmt.Fprintf(rw, "# %s\n\nURL: %s\n\nМодель: %s · %s\n\nТекст #%d · %s · %s\n\n%s\n", item.Title, item.URL, d.ActualModel, d.CreatedAt, snapshot.ID, snapshot.Completeness, snapshot.Warning, d.Markdown)
+		fmt.Fprintf(rw, "# %s\n\nURL: %s\n\nМодель: %s · %s\n\nТекст #%d · %s · %s · частин: %d\n\n%s\n", item.Title, item.URL, d.ActualModel, d.CreatedAt, snapshot.ID, snapshot.Completeness, snapshot.Warning, d.ChunkCount, d.Markdown)
 	case "html":
 		sections, err := SplitDigest(d.Markdown)
 		if err != nil {

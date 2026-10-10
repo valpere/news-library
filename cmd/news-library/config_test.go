@@ -54,3 +54,11 @@ func TestM2ConfigAndRuleValidation(t *testing.T) {
 		t.Fatal("M2 flag override", e)
 	}
 }
+
+func TestChunkAndCacheLimits(t *testing.T) {
+	for _, args := range [][]string{{"-chunk-max-parts", "1"}, {"-cache-max-bytes", "0"}, {"-cache-retention", "-1h"}, {"-cache-cleanup-interval", "0s"}} {
+		if _, e := readConfig(append([]string{"-env-file", ""}, args...)); e == nil {
+			t.Fatal("invalid maintenance limit accepted", args)
+		}
+	}
+}

@@ -8,7 +8,7 @@ YouTube-субтитри, ручний текст, незалежні оцінк
 FTS і фільтри. Додано дайджести Ollama cloud, окремі файли текстів та
 спільний HTTP-кеш, пояснювані правила відсіву, окремі відгуки про
 дайджести й прогноз інтересу за явно заданим профілем. Free-only fallback
-та обробка довгих текстів частинами залишаються в M2; embeddings/read API — M3; Telegram і backup tooling — M4.
+залишається опціональним кроком M2; embeddings/read API — M3; Telegram і backup tooling — M4.
 
 ## Запуск
 
@@ -47,7 +47,8 @@ make build
 | `-model` / `OLLAMA_MODEL` | `gemma4:cloud` | Лише підтверджена cloud-модель Ollama |
 | `-ollama-url` / `OLLAMA_API_URL` | `http://localhost:11434/api/chat` | Локальний cloud-шлюз; optional `OLLAMA_API_KEY` |
 | `-digest-timeout` / `NEWS_LIBRARY_DIGEST_TIMEOUT` | `300s` | Час генерації |
-| `-digest-max-bytes` / `NEWS_LIBRARY_DIGEST_MAX_BYTES` | `163840` | Ліміт тексту для одного дайджесту |
+| `-digest-max-bytes` / `NEWS_LIBRARY_DIGEST_MAX_BYTES` | `163840` | Ліміт тексту одного запиту/частини |
+| `-chunk-max-parts` / `NEWS_LIBRARY_CHUNK_MAX_PARTS` | `64` | Ліміт частин на етапі, 2..512 |
 | `-fetch-timeout` / `NEWS_LIBRARY_FETCH_TIMEOUT` | `30s` | Час отримання джерела |
 | `-max-bytes` / `NEWS_LIBRARY_MAX_BYTES` | `4194304` | Ліміт джерела та ручного тексту |
 | `-lease` / `NEWS_LIBRARY_LEASE` | `1m` | Lease з heartbeat |
@@ -56,6 +57,9 @@ make build
 | `-interests` / `NEWS_LIBRARY_INTERESTS` | порожньо | Поточні інтереси; без профілю прогноз відсутній |
 | `-filter-rules` / `NEWS_LIBRARY_FILTER_RULES` | `[]` | JSON-масив правил |
 | `-filter-threshold` / `NEWS_LIBRARY_FILTER_THRESHOLD` | `0.8` | Відсів лише при R > T |
+| `-cache-max-bytes` / `NEWS_LIBRARY_CACHE_MAX_BYTES` | `536870912` | Ліміт HTTP body files, 512 MiB |
+| `-cache-retention` / `NEWS_LIBRARY_CACHE_RETENTION` | `168h` | Збереження простроченого кешу для explicit stale |
+| `-cache-cleanup-interval` / `NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL` | `1h` | Період очищення |
 | `-cache-ttl` / `NEWS_LIBRARY_CACHE_TTL` | `24h` | Максимальний строк свіжості кешу; 0 = bypass |
 | `-no-worker` / `NEWS_LIBRARY_NO_WORKER` | `false` | Перегляд без виконання черги |
 | `-no-digests` / `NEWS_LIBRARY_NO_DIGESTS` | `false` | Отримання тексту без генерації |
@@ -68,8 +72,17 @@ make build
 fallback виключені. Адаптер перевіряє remote identity через `/api/tags`;
 назву `gemma4:31b-cloud` можна зіставити з `gemma4:cloud`, тільки якщо
 inventory підтверджує той самий remote model. Зміна моделі не переписує
-готові результати чи оцінки. Текст понад ліміт залишається цілим у сховищі;
-генерація явно відмовляє, обробка частинами ще запланована.
+готові результати чи оцінки. Довгий текст обробляється частинами з проміжними дайджестами й фінальним
+синтезом. Усі байти UTF-8 розподіляються без пропусків, у результаті видно
+кількість вихідних частин. Готові частини зберігаються у власному `digests/`
+і переживають рестарт/повтор завдання. Старі завдання з попередньою
+стратегією не перемикаються мовчки: явний retry використовує нову конфігурацію.
+Ліміт частин і вісім етапів скорочення обмежують обробку. Якщо модель не
+скорочує нотатки, відповідає завеликим дайджестом або джерело перевищує ці
+межі, помилка видима; весь доступний текст і готові частини збережені.
+Timeout генерації стосується всього завдання; його можна збільшити для
+великих матеріалів. Usage підсумовує успішні кроки; невідомий usage помилок
+не вигадується.
 
 Спільний HTTP-кеш доступний іншим локальним інструментам:
 
@@ -86,9 +99,15 @@ curl --get 'http://localhost:8787/cache' \
 не оцінюють їх і не запускають моделей. Отримання anonymous, з фіксованими
 upstream headers; `private`, `no-store`, `no-cache`, cookies та непідтримуваний Vary
 не кешуються. HTML віддається як attachment із sandbox CSP.
-TTL керує свіжістю; автоматичне звільнення диска ще не реалізоване.
+TTL керує свіжістю. Очищення виконується при запуску, за розкладом і
+після збереження нової відповіді: видаляє старий прострочений кеш, файли
+без посилань і найдавніше використані HTTP bodies понад ліміт. Спільний
+body кількох URL рахується один раз. Первинні `texts/` і `digests/`,
+оцінки та бібліотечні стани не очищуються. Відповідь понад бюджет або
+помилка запису кешу дає BYPASS; отриманий текст залишається доступним
+бібліотеці. Conditional upstream revalidation ще запланована.
 
-Міграції v1/v2/v3→v4 переносить SQL-тексти у файли, зберігаючи ID, чергу та
+Міграції v1–v4→v5 переносить SQL-тексти у файли, зберігаючи ID, чергу та
 історію оцінок. Перед оновленням зупиніть старий процес і зробіть копію
 каталогу даних. Для відновлення потрібні узгоджена SQLite-копія **та**
 `texts/` і `digests/`; кеш можна пропустити. Шляхи відносні до кореня даних.
@@ -188,7 +207,7 @@ CI збирає прилад із зафіксованого коміту. Те�
 
 Браузерний smoke (окремо, Python Playwright та Chrome):
 `python3 scripts/smoke_ui.py`, `python3 scripts/smoke_digest_ui.py` і
-`python3 scripts/smoke_m2_ui.py`. За потреби `SMOKE_CHROME=/path/to/chrome`.
+`python3 scripts/smoke_m2_ui.py` і `python3 scripts/smoke_long_digest_ui.py`. За потреби `SMOKE_CHROME=/path/to/chrome`.
 Він запускає binary у тимчасовому каталозі, перевіряє форми, текст,
 оцінки, FTS і рестарт; знімки — `build/smoke-{search,detail}.png`.
 Потребує попереднього `make build`. Другий smoke використовує fake cloud

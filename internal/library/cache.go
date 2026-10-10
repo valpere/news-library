@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -27,10 +28,13 @@ type CacheResponse struct {
 	ExpiresAt                                 int64
 }
 type HTTPCache struct {
-	Store   *Store
-	Fetcher *Fetcher
-	TTL     time.Duration
-	group   singleflight.Group
+	Store     *Store
+	Fetcher   *Fetcher
+	TTL       time.Duration
+	group     singleflight.Group
+	mu        sync.Mutex
+	MaxBytes  int64
+	Retention time.Duration
 }
 
 func (f *Fetcher) get(ctx context.Context, raw string) ([]byte, *url.URL, string, bool, error) {
@@ -123,8 +127,17 @@ func (c *HTTPCache) Get(ctx context.Context, raw string, force, allowStale bool)
 		key += "|stale"
 	}
 	result := c.group.DoChan(key, func() (any, error) {
-		cached, cachedErr := c.lookup(canonical)
-		if cachedErr == nil && !force {
+		c.mu.Lock()
+		var cached CacheResponse
+		cachedErr := c.checkCacheDirectory()
+		if cachedErr == nil {
+			cached, cachedErr = c.lookup(canonical)
+		}
+		if cachedErr == nil {
+			_, _ = c.Store.DB.Exec("UPDATE cache_entries SET last_accessed=? WHERE url=?", time.Now().UnixMilli(), canonical)
+		}
+		c.mu.Unlock()
+		if cachedErr == nil && !force && c.TTL > 0 {
 			if cached.ExpiresAt > time.Now().UnixMilli() {
 				cached.Status = "HIT"
 				return cached, nil
@@ -141,20 +154,37 @@ func (c *HTTPCache) Get(ctx context.Context, raw string, force, allowStale bool)
 		}
 		r := CacheResponse{Body: body, URL: final.String(), ContentType: kind, Partial: partial, Hash: fmt.Sprintf("%x", sha256.Sum256(body)), FetchedAt: meta.FetchedAt, Status: "MISS"}
 		lifetime := cacheLifetime(meta.Headers, c.TTL, time.Now())
-		if lifetime <= 0 || partial {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if lifetime <= 0 || partial || (c.MaxBytes > 0 && int64(len(body)) > c.MaxBytes) {
 			r.Status = "BYPASS"
 			if _, e := c.Store.DB.Exec("DELETE FROM cache_entries WHERE url=?", canonical); e != nil {
-				return CacheResponse{}, e
+				r.Status = "BYPASS"
+				return r, nil
 			}
 			return r, nil
 		}
 		r.ExpiresAt = time.Now().Add(lifetime).UnixMilli()
+		if err := c.checkCacheDirectory(); err != nil {
+			r.Status = "BYPASS"
+			return r, nil
+		}
 		path, err := c.Store.Files.Put("cache/http", body)
 		if err != nil {
-			return CacheResponse{}, err
+			r.Status = "BYPASS"
+			return r, nil
 		}
-		_, err = c.Store.DB.Exec(`INSERT INTO cache_entries(url,final_url,content_type,body_path,hash,fetched_at,expires_at,partial) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET final_url=excluded.final_url,content_type=excluded.content_type,body_path=excluded.body_path,hash=excluded.hash,fetched_at=excluded.fetched_at,expires_at=excluded.expires_at,partial=excluded.partial`, canonical, r.URL, r.ContentType, path, r.Hash, r.FetchedAt, r.ExpiresAt, partial)
-		return r, err
+		_, err = c.Store.DB.Exec(`INSERT INTO cache_entries(url,final_url,content_type,body_path,hash,fetched_at,expires_at,partial,last_accessed) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET final_url=excluded.final_url,content_type=excluded.content_type,body_path=excluded.body_path,hash=excluded.hash,fetched_at=excluded.fetched_at,expires_at=excluded.expires_at,partial=excluded.partial,last_accessed=excluded.last_accessed`, canonical, r.URL, r.ContentType, path, r.Hash, r.FetchedAt, r.ExpiresAt, partial, time.Now().UnixMilli())
+		if err != nil {
+			r.Status = "BYPASS"
+			return r, nil
+		}
+		if c.MaxBytes > 0 {
+			if _, err = c.pruneLocked(time.Now()); err != nil {
+				r.Status = "BYPASS"
+			}
+		}
+		return r, nil
 	})
 	select {
 	case <-ctx.Done():

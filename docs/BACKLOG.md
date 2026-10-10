@@ -34,9 +34,9 @@ FR-01–04, FR-09–11, FR-15–18, FR-20; ручні оцінки з FR-07.
 відсів без ШІ, явний override, cloud дайджест і optional прогноз за явно
 заданим поточним профілем, Confidence search/sort, незалежний feedback,
 версійна регенерація та історія. `.env`, файлове сховище й спільний
-HTTP-кеш також працюють. OpenRouter free fallback і chunking довгих
-текстів залишаються запланованими; без ключа резерв неактивний.
-Кеш потребує bounded cleanup і conditional upstream revalidation.
+HTTP-кеш також працюють. Bounded chunking довгих текстів із checkpoints і budgeted HTTP cache
+cleanup реалізовані. OpenRouter free fallback залишається запланованим; без ключа резерв неактивний.
+Кеш потребує conditional upstream revalidation.
 
 1. Правила з версіями, внесками та порогом; порожній набір типово
    пропускає всі записи. Ручне повернення відсіяного до обробки.

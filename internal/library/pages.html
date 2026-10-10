@@ -89,7 +89,7 @@
 
 {{define "digestContent"}}<article id="digest"><h2>Дайджест</h2>
 <p class="muted">{{.Digest.ActualModel}} · {{date .Digest.CreatedAt}} · текст #{{.Digest.SnapshotID}} · дайджест #{{.Digest.ID}}</p>
-<p>{{.Selected.Completeness}} · {{.Selected.Warning}}</p>
+<p>{{.Selected.Completeness}} · {{.Selected.Warning}}{{if gt .Digest.ChunkCount 1}} · Оброблено частинами: {{.Digest.ChunkCount}}{{end}}</p>
 <div class="row" role="tablist" aria-label="Секції дайджесту">{{range $k,$section := .Sections}}<button type="button" role="tab" id="tab-{{$k}}" aria-controls="section-{{$k}}" aria-selected="false" data-section="section-{{$k}}">{{.Title}}</button>{{end}}</div>
 {{range $k,$section := .Sections}}<section id="section-{{$k}}" role="tabpanel" aria-labelledby="tab-{{$k}}"><h3>{{.Title}}</h3>{{.HTML}}</section>{{end}}
 <p><button id="copy-digest" type="button">Копіювати Markdown</button> <span id="copy-status" role="status"></span>{{if not .ExportScript}} · <a href="/items/{{.Item.ID}}/digests/{{.Digest.ID}}/markdown">Markdown</a> · <a href="/items/{{.Item.ID}}/digests/{{.Digest.ID}}/html">HTML</a>{{end}}</p>
