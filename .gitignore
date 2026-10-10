@@ -31,3 +31,16 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Python evaluation scripts
+__pycache__/
+*.py[cod]
+.venv/
+
+# Application runtime and local credentials
+/data/
+/build/
+.env.*
+!.env.example
+/.build/
+tmp/
