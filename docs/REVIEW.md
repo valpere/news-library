@@ -9,8 +9,8 @@
 Перевірено 2026-10-10: активний ruleset
 [`prs`](https://github.com/valpere/news-library/rules/24834135) для default
 branch `main` вимагає PR, забороняє видалення та force-push. Винятків для
-обходу немає. Required approvals = 0; обов'язкових status checks поки немає.
-Локальний workflow `.github/workflows/ci.yml` і шаблон PR ще не опубліковані.
+обходу немає. Required approvals = 0; обов'язковий status check — `news-library-check`, strict; resolution увімкнено.
+Workflow `.github/workflows/ci.yml` і шаблон PR опубліковані через PR #1.
 
 ## Робочий цикл
 

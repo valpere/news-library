@@ -3,13 +3,13 @@
 Канонічні вимоги — [REQUIREMENTS.md](REQUIREMENTS.md), компоненти —
 [HLD.md](HLD.md). FR-NN нижче — коротке посилання на REQ-FR-NN.
 Кожен AT-NN означає сценарій із колонки «Як перевірити» відповідної вимоги.
-Усі AT наразі **planned**; зелений `tumanomir check` не означає реалізованого
+Статус `partial` означає виконане приймання тільки зазначеного етапу; зелений `tumanomir check` не означає реалізованого
 чи пройденого тесту. У PR реалізації додати шлях до тесту й оновити статус AT.
 
 | Вимога | Сценарії | Етап | Приймання | Статус |
 |---|---|---|---|---|
-| FR-01 | UC-01 | M1 | AT-01 | planned |
-| FR-02 | UC-01 | M1 | AT-02 | planned |
+| FR-01 | UC-01 | M1 | AT-01 | passed: `internal/library/store_test.go::TestIngestConcurrentRestart` |
+| FR-02 | UC-01 | M1 | AT-02 | passed: `internal/library/store_test.go::TestIngestConcurrentRestart` |
 | FR-03 | UC-01, UC-02 | M1 | AT-03 | planned |
 | FR-04 | UC-02, UC-03 | M1, M2 | AT-04 | planned |
 | FR-05 | UC-06 | M2 | AT-05 | planned |
