@@ -18,13 +18,13 @@ make build
 # або make run
 ```
 
-Відкрити http://127.0.0.1:8080. Дані зберігаються в `data/library.sqlite`
+Відкрити http://127.0.0.1:8787. Дані зберігаються в `data/library.sqlite`
 разом із SQLite WAL/SHM; каталог виключено з Git. Зупинити через Ctrl+C.
 Після перезапуску записи та черга залишаються, worker відновлює завдання
 після завершення lease. Кнопка «Оновити стан» показує поточну обробку.
 
 ```sh
-./build/news-library -data /absolute/private/library -bind 127.0.0.1:8081
+./build/news-library -data /absolute/private/library -bind 127.0.0.1:8788
 ./build/news-library -no-worker  # UI без виконання черги
 ./build/news-library -help
 ```
@@ -32,7 +32,7 @@ make build
 | Параметр | Типово | Призначення |
 |---|---|---|
 | `-data` | `data` | Каталог SQLite; каталог створюється з правами 0700 |
-| `-bind` | `127.0.0.1:8080` | Лише явна loopback IP; LAN/VPS поки відхиляються |
+| `-bind` | `127.0.0.1:8787` | Лише явна loopback IP; LAN/VPS поки відхиляються |
 | `-fetch-timeout` | `30s` | Загальний час отримання одного матеріалу |
 | `-lease` | `1m` | Lease черги, поновлюється heartbeat |
 | `-attempts` | `3` | Максимум спроб одного завдання; явний retry створює нове |

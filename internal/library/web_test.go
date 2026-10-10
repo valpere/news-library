@@ -13,7 +13,7 @@ import (
 func testWeb(t *testing.T) (*Store, *Web) {
 	t.Helper()
 	s := testStore(t)
-	w, e := NewWeb(s, "http://127.0.0.1:8080", 1<<20)
+	w, e := NewWeb(s, "http://127.0.0.1:8787", 1<<20)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -146,7 +146,7 @@ func TestWebMutationBoundaries(t *testing.T) {
 		{"wrong token", url.Values{"read": {"1"}, "csrf": {"wrong"}}, nil},
 		{"foreign origin", url.Values{"read": {"1"}, "csrf": {w.CSRF}}, map[string]string{"Origin": "https://evil.example"}},
 		{"cross site", url.Values{"read": {"1"}, "csrf": {w.CSRF}}, map[string]string{"Sec-Fetch-Site": "cross-site"}},
-		{"rebound host", url.Values{"read": {"1"}, "csrf": {w.CSRF}}, map[string]string{"Host": "evil.example:8080"}},
+		{"rebound host", url.Values{"read": {"1"}, "csrf": {w.CSRF}}, map[string]string{"Host": "evil.example:8787"}},
 		{"agent credentials", url.Values{"read": {"1"}, "csrf": {w.CSRF}}, map[string]string{"Authorization": "Bearer agent-token"}},
 	}
 	for _, tc := range tests {

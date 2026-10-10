@@ -20,7 +20,7 @@ import (
 
 func run() error {
 	data := flag.String("data", "data", "каталог SQLite та runtime даних")
-	bind := flag.String("bind", "127.0.0.1:8080", "loopback host:port")
+	bind := flag.String("bind", "127.0.0.1:8787", "loopback host:port")
 	timeout := flag.Duration("fetch-timeout", 30*time.Second, "загальний час отримання тексту")
 	lease := flag.Duration("lease", time.Minute, "термін lease; heartbeat поновлює його")
 	backoff := flag.Duration("backoff", 10*time.Second, "початкова затримка повтору")
