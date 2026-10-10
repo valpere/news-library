@@ -175,3 +175,39 @@ func TestWebMutationBoundaries(t *testing.T) {
 	}
 	post(t, w, "/items/1/read", url.Values{"read": {"1"}})
 }
+
+func TestWebLocalhostAccessAndOrigin(t *testing.T) {
+	s, w := testWeb(t)
+	id := add(t, s, "https://example.com/localhost")
+	for _, path := range []string{"/", "/items/1"} {
+		rw := webRequest(w, "GET", path, nil, map[string]string{"Host": "localhost:8787"})
+		if rw.Code != 200 {
+			t.Fatalf("localhost GET %s: %d %s", path, rw.Code, rw.Body.String())
+		}
+	}
+	form := url.Values{"read": {"1"}, "csrf": {w.CSRF}}
+	for _, headers := range []map[string]string{
+		{"Host": "localhost:8787", "Origin": "https://evil.example"},
+		{"Host": "localhost:8787", "Origin": "http://localhost:9999"},
+		{"Host": "localhost:8787", "Origin": w.Origin},
+		{"Host": "localhost:9999", "Origin": "http://localhost:9999"},
+		{"Host": "evil.localhost:8787", "Origin": "http://evil.localhost:8787"},
+	} {
+		rw := webRequest(w, "POST", "/items/1/read", form, headers)
+		if rw.Code != 403 {
+			t.Fatal("untrusted host/origin accepted", headers, rw.Code)
+		}
+		i, _ := s.Item(id)
+		if i.Read {
+			t.Fatal("rejected request changed state")
+		}
+	}
+	rw := webRequest(w, "POST", "/items/1/read", form, map[string]string{"Host": "localhost:8787", "Origin": "http://localhost:8787", "Sec-Fetch-Site": "same-origin"})
+	if rw.Code != 303 {
+		t.Fatal("localhost form failed", rw.Code, rw.Body.String())
+	}
+	i, _ := s.Item(id)
+	if !i.Read {
+		t.Fatal("localhost form did not persist")
+	}
+}
