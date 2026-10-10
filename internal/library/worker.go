@@ -10,9 +10,14 @@ import (
 type Source interface {
 	Fetch(context.Context, string) (Snapshot, error)
 }
+type Generator interface {
+	Generate(context.Context, Job, Snapshot) (Digest, error)
+}
 type Worker struct {
 	Store                   *Store
 	Source                  Source
+	Generator               Generator
+	DigestTimeout           time.Duration
 	Timeout, Lease, Backoff time.Duration
 	MaxAttempts             int
 }
@@ -22,7 +27,11 @@ func (w *Worker) Step(ctx context.Context) (bool, error) {
 	if err != nil || j == nil {
 		return false, err
 	}
-	fetchCtx, cancel := context.WithTimeout(ctx, w.Timeout)
+	timeout := w.Timeout
+	if j.Stage == "digest" && w.DigestTimeout > 0 {
+		timeout = w.DigestTimeout
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	done := make(chan struct{})
 	heartbeatDone := make(chan struct{})
@@ -44,7 +53,24 @@ func (w *Worker) Step(ctx context.Context) (bool, error) {
 			}
 		}
 	}()
-	snap, err := w.Source.Fetch(fetchCtx, j.URL)
+	var snap Snapshot
+	var digest Digest
+	if j.Stage == "digest" {
+		snap, err = w.Store.Snapshot(j.SnapshotID.Int64)
+		if err == nil {
+			if w.Generator == nil {
+				err = &SourceError{Message: "генерацію не налаштовано"}
+			} else {
+				digest, err = w.Generator.Generate(fetchCtx, *j, snap)
+			}
+		}
+	} else if fresh, ok := w.Source.(interface {
+		FetchFresh(context.Context, string) (Snapshot, error)
+	}); ok && j.Refresh {
+		snap, err = fresh.FetchFresh(fetchCtx, j.URL)
+	} else {
+		snap, err = w.Source.Fetch(fetchCtx, j.URL)
+	}
 	close(done)
 	<-heartbeatDone
 	// On shutdown leave the persisted lease for recovery instead of consuming a failure.
@@ -52,6 +78,9 @@ func (w *Worker) Step(ctx context.Context) (bool, error) {
 		return true, ctx.Err()
 	}
 	if err == nil {
+		if j.Stage == "digest" {
+			return true, w.Store.CompleteDigest(*j, digest)
+		}
 		return true, w.Store.Complete(*j, snap)
 	}
 	retry := true
@@ -65,7 +94,7 @@ func (w *Worker) Run(ctx context.Context) {
 	for ctx.Err() == nil {
 		worked, err := w.Step(ctx)
 		if err != nil && ctx.Err() == nil {
-			log.Printf("background fetch could not persist its result")
+			log.Printf("background processing could not persist its result")
 		}
 		if worked && err == nil {
 			continue

@@ -19,16 +19,14 @@ import (
 )
 
 func run() error {
-	data := flag.String("data", "data", "каталог SQLite та runtime даних")
-	bind := flag.String("bind", "127.0.0.1:8787", "loopback host:port")
-	timeout := flag.Duration("fetch-timeout", 30*time.Second, "загальний час отримання тексту")
-	lease := flag.Duration("lease", time.Minute, "термін lease; heartbeat поновлює його")
-	backoff := flag.Duration("backoff", 10*time.Second, "початкова затримка повтору")
-	attempts := flag.Int("attempts", 3, "максимальна кількість спроб fetch")
-	maxBytes := flag.Int64("max-bytes", 4<<20, "ліміт байтів відповіді джерела та ручного тексту")
-	noWorker := flag.Bool("no-worker", false, "лише UI, без обробки черги")
-	flag.Parse()
-	host, port, err := net.SplitHostPort(*bind)
+	c, err := readConfig(os.Args[1:])
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	host, port, err := net.SplitHostPort(c.Bind)
 	if err != nil {
 		return err
 	}
@@ -36,41 +34,54 @@ func run() error {
 	if ip == nil || !ip.IsLoopback() {
 		return errors.New("bind повинен бути явно заданою loopback IP-адресою")
 	}
-	if *timeout <= 0 || *lease < time.Second || *backoff <= 0 || *attempts < 1 || *maxBytes < 1024 || *maxBytes > 64<<20 {
-		return errors.New("некоректні ліміти: timeout/backoff > 0, lease >= 1s, attempts >= 1, 1KiB <= max-bytes <= 64MiB")
-	}
-	path, err := filepath.Abs(*data)
+	path, err := filepath.Abs(c.Data)
 	if err != nil {
 		return err
 	}
 	if err = os.MkdirAll(path, 0700); err != nil {
 		return err
 	}
-	s, err := library.Open(filepath.Join(path, "library.sqlite"))
-	if err != nil {
-		return err
-	}
-	defer s.Close()
+	// Claim the configured port before migrating any database. A second process
+	// must not upgrade the database underneath an older running binary.
 	listener, err := net.Listen("tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
-	origin := "http://" + listener.Addr().String()
-	web, err := library.NewWeb(s, origin, *maxBytes)
+	s, err := library.Open(filepath.Join(path, "library.sqlite"))
 	if err != nil {
 		return err
 	}
+	defer s.Close()
+	var generator *library.Ollama
+	if !c.NoDigests {
+		generator, err = library.NewOllama(c.OllamaURL, c.OllamaKey, c.DigestTimeout)
+		if err != nil {
+			return err
+		}
+		if err = s.EnableDigests(library.DigestConfig{Model: c.Model, PromptVersion: library.DigestPromptVersion, MaxInputBytes: c.InputLimit}); err != nil {
+			return err
+		}
+	}
+	fetcher := library.NewFetcher(c.FetchTimeout, c.MaxBytes)
+	cache := &library.HTTPCache{Store: s, Fetcher: fetcher, TTL: c.CacheTTL}
+	fetcher.Cache = cache
+	origin := "http://" + listener.Addr().String()
+	web, err := library.NewWeb(s, origin, c.MaxBytes)
+	if err != nil {
+		return err
+	}
+	web.Cache = cache
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	done := make(chan struct{})
-	if !*noWorker {
-		worker := &library.Worker{Store: s, Source: library.NewFetcher(*timeout, *maxBytes), Timeout: *timeout, Lease: *lease, Backoff: *backoff, MaxAttempts: *attempts}
+	if !c.NoWorker {
+		worker := &library.Worker{Store: s, Source: fetcher, Generator: generator, Timeout: c.FetchTimeout, DigestTimeout: c.DigestTimeout, Lease: c.Lease, Backoff: c.Backoff, MaxAttempts: c.Attempts}
 		go func() { defer close(done); worker.Run(ctx) }()
 	} else {
 		close(done)
 	}
-	server := &http.Server{Handler: web.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 32 << 10}
+	server := &http.Server{Handler: web.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: max(30*time.Second, c.FetchTimeout+5*time.Second), IdleTimeout: time.Minute, MaxHeaderBytes: 32 << 10}
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)

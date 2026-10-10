@@ -18,22 +18,28 @@ import (
 //go:embed pages.html
 var pages string
 
+//go:embed progress.js
+var progressJS string
+
 type Web struct {
 	Store        *Store
+	Cache        *HTTPCache
 	Origin, CSRF string
 	MaxText      int64
 	tmpl         *template.Template
 	zone         *time.Location
 }
 type pageData struct {
-	CSRF      string
-	Filters   Filters
-	Items     []Item
-	Item      Item
-	Snapshots []Snapshot
-	Selected  *Snapshot
-	Ratings   []RatingEvent
-	Jobs      []JobStatus
+	CSRF            string
+	Filters         Filters
+	Items           []Item
+	Item            Item
+	Snapshots       []Snapshot
+	Selected        *Snapshot
+	Ratings         []RatingEvent
+	Jobs            []JobStatus
+	Pending         bool
+	RateWithoutText bool
 }
 
 func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
@@ -84,11 +90,16 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", w.list)
+	mux.HandleFunc("GET /cache", w.cache)
+	mux.HandleFunc("GET /static/progress.js", func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		rw.Write([]byte(progressJS))
+	})
 	mux.HandleFunc("GET /items/{id}", w.detail)
 	mux.HandleFunc("POST /items", w.add)
 	mux.HandleFunc("POST /items/{id}/{action}", w.mutate)
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+		rw.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 		rw.Header().Set("X-Content-Type-Options", "nosniff")
 		// Preserve the origin of same-origin form POSTs. no-referrer makes
 		// Chromium send Origin: null for HTTP navigation forms. External links
@@ -220,7 +231,8 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "сховище недоступне", 500)
 		return
 	}
-	w.render(rw, "detail", pageData{Item: i, Snapshots: snapshots, Selected: snap, Ratings: ratings, Jobs: jobs})
+	pending := snap == nil && (i.State == "queued" || i.State == "fetching" || i.State == "retry_wait")
+	w.render(rw, "detail", pageData{Item: i, Snapshots: snapshots, Selected: snap, Ratings: ratings, Jobs: jobs, Pending: pending, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))

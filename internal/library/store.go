@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,7 +19,14 @@ import (
 //go:embed schema.sql
 var schema string
 
-type Store struct{ DB *sql.DB }
+//go:embed schema_v2.sql
+var schemaV2 string
+
+type Store struct {
+	DB           *sql.DB
+	DigestConfig *DigestConfig
+	Files        Files
+}
 type Item struct {
 	ID                                                        int64
 	OriginalURL, URL, Title, AddedAt, Placement, State, Error string
@@ -39,10 +47,14 @@ type RatingEvent struct {
 	Reason                    string
 }
 type Job struct {
-	ID, ItemID      int64
-	URL, Token      string
-	Attempts        int
-	SelectedAtClaim sql.NullInt64
+	ID, ItemID                                 int64
+	URL, Token                                 string
+	Attempts                                   int
+	SelectedAtClaim                            sql.NullInt64
+	Stage, ConfigVersion, Model, PromptVersion string
+	SnapshotID                                 sql.NullInt64
+	InputLimit                                 int
+	Refresh                                    bool
 }
 type Filters struct {
 	Query, Placement, Rating, Read, State, Sort, Direction string
@@ -66,13 +78,21 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 1 {
+	if version > 3 {
 		db.Close()
 		return nil, errors.New("database schema is newer than this application")
 	}
 	tx, err := db.Begin()
 	if err == nil {
-		_, err = tx.Exec(schema)
+		if version == 0 {
+			_, err = tx.Exec(schema)
+		}
+		if err == nil && version < 2 {
+			_, err = tx.Exec(schemaV2)
+		}
+		if err == nil && version < 3 {
+			err = migrateFiles(tx, Files{Root: filepath.Dir(path)})
+		}
 		if err == nil {
 			err = tx.Commit()
 		} else {
@@ -83,7 +103,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Store{DB: db}, nil
+	return &Store{DB: db, Files: Files{Root: filepath.Dir(path)}}, nil
 }
 func (s *Store) Close() error { return s.DB.Close() }
 func nowUTC() string          { return time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z") }
@@ -169,7 +189,7 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 		return nil, err
 	}
 	var j Job
-	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot FROM jobs j JOIN items i ON i.id=j.item_id WHERE (j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli()).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim)
+	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot,j.stage,j.snapshot_id,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh FROM jobs j JOIN items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}
@@ -181,7 +201,12 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 	if _, err = tx.ExecContext(ctx, "UPDATE jobs SET state='running',token=?,attempts=?,lease_until=? WHERE id=?", j.Token, j.Attempts, now.Add(lease).UnixMilli(), j.ID); err != nil {
 		return nil, err
 	}
-	if _, err = tx.ExecContext(ctx, "UPDATE items SET state='fetching',error='' WHERE id=? AND selected_snapshot IS NULL", j.ItemID); err != nil {
+	if j.Stage == "digest" {
+		_, err = tx.ExecContext(ctx, "UPDATE items SET state='enriching',error='' WHERE id=? AND selected_snapshot=? AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=?)", j.ItemID, j.SnapshotID, j.SnapshotID)
+	} else {
+		_, err = tx.ExecContext(ctx, "UPDATE items SET state='fetching',error='' WHERE id=? AND selected_snapshot IS NULL", j.ItemID)
+	}
+	if err != nil {
 		return nil, err
 	}
 	return &j, tx.Commit()
@@ -209,18 +234,29 @@ func leaseValid(tx *sql.Tx, j Job) error {
 	return nil
 }
 func indexSnapshot(tx *sql.Tx, id int64, title, text string) error {
-	_, err := tx.Exec("UPDATE item_fts SET title=?,text=? WHERE rowid=?", title, text, id)
+	_, err := tx.Exec("UPDATE item_fts SET title=?,text=?,url=(SELECT canonical_url FROM items WHERE id=?) WHERE rowid=?", title, text, id, id)
 	return err
 }
-func insertSnapshot(tx *sql.Tx, id int64, jobID any, snap Snapshot) (int64, error) {
+func (s *Store) insertSnapshot(tx *sql.Tx, id int64, jobID any, snap Snapshot) (int64, error) {
 	sum := sha256.Sum256([]byte(snap.Text))
-	r, err := tx.Exec("INSERT INTO source_versions(item_id,job_id,text,title,hash,retrieved_at,origin,extractor,completeness,warning) VALUES(?,?,?,?,?,?,?,?,?,?)", id, jobID, snap.Text, snap.Title, fmt.Sprintf("%x", sum), nowUTC(), snap.Origin, snap.Extractor, snap.Completeness, snap.Warning)
+	path, err := s.Files.Put("texts", []byte(snap.Text))
+	if err != nil {
+		return 0, err
+	}
+	retrieved := snap.RetrievedAt
+	if retrieved == "" {
+		retrieved = nowUTC()
+	}
+	r, err := tx.Exec("INSERT INTO source_versions(item_id,job_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning) VALUES(?,?,?,?,?,?,?,?,?,?)", id, jobID, path, snap.Title, fmt.Sprintf("%x", sum), retrieved, snap.Origin, snap.Extractor, snap.Completeness, snap.Warning)
 	if err != nil {
 		return 0, err
 	}
 	return r.LastInsertId()
 }
 func (s *Store) Complete(j Job, snap Snapshot) error {
+	if j.Stage != "fetch" {
+		return errors.New("not a fetch job")
+	}
 	if strings.TrimSpace(snap.Text) == "" {
 		return errors.New("empty snapshot")
 	}
@@ -232,7 +268,7 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 	if err = leaseValid(tx, j); err != nil {
 		return err
 	}
-	sid, err := insertSnapshot(tx, j.ItemID, j.ID, snap)
+	sid, err := s.insertSnapshot(tx, j.ItemID, j.ID, snap)
 	if err != nil {
 		return err
 	}
@@ -247,6 +283,9 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 			return err
 		}
 		if err = indexSnapshot(tx, j.ItemID, snap.Title, snap.Text); err != nil {
+			return err
+		}
+		if err = s.queueDigest(tx, j.ItemID, sid); err != nil {
 			return err
 		}
 	}
@@ -271,7 +310,16 @@ func (s *Store) Fail(j Job, message string, retry bool, maxAttempts int, now tim
 	if _, err = tx.Exec("UPDATE jobs SET state=?,error=?,next_attempt=?,lease_until=0 WHERE id=?", state, message, now.Add(backoff).UnixMilli(), j.ID); err != nil {
 		return err
 	}
-	if _, err = tx.Exec("UPDATE items SET state=?,error=? WHERE id=? AND selected_snapshot IS NULL", itemState, message, j.ItemID); err != nil {
+	if j.Stage == "digest" {
+		itemState = "digest_failed"
+		if state == "retry_wait" {
+			itemState = "digest_retry_wait"
+		}
+		_, err = tx.Exec("UPDATE items SET state=?,error=? WHERE id=? AND selected_snapshot=? AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=?)", itemState, message, j.ItemID, j.SnapshotID, j.SnapshotID)
+	} else {
+		_, err = tx.Exec("UPDATE items SET state=?,error=? WHERE id=? AND selected_snapshot IS NULL", itemState, message, j.ItemID)
+	}
+	if err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -282,7 +330,7 @@ func (s *Store) Retry(id int64) error {
 		return err
 	}
 	defer tx.Rollback()
-	r, err := tx.Exec("INSERT INTO jobs(item_id) SELECT id FROM items WHERE id=? AND NOT EXISTS(SELECT 1 FROM jobs WHERE item_id=? AND state IN ('queued','running','retry_wait'))", id, id)
+	r, err := tx.Exec("INSERT INTO jobs(item_id,refresh) SELECT id,1 FROM items WHERE id=? AND NOT EXISTS(SELECT 1 FROM jobs WHERE item_id=? AND stage='fetch' AND state IN ('queued','running','retry_wait'))", id, id)
 	if err != nil {
 		return err
 	}
@@ -308,22 +356,28 @@ func (s *Store) Manual(id int64, text string) error {
 	if err = tx.QueryRow("SELECT title FROM items WHERE id=?", id).Scan(&title); err != nil {
 		return err
 	}
-	sid, err := insertSnapshot(tx, id, nil, Snapshot{Text: text, Title: title, Origin: "manual", Extractor: "manual-v1", Completeness: "unknown", Warning: "Повнота ручного тексту невідома"})
+	sid, err := s.insertSnapshot(tx, id, nil, Snapshot{Text: text, Title: title, Origin: "manual", Extractor: "manual-v1", Completeness: "unknown", Warning: "Повнота ручного тексту невідома"})
 	if err != nil {
 		return err
 	}
 	if _, err = tx.Exec("UPDATE items SET selected_snapshot=?,state='ready',error='' WHERE id=?", sid, id); err != nil {
 		return err
 	}
-	if _, err = tx.Exec("UPDATE jobs SET state='cancelled' WHERE item_id=? AND state IN ('queued','retry_wait')", id); err != nil {
+	if _, err = tx.Exec("UPDATE jobs SET state='cancelled' WHERE item_id=? AND stage='fetch' AND state IN ('queued','retry_wait')", id); err != nil {
 		return err
 	}
 	if err = indexSnapshot(tx, id, title, text); err != nil {
 		return err
 	}
+	if err = s.queueDigest(tx, id, sid); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 func (s *Store) Rate(id, score int64, source *int64, assessed *time.Time, reason string) error {
+	return s.RateShown(id, score, source, nil, assessed, reason)
+}
+func (s *Store) RateShown(id, score int64, source, digest *int64, assessed *time.Time, reason string) error {
 	if score < 0 {
 		return errors.New("оцінка має бути невід’ємним цілим")
 	}
@@ -335,7 +389,11 @@ func (s *Store) Rate(id, score int64, source *int64, assessed *time.Time, reason
 	if source != nil {
 		sid = *source
 	}
-	_, err := s.DB.Exec("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,reason) VALUES(?,?,?,?,?,?)", id, score, nowUTC(), at, sid, reason)
+	var did any
+	if digest != nil {
+		did = *digest
+	}
+	_, err := s.DB.Exec("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason) VALUES(?,?,?,?,?,?,?)", id, score, nowUTC(), at, sid, did, reason)
 	return err
 }
 func (s *Store) SetPlacement(id int64, value string) error {
@@ -402,7 +460,7 @@ func (s *Store) Item(id int64) (Item, error) {
 	return scanItem(s.DB.QueryRow(itemSelect+" WHERE i.id=?", id))
 }
 func (s *Store) Snapshots(id int64) ([]Snapshot, error) {
-	rows, err := s.DB.Query("SELECT id,item_id,text,title,hash,retrieved_at,origin,extractor,completeness,warning FROM source_versions WHERE item_id=? ORDER BY id DESC", id)
+	rows, err := s.DB.Query("SELECT id,item_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning FROM source_versions WHERE item_id=? ORDER BY id DESC", id)
 	if err != nil {
 		return nil, err
 	}
@@ -410,9 +468,15 @@ func (s *Store) Snapshots(id int64) ([]Snapshot, error) {
 	var result []Snapshot
 	for rows.Next() {
 		var v Snapshot
-		if err = rows.Scan(&v.ID, &v.ItemID, &v.Text, &v.Title, &v.Hash, &v.RetrievedAt, &v.Origin, &v.Extractor, &v.Completeness, &v.Warning); err != nil {
+		var path string
+		if err = rows.Scan(&v.ID, &v.ItemID, &path, &v.Title, &v.Hash, &v.RetrievedAt, &v.Origin, &v.Extractor, &v.Completeness, &v.Warning); err != nil {
 			return nil, err
 		}
+		data, e := s.Files.Read(path, v.Hash)
+		if e != nil {
+			return nil, e
+		}
+		v.Text = string(data)
 		result = append(result, v)
 	}
 	return result, rows.Err()
@@ -511,13 +575,14 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 type JobStatus struct {
 	ID                      int64
 	State                   string
+	Stage                   string
 	Attempts                int
 	Error                   string
 	NextAttempt, LeaseUntil int64
 }
 
 func (s *Store) Jobs(id int64) ([]JobStatus, error) {
-	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until FROM jobs WHERE item_id=? ORDER BY id DESC", id)
+	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage FROM jobs WHERE item_id=? ORDER BY id DESC", id)
 	if err != nil {
 		return nil, err
 	}
@@ -525,7 +590,7 @@ func (s *Store) Jobs(id int64) ([]JobStatus, error) {
 	var result []JobStatus
 	for rows.Next() {
 		var j JobStatus
-		if err = rows.Scan(&j.ID, &j.State, &j.Attempts, &j.Error, &j.NextAttempt, &j.LeaseUntil); err != nil {
+		if err = rows.Scan(&j.ID, &j.State, &j.Attempts, &j.Error, &j.NextAttempt, &j.LeaseUntil, &j.Stage); err != nil {
 			return nil, err
 		}
 		result = append(result, j)

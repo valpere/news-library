@@ -29,6 +29,7 @@ func (e *SourceError) Error() string { return e.Message }
 type Fetcher struct {
 	client   *http.Client
 	MaxBytes int64
+	Cache    *HTTPCache
 }
 
 func NewFetcher(timeout time.Duration, maxBytes int64) *Fetcher {
@@ -89,7 +90,7 @@ func dialResolved(ctx context.Context, network, address string, lookup func(cont
 	}
 	return nil, last
 }
-func (f *Fetcher) get(ctx context.Context, raw string) ([]byte, *url.URL, string, bool, error) {
+func (f *Fetcher) getNetwork(ctx context.Context, raw string, meta *NetworkMeta) ([]byte, *url.URL, string, bool, error) {
 	if _, err := CanonicalURL(raw); err != nil {
 		return nil, nil, "", false, &SourceError{Message: err.Error()}
 	}
@@ -121,6 +122,9 @@ func (f *Fetcher) get(ctx context.Context, raw string) ([]byte, *url.URL, string
 		}
 		partial = true
 	}
+	if meta != nil {
+		*meta = NetworkMeta{Headers: resp.Header.Clone(), FetchedAt: nowUTC()}
+	}
 	return data, resp.Request.URL, resp.Header.Get("Content-Type"), partial, nil
 }
 
@@ -151,7 +155,12 @@ func youtubeID(u *url.URL) (string, bool, error) {
 	}
 	return id, true, nil
 }
+func (f *Fetcher) FetchFresh(ctx context.Context, raw string) (Snapshot, error) {
+	return f.Fetch(context.WithValue(ctx, cacheRefreshKey{}, true), raw)
+}
 func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
+	meta := &NetworkMeta{}
+	ctx = context.WithValue(ctx, cacheMetaKey{}, meta)
 	u, err := url.Parse(raw)
 	if err != nil {
 		return Snapshot{}, err
@@ -187,6 +196,10 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 		snap.Title = article.Title()
 	} else {
 		return Snapshot{}, &SourceError{Message: "непідтримуваний формат джерела: потрібен HTML або text/plain"}
+	}
+	snap.RetrievedAt = meta.FetchedAt
+	if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" {
+		snap.Warning += "; джерело з кешу, отримано " + meta.FetchedAt
 	}
 	snap.Text = strings.TrimSpace(snap.Text)
 	if snap.Text == "" {
@@ -261,6 +274,12 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
 	if partial || pagePartial {
 		s.Completeness = "partial"
 		s.Warning += "; відповідь часткова або не повністю прочитана"
+	}
+	if meta, ok := ctx.Value(cacheMetaKey{}).(*NetworkMeta); ok {
+		s.RetrievedAt = meta.FetchedAt
+		if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" {
+			s.Warning += "; субтитри з кешу, отримано " + meta.FetchedAt
+		}
 	}
 	return s, nil
 }

@@ -10,15 +10,59 @@
 <label>Сортування <select name="sort"><option value="added">Час додавання</option><option value="rating" {{if eq .Filters.Sort "rating"}}selected{{end}}>Власна оцінка</option><option value="relevance" {{if eq .Filters.Sort "relevance"}}selected{{end}}>Релевантність</option></select></label>
 <label>Напрямок <select name="direction"><option value="desc">Спадання</option><option value="asc" {{if eq .Filters.Direction "asc"}}selected{{end}}>Зростання</option></select></label><button>Знайти</button></form>
 {{range .Items}}<article><h2><a href="/items/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a></h2><p>{{placement .Placement}} · {{state .State}} · оцінка: {{score .Score}} · {{if .Read}}прочитано{{else}}непрочитано{{end}}</p><small>{{date .AddedAt}} · {{.Tags}}</small>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}</article>{{else}}<p>Матеріалів поки немає або жоден не відповідає фільтрам.</p>{{end}}{{template "bottom" .}}{{end}}
-{{define "detail"}}{{template "top" .}}<h2>{{if .Item.Title}}{{.Item.Title}}{{else}}{{.Item.URL}}{{end}}</h2><p><a href="{{.Item.URL}}" rel="noreferrer">Відкрити джерело</a> · {{date .Item.AddedAt}}</p><p>{{state .Item.State}} · {{placement .Item.Placement}} · {{if .Item.Read}}прочитано{{else}}непрочитано{{end}} · оцінка: {{score .Item.Score}}</p>{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
+{{define "rating"}}
+<form method="post" action="/items/{{.Item.ID}}/rating"><h2>Власна оцінка користі</h2><input type="hidden" name="csrf" value="{{.CSRF}}">{{if .Selected}}<input type="hidden" name="source" value="{{.Selected.ID}}">{{end}}<label>Невід’ємне ціле <input name="score" type="number" min="0" step="1" required></label><label>Причина <input name="reason"></label><p><label>Дата рішення (порожньо = зараз) <input name="assessed_at" type="datetime-local"></label><label><input type="checkbox" name="unknown_date" value="1"> Історична дата невідома</label></p><button>Додати оцінку</button></form>
+<div class="row">{{range $n := (quickScores)}}<form method="post" action="/items/{{$.Item.ID}}/rating"><input type="hidden" name="csrf" value="{{$.CSRF}}">{{if $.Selected}}<input type="hidden" name="source" value="{{$.Selected.ID}}">{{end}}<button name="score" value="{{$n}}">Оцінити {{$n}}</button></form>{{end}}</div>
+{{end}}
+{{define "libraryActions"}}
 <div class="row"><form method="post" action="/items/{{.Item.ID}}/placement"><input type="hidden" name="csrf" value="{{.CSRF}}"><button name="placement" value="library">Зберегти</button> <button name="placement" value="deferred">Відкласти</button> <button name="placement" value="inbox">До вхідних</button></form>
 <form method="post" action="/items/{{.Item.ID}}/read"><input type="hidden" name="csrf" value="{{.CSRF}}">{{if .Item.Read}}<button name="read" value="0">Позначити непрочитаним</button>{{else}}<button name="read" value="1">Позначити прочитаним</button>{{end}}</form></div>
 <form method="post" action="/items/{{.Item.ID}}/tags"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Теги через кому <input name="tags" value="{{.Item.Tags}}"></label><button>Зберегти теги</button></form>
-<h2>Доступний текст</h2>{{if .Selected}}<p>Версія #{{.Selected.ID}} · {{.Selected.Origin}} · {{.Selected.Extractor}} · {{.Selected.Completeness}} · {{date .Selected.RetrievedAt}}</p><p class="muted">{{.Selected.Warning}}</p><article><pre>{{.Selected.Text}}</pre></article>{{else}}<p>Текст ще не отримано. Можна повторити отримання або вставити його вручну.</p>{{end}}
-<form method="post" action="/items/{{.Item.ID}}/rating"><h2>Власна оцінка користі</h2><input type="hidden" name="csrf" value="{{.CSRF}}">{{if .Selected}}<input type="hidden" name="source" value="{{.Selected.ID}}">{{end}}<label>Невід’ємне ціле <input name="score" type="number" min="0" step="1" required></label><label>Причина <input name="reason"></label><p><label>Дата рішення (порожньо = зараз) <input name="assessed_at" type="datetime-local"></label><label><input type="checkbox" name="unknown_date" value="1"> Історична дата невідома</label></p><button>Додати оцінку</button></form>
-<div class="row">{{range $n := (quickScores)}}<form method="post" action="/items/{{$.Item.ID}}/rating"><input type="hidden" name="csrf" value="{{$.CSRF}}">{{if $.Selected}}<input type="hidden" name="source" value="{{$.Selected.ID}}">{{end}}<button name="score" value="{{$n}}">Оцінити {{$n}}</button></form>{{end}}</div>
+{{end}}
+{{define "detail"}}
+{{template "top" .}}
+<h2>{{if .Item.Title}}{{.Item.Title}}{{else}}{{.Item.URL}}{{end}}</h2>
+<p><a href="{{.Item.URL}}" rel="noreferrer">Відкрити джерело</a> · {{date .Item.AddedAt}}</p>
+<p>{{placement .Item.Placement}} · {{if .Item.Read}}прочитано{{else}}непрочитано{{end}} · оцінка: {{score .Item.Score}}</p>
+<section id="processing" data-pending="{{.Pending}}" aria-live="polite">
+{{if .Selected}}
+<h2>Доступний текст</h2>
+<p>Версія #{{.Selected.ID}} · {{.Selected.Origin}} · {{.Selected.Extractor}} · {{.Selected.Completeness}} · {{date .Selected.RetrievedAt}}</p>
+<p class="muted">{{.Selected.Warning}}</p>
+<article><pre>{{.Selected.Text}}</pre></article>
+{{else if .Pending}}
+<article><h2>Посилання збережено</h2>
+<p id="processing-message">{{state .Item.State}}. Текст ще не отримано. Після завершення обробки він з’явиться тут автоматично.</p>
+{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
+<p><a id="processing-refresh" href="" hidden>Показати результат обробки</a></p>
+<noscript><p>Щоб побачити результат, натисніть «Оновити стан».</p></noscript></article>
+{{else}}
+<article><h2>Текст недоступний</h2>
+{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
+<p>Можна повторити отримання, відкрити джерело або вставити текст вручну.</p></article>
+{{end}}
+</section>
+{{if .Selected}}
+{{template "rating" .}}
+{{template "libraryActions" .}}
+{{else}}
+{{if .RateWithoutText}}
+<p>Оцінювання без збереженого тексту: використайте його, якщо вже ознайомилися з матеріалом поза бібліотекою. Версія тексту для цієї оцінки невідома.</p>
+{{template "rating" .}}
+{{end}}
+<details><summary>Інші дії з матеріалом</summary>
+{{template "libraryActions" .}}
+{{if not .RateWithoutText}}<p><a href="/items/{{.Item.ID}}?rate_without_text=1">Я вже ознайомився з матеріалом — оцінити без тексту</a></p>{{end}}
+</details>
+{{end}}
 <details><summary>Історія оцінок ({{len .Ratings}})</summary>{{range .Ratings}}<p>#{{.ID}} · оцінка {{.Score}} · записано {{date .RecordedAt}} · рішення: {{if .AssessedAt.Valid}}{{date .AssessedAt.String}}{{else}}дата невідома{{end}} · текст: {{if .SourceVersionID.Valid}}#{{.SourceVersionID.Int64}}{{else}}невідомий{{end}}<br>{{.Reason}}</p>{{else}}<p>Власної оцінки немає.</p>{{end}}</details>
 <details><summary>Версії тексту ({{len .Snapshots}})</summary>{{range .Snapshots}}<p><a href="/items/{{$.Item.ID}}?source={{.ID}}">#{{.ID}} · {{.Origin}} · {{date .RetrievedAt}} · {{.Completeness}}</a></p>{{end}}</details>
+
+{{if not .Pending}}
 <form method="post" action="/items/{{.Item.ID}}/retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повторити отримання тексту</button></form>
+{{end}}
 <details><summary>Вставити текст вручну</summary><form method="post" action="/items/{{.Item.ID}}/manual"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="manual">Нова версія; попередні залишаться в історії</label><textarea id="manual" name="text" rows="10" required></textarea><button>Зберегти текст</button></form></details>
-<details><summary>Черга та помилки</summary>{{range .Jobs}}<p>Завдання #{{.ID}} · {{state .State}} · спроби: {{.Attempts}}<br>{{.Error}}</p>{{end}}</details>{{template "bottom" .}}{{end}}
+<details><summary>Черга та помилки</summary>{{range .Jobs}}<p>Завдання #{{.ID}} · {{state .State}} · спроби: {{.Attempts}}<br>{{.Error}}</p>{{end}}</details>
+{{if and .Pending (not .RateWithoutText)}}<script src="/static/progress.js" defer></script>{{end}}
+{{template "bottom" .}}
+{{end}}
