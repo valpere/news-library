@@ -21,6 +21,9 @@ type config struct {
 	Attempts, InputLimit                                  int
 	MaxBytes                                              int64
 	NoWorker, NoDigests                                   bool
+	CacheMaxBytes                                         int64
+	CacheRetention, CacheCleanupInterval                  time.Duration
+	ChunkMaxParts                                         int
 }
 
 func readConfig(args []string) (config, error) {
@@ -51,6 +54,7 @@ func readConfig(args []string) (config, error) {
 	// Resolve supplied values before parsing defaults: an invalid lower-priority
 	// setting must not reject a valid command-line override.
 	flagNames := map[string]string{
+		"chunk-max-parts": "NEWS_LIBRARY_CHUNK_MAX_PARTS", "cache-max-bytes": "NEWS_LIBRARY_CACHE_MAX_BYTES", "cache-retention": "NEWS_LIBRARY_CACHE_RETENTION", "cache-cleanup-interval": "NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL",
 		"interests": "NEWS_LIBRARY_INTERESTS", "filter-rules": "NEWS_LIBRARY_FILTER_RULES", "filter-threshold": "NEWS_LIBRARY_FILTER_THRESHOLD",
 		"data": "NEWS_LIBRARY_DATA", "bind": "NEWS_LIBRARY_BIND", "model": "OLLAMA_MODEL", "ollama-url": "OLLAMA_API_URL",
 		"fetch-timeout": "NEWS_LIBRARY_FETCH_TIMEOUT", "digest-timeout": "NEWS_LIBRARY_DIGEST_TIMEOUT", "lease": "NEWS_LIBRARY_LEASE",
@@ -121,7 +125,7 @@ func readConfig(args []string) (config, error) {
 	for _, entry := range []struct {
 		name, value string
 		target      *time.Duration
-	}{{"NEWS_LIBRARY_FETCH_TIMEOUT", "30s", &c.FetchTimeout}, {"NEWS_LIBRARY_DIGEST_TIMEOUT", "300s", &c.DigestTimeout}, {"NEWS_LIBRARY_LEASE", "1m", &c.Lease}, {"NEWS_LIBRARY_BACKOFF", "10s", &c.Backoff}, {"NEWS_LIBRARY_CACHE_TTL", "24h", &c.CacheTTL}} {
+	}{{"NEWS_LIBRARY_CACHE_RETENTION", "168h", &c.CacheRetention}, {"NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL", "1h", &c.CacheCleanupInterval}, {"NEWS_LIBRARY_FETCH_TIMEOUT", "30s", &c.FetchTimeout}, {"NEWS_LIBRARY_DIGEST_TIMEOUT", "300s", &c.DigestTimeout}, {"NEWS_LIBRARY_LEASE", "1m", &c.Lease}, {"NEWS_LIBRARY_BACKOFF", "10s", &c.Backoff}, {"NEWS_LIBRARY_CACHE_TTL", "24h", &c.CacheTTL}} {
 		v, e := duration(entry.name, entry.value)
 		if e != nil {
 			return c, e
@@ -153,7 +157,23 @@ func readConfig(args []string) (config, error) {
 	if e != nil {
 		return c, e
 	}
+	c.CacheMaxBytes, e = integer("NEWS_LIBRARY_CACHE_MAX_BYTES", "536870912")
+	if e != nil {
+		return c, e
+	}
+	parts, e := integer("NEWS_LIBRARY_CHUNK_MAX_PARTS", "64")
+	if e != nil {
+		return c, e
+	}
+	if parts < 2 || parts > 512 {
+		return c, errors.New("chunk-max-parts має бути 2..512")
+	}
+	c.ChunkMaxParts = int(parts)
 	flags := flag.NewFlagSet("news-library", flag.ContinueOnError)
+	flags.Int64Var(&c.CacheMaxBytes, "cache-max-bytes", c.CacheMaxBytes, "ліміт HTTP cache bodies")
+	flags.DurationVar(&c.CacheRetention, "cache-retention", c.CacheRetention, "скільки тримати прострочений кеш для explicit stale")
+	flags.DurationVar(&c.CacheCleanupInterval, "cache-cleanup-interval", c.CacheCleanupInterval, "інтервал очищення HTTP-кешу")
+	flags.IntVar(&c.ChunkMaxParts, "chunk-max-parts", c.ChunkMaxParts, "максимальна кількість частин довгого тексту")
 	flags.StringVar(&path, "env-file", path, "локальний файл конфігурації; порожньо = без файлу")
 	flags.StringVar(&c.Interests, "interests", c.Interests, "поточні інтереси для прогнозу; порожньо = без прогнозу")
 	flags.StringVar(&c.FilterRules, "filter-rules", c.FilterRules, "JSON-масив правил відсіву")
@@ -180,6 +200,9 @@ func readConfig(args []string) (config, error) {
 	}
 	if c.FetchTimeout <= 0 || c.DigestTimeout <= 0 || c.Lease < time.Second || c.Backoff <= 0 || c.CacheTTL < 0 || c.Attempts < 1 || c.Attempts > 100 || c.MaxBytes < 1024 || c.MaxBytes > 64<<20 || c.InputLimit < 1024 || c.InputLimit > 4<<20 {
 		return c, errors.New("некоректні таймаути/ліміти конфігурації")
+	}
+	if c.CacheMaxBytes < 1024 || c.CacheMaxBytes > 1<<40 || c.CacheRetention < 0 || c.CacheCleanupInterval < time.Second || c.ChunkMaxParts < 2 || c.ChunkMaxParts > 512 {
+		return c, errors.New("некоректні ліміти cache/chunks")
 	}
 	if len(c.Interests) > 8000 {
 		return c, errors.New("профіль інтересів завеликий")

@@ -9,15 +9,19 @@ import (
 )
 
 type DigestConfig struct {
-	Model, PromptVersion string
-	MaxInputBytes        int
-	Interests            string
+	Model, PromptVersion      string
+	MaxInputBytes             int
+	Interests                 string
+	ChunkLimit, ChunkMaxParts int
 }
 
 func (c DigestConfig) Version() string {
 	version := fmt.Sprintf("%s|%s|%d", c.Model, c.PromptVersion, c.MaxInputBytes)
 	if c.Interests != "" {
 		version += "|" + profileHash(c.Interests)
+	}
+	if c.ChunkLimit > 0 {
+		version += fmt.Sprintf("|chunks-v1:%d:%d", c.ChunkLimit, c.ChunkMaxParts)
 	}
 	return version
 }
@@ -27,12 +31,16 @@ type Digest struct {
 	Markdown, Model, ActualModel, Provider, PromptVersion, CreatedAt string
 	InputTokens, OutputTokens                                        int64
 	Prediction                                                       *InterestPrediction
+	ChunkCount                                                       int
 }
 
 // EnableDigests schedules the first digest for existing unprocessed snapshots.
 // Changing configuration leaves existing results and decisions alone.
 func (s *Store) EnableDigests(c DigestConfig) error {
 	c.Interests = strings.TrimSpace(c.Interests)
+	if c.ChunkLimit != 0 && (c.ChunkLimit < 1024 || c.ChunkLimit > c.MaxInputBytes || c.ChunkMaxParts < 2 || c.ChunkMaxParts > 512) {
+		return errors.New("invalid chunk configuration")
+	}
 	if len(c.Interests) > 8000 || (c.Interests != "" && c.PromptVersion != DigestPredictionPromptVersion) || (c.Interests == "" && c.PromptVersion == DigestPredictionPromptVersion) {
 		return errors.New("invalid interest profile configuration")
 	}
@@ -85,7 +93,7 @@ func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
 		return err
 	}
 	c := s.DigestConfig
-	_, err = tx.Exec(`INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests) VALUES(?,'digest',?,?,?,?,?,?) ON CONFLICT DO NOTHING`, itemID, snapshotID, c.Version(), c.Model, c.PromptVersion, c.MaxInputBytes, c.Interests)
+	_, err = tx.Exec(`INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests,chunk_limit,chunk_max_parts) VALUES(?,'digest',?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, itemID, snapshotID, c.Version(), c.Model, c.PromptVersion, c.MaxInputBytes, c.Interests, c.ChunkLimit, c.ChunkMaxParts)
 	if err != nil {
 		return err
 	}
@@ -133,7 +141,7 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 		return err
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(d.Markdown)))
-	result, err := tx.Exec(`INSERT INTO generated_artifacts(item_id,snapshot_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, j.ItemID, j.SnapshotID.Int64, j.ID, path, j.Model, d.ActualModel, d.Provider, j.PromptVersion, nowUTC(), d.InputTokens, d.OutputTokens, hash)
+	result, err := tx.Exec(`INSERT INTO generated_artifacts(item_id,snapshot_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, j.ItemID, j.SnapshotID.Int64, j.ID, path, j.Model, d.ActualModel, d.Provider, j.PromptVersion, nowUTC(), d.InputTokens, d.OutputTokens, hash, max(d.ChunkCount, 1))
 	if err != nil {
 		return err
 	}
@@ -156,12 +164,12 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	return tx.Commit()
 }
 
-const digestSelect = `SELECT id,item_id,snapshot_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash FROM generated_artifacts`
+const digestSelect = `SELECT id,item_id,snapshot_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count FROM generated_artifacts`
 
 func (s *Store) scanDigest(row interface{ Scan(...any) error }) (Digest, error) {
 	var d Digest
 	var path, hash string
-	err := row.Scan(&d.ID, &d.ItemID, &d.SnapshotID, &d.JobID, &path, &d.Model, &d.ActualModel, &d.Provider, &d.PromptVersion, &d.CreatedAt, &d.InputTokens, &d.OutputTokens, &hash)
+	err := row.Scan(&d.ID, &d.ItemID, &d.SnapshotID, &d.JobID, &path, &d.Model, &d.ActualModel, &d.Provider, &d.PromptVersion, &d.CreatedAt, &d.InputTokens, &d.OutputTokens, &hash, &d.ChunkCount)
 	if err != nil {
 		return d, err
 	}

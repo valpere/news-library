@@ -71,12 +71,12 @@ func run() error {
 		if strings.TrimSpace(c.Interests) != "" {
 			prompt = library.DigestPredictionPromptVersion
 		}
-		if err = s.EnableDigests(library.DigestConfig{Model: c.Model, PromptVersion: prompt, MaxInputBytes: c.InputLimit, Interests: c.Interests}); err != nil {
+		if err = s.EnableDigests(library.DigestConfig{Model: c.Model, PromptVersion: prompt, MaxInputBytes: c.InputLimit, Interests: c.Interests, ChunkLimit: c.InputLimit, ChunkMaxParts: c.ChunkMaxParts}); err != nil {
 			return err
 		}
 	}
 	fetcher := library.NewFetcher(c.FetchTimeout, c.MaxBytes)
-	cache := &library.HTTPCache{Store: s, Fetcher: fetcher, TTL: c.CacheTTL}
+	cache := &library.HTTPCache{Store: s, Fetcher: fetcher, TTL: c.CacheTTL, MaxBytes: c.CacheMaxBytes, Retention: c.CacheRetention}
 	fetcher.Cache = cache
 	origin := "http://" + listener.Addr().String()
 	web, err := library.NewWeb(s, origin, c.MaxBytes)
@@ -84,11 +84,16 @@ func run() error {
 		return err
 	}
 	web.Cache = cache
+	if _, err = cache.Prune(time.Now()); err != nil {
+		log.Print("HTTP cache initial cleanup failed")
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	cleanupDone := make(chan struct{})
+	go func() { defer close(cleanupDone); cache.RunCleanup(ctx, c.CacheCleanupInterval) }()
 	done := make(chan struct{})
 	if !c.NoWorker {
-		worker := &library.Worker{Store: s, Source: fetcher, Generator: generator, Timeout: c.FetchTimeout, DigestTimeout: c.DigestTimeout, Lease: c.Lease, Backoff: c.Backoff, MaxAttempts: c.Attempts}
+		worker := &library.Worker{Store: s, Source: fetcher, Generator: &library.ChunkGenerator{Store: s, Leaf: generator}, Timeout: c.FetchTimeout, DigestTimeout: c.DigestTimeout, Lease: c.Lease, Backoff: c.Backoff, MaxAttempts: c.Attempts}
 		go func() { defer close(done); worker.Run(ctx) }()
 	} else {
 		close(done)
@@ -107,6 +112,7 @@ func run() error {
 	stop()
 	<-shutdownDone
 	<-done
+	<-cleanupDone
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}

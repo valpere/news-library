@@ -2,7 +2,7 @@
 
 Основа погоджена: один Go-сервіс, SQLite, стійка черга, локальний запуск
 із можливістю перенесення на VPS. Нижче — технічна конкретизація для
-реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v4, FTS5,
+реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v5, FTS5,
 транзакційна черга та незмінні snapshots/оцінки. Наступні компоненти M2–M4
 залишаються запланованими. Сервер — `cmd/news-library`, адаптери та UI —
 `internal/library/{source,worker,web}.go`, шаблони — `pages.html`.
@@ -291,8 +291,8 @@ prompt version і input limit; digest artifact має фактичну cloud ali
 provider, snapshot, час і usage. Мережа виконується поза транзакціями.
 Збереження snapshot ставить окремий digest job. Lease/fencing/retry спільні;
 вимкнення генерації залишає digest leases без змін. Новіший manual snapshot
-не перезаписується завершенням старого digest job. Завеликий текст явно
-відхиляється зі збереженням повного джерела; chunking ще не реалізоване.
+не перезаписується завершенням старого digest job. Legacy single-request jobs відхиляють завеликий текст зі збереженням
+повного джерела; нові jobs підтримують bounded checkpointed chunking.
 
 `cache.go` ділить anonymous raw response cache між Fetcher і loopback GET.
 Singleflight зводить однакові одночасні запити; свіжість обмежена config TTL
@@ -301,8 +301,8 @@ Singleflight зводить однакові одночасні запити; с
 Кеш містить retrieved time, final URL, content type, partial і hash;
 використаний кеш не видається за нове отримання. Cache GET не додає items,
 не змінює judgments/read і не викликає генерацію; raw HTML має attachment
-і sandbox CSP. Автоматична eviction та conditional upstream revalidation
-залишаються наступним поліпшенням; TTL визначає лише свіжість.
+і sandbox CSP. TTL визначає свіжість; cache body eviction реалізована окремо від
+primary storage. Conditional upstream revalidation ще запланована.
 
 Web очікує fetch і digest, після чого показує секції й лише тоді звичайне
 оцінювання. Виняток — явно обрана оцінка вже прочитаного джерела або
@@ -343,4 +343,28 @@ Web може вибирати source/digest IDs, показує історію �
 результат під час регенерації, використовує readonly polling із захистом
 unsent input. Confidence sorting/filtering SQL не змінює людських даних.
 Міграція v3→v4 додає metadata; не генерує прогнозів/історичних оцінок і не
-запускає правил. OpenRouter free та long-source chunking ще planned.
+запускає правил. OpenRouter free ще planned; long-source chunking реалізоване нижче.
+
+## Schema v5: частини та очищення кешу
+
+Jobs фіксують chunk_limit/max_parts, version key — chunks-v1. Legacy jobs
+із zero chunk_limit зберігають попередню single-request поведінку. Новий
+ChunkGenerator використовує той самий cloud-only leaf adapter: кожна
+частина має явний partial warning й digest prompt без персонального
+прогнозу. Checkpoints immutable, input hash перевіряється, file fsync та
+lease fencing передують публікації. Готові частини синтезуються, за потреби
+з bounded reduction (8 rounds, max_parts на етапі, строгий прогрес довжини).
+Фінальний запит використовує оригінальний prompt/profile, source provenance
+і warning про synthesis; metadata artifact має chunk_count та сумарний
+reported usage успішних кроків. Timeout охоплює все завдання. Backup
+каталогу digests/ включає незавершені checkpoints, не лише final results.
+
+HTTPCache mutex серіалізує body reads, publication та cleanup цього одного
+сервісу; мережа поза mutex. last_accessed зберігається тільки в cache_entries.
+Cleanup видаляє refs старші expires+retention, потім orphan regular .body
+files і LRU bodies понад бюджет. Shared bodies рахуються один раз і
+видаляються разом із усіма їх cache refs. DB refs видаляються перед unlink;
+crash лишає orphan, який наступне cleanup прибирає. GET уже має body у
+пам’яті перед евікцією. Новий body більший за бюджет bypasses storage;
+cache write failures повертають доступну upstream відповідь для збереження
+source snapshot. Primary paths та human data не входять у cleanup.

@@ -107,7 +107,7 @@ func (s *Store) queueRegeneration(tx *sql.Tx, itemID, snapshotID int64) error {
 		return errors.New("генерація вже активна")
 	}
 	c := s.DigestConfig
-	_, err = tx.Exec("INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests) VALUES(?,'digest',?,?,?,?,?,?)", itemID, snapshotID, c.Version()+"|regenerate:"+rand.Text(), c.Model, c.PromptVersion, c.MaxInputBytes, c.Interests)
+	_, err = tx.Exec("INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests,chunk_limit,chunk_max_parts) VALUES(?,'digest',?,?,?,?,?,?,?,?)", itemID, snapshotID, c.Version()+"|regenerate:"+rand.Text(), c.Model, c.PromptVersion, c.MaxInputBytes, c.Interests, c.ChunkLimit, c.ChunkMaxParts)
 	if err != nil {
 		return err
 	}
