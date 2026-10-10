@@ -269,7 +269,9 @@ Readability виділяє HTML без додаткових запитів. По
 використовують той самий захищений клієнт; формат caption tracks може
 змінитися й тоді показується needs_input. Без shell/extractor subprocesses.
 
-Початкові параметри й запуск — README. Лише loopback; exact Host та
-Origin, CSRF у POST body, Sec-Fetch-Site, CSP, html/template escaping.
+Початкові параметри й запуск — README. Лише loopback; дозволені
+налаштований Host та `localhost` із тим самим портом. Origin має
+відповідати Host запиту; CSRF у POST body, Sec-Fetch-Site, CSP та
+html/template escaping залишаються обов’язковими.
 Authorization не дає доступу до UI-мутацій. Worker вимикається через
 `-no-worker`; runtime каталог поза Git. Тексти джерел не виконуються.

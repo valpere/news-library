@@ -27,7 +27,7 @@
 | FR-17 | UC-11 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
 | FR-18 | UC-05 | M1, M2, M3 | AT-18 | partial M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M2 Confidence/M3 vector planned |
 | FR-19 | UC-09 | M3 | AT-19 | planned |
-| FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries](../internal/library/web_test.go) |
+| FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries / TestWebLocalhostAccessAndOrigin](../internal/library/web_test.go) |
 
 ## Перевірка специфікації
 

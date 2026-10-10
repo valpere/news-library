@@ -14,7 +14,8 @@ def start():
     p=subprocess.Popen([str(root/'build/news-library'),'-data',str(data),'-bind','127.0.0.1:0'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     line=p.stdout.readline().strip()
     if not line.startswith('news-library: http://127.0.0.1:'): raise RuntimeError(line+p.stderr.read())
-    return p,line.removeprefix('news-library: ')
+    # Exercise the localhost alias, including Chromium form Origin headers.
+    return p,line.removeprefix('news-library: ').replace('127.0.0.1','localhost')
 def stop(p):
     p.send_signal(signal.SIGTERM)
     p.wait(timeout=15)

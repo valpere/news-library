@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"errors"
 	"html/template"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -95,7 +96,11 @@ func (w *Web) Handler() http.Handler {
 		rw.Header().Set("Referrer-Policy", "same-origin")
 		rw.Header().Set("Cache-Control", "no-store")
 		u, _ := url.Parse(w.Origin)
-		if r.Host != u.Host {
+		hostAllowed := r.Host == u.Host
+		if ip := net.ParseIP(u.Hostname()); ip != nil && ip.IsLoopback() {
+			hostAllowed = hostAllowed || r.Host == net.JoinHostPort("localhost", u.Port())
+		}
+		if !hostAllowed {
 			http.Error(rw, "невідомий Host", http.StatusForbidden)
 			return
 		}
@@ -104,7 +109,7 @@ func (w *Web) Handler() http.Handler {
 				http.Error(rw, "користувацькі мутації не приймають агентські облікові дані", http.StatusForbidden)
 				return
 			}
-			if origin := r.Header.Get("Origin"); origin != "" && origin != w.Origin {
+			if origin := r.Header.Get("Origin"); origin != "" && origin != u.Scheme+"://"+r.Host {
 				http.Error(rw, "сторонній Origin", http.StatusForbidden)
 				return
 			}
