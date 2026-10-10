@@ -4,6 +4,9 @@ go 1.26.0
 
 require (
 	codeberg.org/readeck/go-readability/v2 v2.1.3
+	github.com/joho/godotenv v1.5.1
+	github.com/yuin/goldmark/v2 v2.1.6
+	golang.org/x/sync v0.24.0
 	modernc.org/sqlite v1.60.1
 )
 

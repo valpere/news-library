@@ -2,38 +2,58 @@ package library
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
 	_ "embed"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"html/template"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 //go:embed pages.html
 var pages string
 
+//go:embed progress.js
+var progressJS string
+
+//go:embed digest.js
+var digestJS string
+
 type Web struct {
 	Store        *Store
+	Cache        *HTTPCache
 	Origin, CSRF string
 	MaxText      int64
 	tmpl         *template.Template
 	zone         *time.Location
 }
 type pageData struct {
-	CSRF      string
-	Filters   Filters
-	Items     []Item
-	Item      Item
-	Snapshots []Snapshot
-	Selected  *Snapshot
-	Ratings   []RatingEvent
-	Jobs      []JobStatus
+	CSRF            string
+	Filters         Filters
+	Items           []Item
+	Item            Item
+	Snapshots       []Snapshot
+	Selected        *Snapshot
+	Ratings         []RatingEvent
+	Jobs            []JobStatus
+	Digest          *Digest
+	Sections        []DigestSection
+	DigestEnabled   bool
+	CanRetryDigest  bool
+	ExportScript    template.JS
+	ExportCSP       string
+	Pending         bool
+	RateWithoutText bool
 }
 
 func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
@@ -47,7 +67,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 	}
 	funcs := template.FuncMap{
 		"state": func(s string) string {
-			labels := map[string]string{"queued": "У черзі", "fetching": "Отримання тексту", "ready": "Текст доступний", "needs_input": "Потрібен текст", "retry_wait": "Очікує повтору", "failed": "Не вдалося", "running": "Виконується", "done": "Завершено", "cancelled": "Скасовано"}
+			labels := map[string]string{"queued": "У черзі", "fetching": "Отримання тексту", "ready": "Готово", "enriching": "Створення дайджесту", "digest_retry_wait": "Очікує повтору дайджесту", "digest_failed": "Дайджест не створено", "needs_input": "Потрібен текст", "retry_wait": "Очікує повтору", "failed": "Не вдалося", "running": "Виконується", "done": "Завершено", "cancelled": "Скасовано"}
 			if label, ok := labels[s]; ok {
 				return label
 			}
@@ -63,7 +83,9 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 				return "Відкладені"
 			}
 			return s
-		}, "states": func() []string { return []string{"queued", "fetching", "ready", "needs_input", "retry_wait", "failed"} }, "quickScores": func() []int { return []int{0, 1, 2} }, "date": func(raw string) string {
+		}, "states": func() []string {
+			return []string{"queued", "fetching", "ready", "needs_input", "retry_wait", "failed", "enriching", "digest_retry_wait", "digest_failed"}
+		}, "quickScores": func() []int { return []int{0, 1, 2} }, "date": func(raw string) string {
 			t, err := time.Parse(time.RFC3339Nano, raw)
 			if err != nil {
 				return raw
@@ -84,11 +106,21 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", w.list)
+	mux.HandleFunc("GET /cache", w.cache)
+	mux.HandleFunc("GET /static/progress.js", func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		rw.Write([]byte(progressJS))
+	})
+	mux.HandleFunc("GET /static/digest.js", func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		rw.Write([]byte(digestJS))
+	})
+	mux.HandleFunc("GET /items/{id}/digests/{digest}/{format}", w.exportDigest)
 	mux.HandleFunc("GET /items/{id}", w.detail)
 	mux.HandleFunc("POST /items", w.add)
 	mux.HandleFunc("POST /items/{id}/{action}", w.mutate)
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+		rw.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 		rw.Header().Set("X-Content-Type-Options", "nosniff")
 		// Preserve the origin of same-origin form POSTs. no-referrer makes
 		// Chromium send Origin: null for HTTP navigation forms. External links
@@ -220,7 +252,30 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "сховище недоступне", 500)
 		return
 	}
-	w.render(rw, "detail", pageData{Item: i, Snapshots: snapshots, Selected: snap, Ratings: ratings, Jobs: jobs})
+	var digest *Digest
+	var sections []DigestSection
+	if snap != nil {
+		digest, err = w.Store.DigestForSnapshot(snap.ID)
+		if err == nil && digest != nil {
+			sections, err = SplitDigest(digest.Markdown)
+		}
+		if err != nil {
+			http.Error(rw, "дайджест недоступний; перевірте сховище", 500)
+			return
+		}
+	}
+	pending := snap == nil && (i.State == "queued" || i.State == "fetching" || i.State == "retry_wait")
+	if snap != nil && digest == nil && w.Store.DigestConfig != nil {
+		for _, job := range jobs {
+			if job.Stage != "digest" {
+				continue
+			}
+			if job.SnapshotID.Int64 == snap.ID && (job.State == "queued" || job.State == "running" || job.State == "retry_wait") {
+				pending = true
+			}
+		}
+	}
+	w.render(rw, "detail", pageData{Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: snap != nil && snap.ID == i.Selected.Int64 && w.Store.DigestConfig != nil, Ratings: ratings, Jobs: jobs, Pending: pending, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))
@@ -256,6 +311,8 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 		} else {
 			err = w.Store.Manual(id, text)
 		}
+	case "digest-retry":
+		err = w.Store.RetryDigest(id)
 	case "retry":
 		err = w.Store.Retry(id)
 	case "rating":
@@ -275,6 +332,15 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 			}
 			source = &sid
 		}
+		var digest *int64
+		if raw := form.Get("digest"); raw != "" {
+			did, e := strconv.ParseInt(raw, 10, 64)
+			if e != nil || did <= 0 {
+				err = errors.New("некоректна версія дайджесту")
+				break
+			}
+			digest = &did
+		}
 		now := time.Now()
 		var assessed *time.Time = &now
 		if form.Get("unknown_date") == "1" {
@@ -288,7 +354,7 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 			}
 			assessed = &t
 		}
-		err = w.Store.Rate(id, score, source, assessed, form.Get("reason"))
+		err = w.Store.RateShown(id, score, source, digest, assessed, form.Get("reason"))
 	default:
 		http.NotFound(rw, r)
 		return
@@ -298,4 +364,68 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(rw, r, "/items/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+}
+
+func (w *Web) exportDigest(rw http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	did, e := strconv.ParseInt(r.PathValue("digest"), 10, 64)
+	if err != nil || e != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	d, err := w.Store.Digest(did, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(rw, r)
+		return
+	}
+	if err != nil {
+		http.Error(rw, "дайджест недоступний", 500)
+		return
+	}
+	item, err := w.Store.Item(id)
+	if err != nil {
+		http.Error(rw, "сховище недоступне", 500)
+		return
+	}
+	snapshot, err := w.Store.Snapshot(d.SnapshotID)
+	if err != nil {
+		http.Error(rw, "джерело дайджесту недоступне", 500)
+		return
+	}
+	item.Title = snapshot.Title
+	name := strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		if r == '/' || r == '\\' {
+			return '-'
+		}
+		return r
+	}, snapshot.Title))
+	if name == "" {
+		name = fmt.Sprintf("digest-%d-%d", id, d.ID)
+	}
+	if runes := []rune(name); len(runes) > 180 {
+		name = string(runes[:180])
+	}
+	format := r.PathValue("format")
+	switch format {
+	case "markdown":
+		rw.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		rw.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".md"}))
+		fmt.Fprintf(rw, "# %s\n\nURL: %s\n\nМодель: %s · %s\n\nТекст #%d · %s · %s\n\n%s\n", item.Title, item.URL, d.ActualModel, d.CreatedAt, snapshot.ID, snapshot.Completeness, snapshot.Warning, d.Markdown)
+	case "html":
+		sections, err := SplitDigest(d.Markdown)
+		if err != nil {
+			http.Error(rw, "дайджест пошкоджено", 500)
+			return
+		}
+		rw.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".html"}))
+		hash := sha256.Sum256([]byte(digestJS))
+		policy := "default-src 'none'; script-src 'sha256-" + base64.StdEncoding.EncodeToString(hash[:]) + "'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
+		rw.Header().Set("Content-Security-Policy", policy)
+		w.render(rw, "export", pageData{Item: item, Selected: &snapshot, Digest: &d, Sections: sections, ExportScript: template.JS(digestJS), ExportCSP: policy})
+	default:
+		http.NotFound(rw, r)
+	}
 }

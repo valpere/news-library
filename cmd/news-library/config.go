@@ -1,0 +1,173 @@
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/joho/godotenv"
+)
+
+type config struct {
+	Data, Bind, Model, OllamaURL, OllamaKey               string
+	FetchTimeout, DigestTimeout, Lease, Backoff, CacheTTL time.Duration
+	Attempts, InputLimit                                  int
+	MaxBytes                                              int64
+	NoWorker, NoDigests                                   bool
+}
+
+func readConfig(args []string) (config, error) {
+	path := ".env"
+	explicitFile := false
+	for i, a := range args {
+		if a == "-env-file" || a == "--env-file" {
+			explicitFile = true
+			if i+1 < len(args) {
+				path = args[i+1]
+			}
+		} else if strings.HasPrefix(a, "--env-file=") {
+			explicitFile = true
+			path = strings.TrimPrefix(a, "--env-file=")
+		} else if strings.HasPrefix(a, "-env-file=") {
+			explicitFile = true
+			path = strings.TrimPrefix(a, "-env-file=")
+		}
+	}
+	values := map[string]string{}
+	if path != "" {
+		var err error
+		values, err = godotenv.Read(path)
+		if err != nil && (explicitFile || !errors.Is(err, os.ErrNotExist)) {
+			return config{}, errors.New("не вдалося прочитати конфігурацію .env")
+		}
+	}
+	// Resolve supplied values before parsing defaults: an invalid lower-priority
+	// setting must not reject a valid command-line override.
+	flagNames := map[string]string{
+		"data": "NEWS_LIBRARY_DATA", "bind": "NEWS_LIBRARY_BIND", "model": "OLLAMA_MODEL", "ollama-url": "OLLAMA_API_URL",
+		"fetch-timeout": "NEWS_LIBRARY_FETCH_TIMEOUT", "digest-timeout": "NEWS_LIBRARY_DIGEST_TIMEOUT", "lease": "NEWS_LIBRARY_LEASE",
+		"backoff": "NEWS_LIBRARY_BACKOFF", "cache-ttl": "NEWS_LIBRARY_CACHE_TTL", "attempts": "NEWS_LIBRARY_ATTEMPTS",
+		"max-bytes": "NEWS_LIBRARY_MAX_BYTES", "digest-max-bytes": "NEWS_LIBRARY_DIGEST_MAX_BYTES", "no-worker": "NEWS_LIBRARY_NO_WORKER", "no-digests": "NEWS_LIBRARY_NO_DIGESTS",
+	}
+	overrides := map[string]string{}
+	for i := 0; i < len(args); i++ {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		variable, known := flagNames[name]
+		if !known {
+			if name == "env-file" && !hasValue {
+				i++
+			}
+			continue
+		}
+		if !hasValue {
+			if name == "no-worker" || name == "no-digests" {
+				value = "true"
+			} else if i+1 < len(args) {
+				i++
+				value = args[i]
+			} else {
+				continue
+			}
+		}
+		overrides[variable] = value
+	}
+	get := func(name, fallback string) string {
+		if v, ok := overrides[name]; ok {
+			return v
+		}
+		if v, ok := os.LookupEnv(name); ok {
+			return v
+		}
+		if v, ok := values[name]; ok {
+			return v
+		}
+		return fallback
+	}
+	duration := func(name, fallback string) (time.Duration, error) {
+		v, e := time.ParseDuration(get(name, fallback))
+		if e != nil {
+			return 0, fmt.Errorf("некоректне налаштування %s", name)
+		}
+		return v, nil
+	}
+	integer := func(name, fallback string) (int64, error) {
+		v, e := strconv.ParseInt(get(name, fallback), 10, 64)
+		if e != nil {
+			return 0, fmt.Errorf("некоректне налаштування %s", name)
+		}
+		return v, nil
+	}
+	boolean := func(name, fallback string) (bool, error) {
+		v, e := strconv.ParseBool(get(name, fallback))
+		if e != nil {
+			return false, fmt.Errorf("некоректне налаштування %s", name)
+		}
+		return v, nil
+	}
+	c := config{Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
+	for _, entry := range []struct {
+		name, value string
+		target      *time.Duration
+	}{{"NEWS_LIBRARY_FETCH_TIMEOUT", "30s", &c.FetchTimeout}, {"NEWS_LIBRARY_DIGEST_TIMEOUT", "300s", &c.DigestTimeout}, {"NEWS_LIBRARY_LEASE", "1m", &c.Lease}, {"NEWS_LIBRARY_BACKOFF", "10s", &c.Backoff}, {"NEWS_LIBRARY_CACHE_TTL", "24h", &c.CacheTTL}} {
+		v, e := duration(entry.name, entry.value)
+		if e != nil {
+			return c, e
+		}
+		*entry.target = v
+	}
+	attempts, e := integer("NEWS_LIBRARY_ATTEMPTS", "3")
+	if e != nil {
+		return c, e
+	}
+	limit, e := integer("NEWS_LIBRARY_DIGEST_MAX_BYTES", "163840")
+	if e != nil {
+		return c, e
+	}
+	c.MaxBytes, e = integer("NEWS_LIBRARY_MAX_BYTES", "4194304")
+	if e != nil {
+		return c, e
+	}
+	if attempts < 1 || attempts > 100 || limit < 1024 || limit > 4<<20 {
+		return c, errors.New("attempts має бути 1..100, digest-max-bytes — 1KiB..4MiB")
+	}
+	c.Attempts = int(attempts)
+	c.InputLimit = int(limit)
+	c.NoWorker, e = boolean("NEWS_LIBRARY_NO_WORKER", "false")
+	if e != nil {
+		return c, e
+	}
+	c.NoDigests, e = boolean("NEWS_LIBRARY_NO_DIGESTS", "false")
+	if e != nil {
+		return c, e
+	}
+	flags := flag.NewFlagSet("news-library", flag.ContinueOnError)
+	flags.StringVar(&path, "env-file", path, "локальний файл конфігурації; порожньо = без файлу")
+	flags.StringVar(&c.Data, "data", c.Data, "каталог SQLite, текстів, дайджестів та HTTP-кешу")
+	flags.StringVar(&c.Bind, "bind", c.Bind, "loopback host:port")
+	flags.StringVar(&c.Model, "model", c.Model, "Ollama cloud модель дайджесту")
+	flags.StringVar(&c.OllamaURL, "ollama-url", c.OllamaURL, "локальний Ollama /api/chat")
+	flags.DurationVar(&c.FetchTimeout, "fetch-timeout", c.FetchTimeout, "час отримання одного джерела")
+	flags.DurationVar(&c.DigestTimeout, "digest-timeout", c.DigestTimeout, "час cloud генерації")
+	flags.DurationVar(&c.Lease, "lease", c.Lease, "lease черги з heartbeat")
+	flags.DurationVar(&c.Backoff, "backoff", c.Backoff, "початкова затримка повтору")
+	flags.DurationVar(&c.CacheTTL, "cache-ttl", c.CacheTTL, "максимальний TTL HTTP-кешу; 0 = bypass")
+	flags.IntVar(&c.Attempts, "attempts", c.Attempts, "максимум спроб завдання")
+	flags.Int64Var(&c.MaxBytes, "max-bytes", c.MaxBytes, "ліміт джерела/ручного тексту")
+	flags.IntVar(&c.InputLimit, "digest-max-bytes", c.InputLimit, "ліміт тексту одного дайджесту")
+	flags.BoolVar(&c.NoWorker, "no-worker", c.NoWorker, "лише UI, без виконання черги")
+	flags.BoolVar(&c.NoDigests, "no-digests", c.NoDigests, "вимкнути генерацію, зберігаючи отримання тексту")
+	if e = flags.Parse(args); e != nil {
+		return c, e
+	}
+	if flags.NArg() != 0 {
+		return c, errors.New("неочікувані аргументи")
+	}
+	if c.FetchTimeout <= 0 || c.DigestTimeout <= 0 || c.Lease < time.Second || c.Backoff <= 0 || c.CacheTTL < 0 || c.Attempts < 1 || c.Attempts > 100 || c.MaxBytes < 1024 || c.MaxBytes > 64<<20 || c.InputLimit < 1024 || c.InputLimit > 4<<20 {
+		return c, errors.New("некоректні таймаути/ліміти конфігурації")
+	}
+	return c, nil
+}

@@ -14,8 +14,10 @@ some older proposals were superseded. Do not treat proposals as user decisions.
 
 ## Project Structure
 
-M1 is implemented in `cmd/news-library/` and `internal/library/`: one Go
-service, a web interface, SQLite, and a persistent background queue. Python
+M1 and the digest part of M2 are implemented in `cmd/news-library/` and `internal/library/`: one Go
+service, a web interface, SQLite metadata, separate immutable text/digest files,
+a shared HTTP cache, and a persistent background queue. Runtime settings live
+in private `.env`; `.env.example` documents defaults. Backup needs DB + primary files. Python
 validation and optional browser smoke live in `scripts/`; private evaluation
 scripts and pilot artifacts remain local. The upstream license is preserved.
 

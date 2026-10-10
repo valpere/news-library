@@ -11,19 +11,19 @@
 | FR-01 | UC-01 | M1 | AT-01 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
 | FR-02 | UC-01 | M1 | AT-02 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
 | FR-03 | UC-01, UC-02 | M1 | AT-03 | passed: [TestWorkerFailureAndStoredText](../internal/library/source_test.go) |
-| FR-04 | UC-02, UC-03 | M1, M2 | AT-04 | partial M1: [TestArticleFixtures / TestYouTubeFixtures](../internal/library/source_test.go); M2 artifacts planned |
+| FR-04 | UC-02, UC-03 | M1, M2 | AT-04 | passed source + digest provenance: [TestArticleFixtures / TestYouTubeFixtures](../internal/library/source_test.go), [TestDigestQueueRecoveryAndRatingContext](../internal/library/digest_test.go) |
 | FR-05 | UC-06 | M2 | AT-05 | planned |
 | FR-06 | UC-05, UC-06 | M2 | AT-06 | planned |
 | FR-07 | UC-02, UC-03 | M1, M2 | AT-07 | partial M1: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go); M2 predictions planned |
 | FR-08 | UC-07 | M2 | AT-08 | planned |
 | FR-09 | UC-04 | M1 | AT-09 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
-| FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | partial M1: [TestLeaseRestartRetryAndIdempotency / TestCrashOnLastAttemptTerminates](../internal/library/store_test.go); M2 stages planned |
+| FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | partial M1: [TestLeaseRestartRetryAndIdempotency / TestCrashOnLastAttemptTerminates](../internal/library/store_test.go); digest recovery: [TestDigestQueueRecoveryAndRatingContext](../internal/library/digest_test.go); future filter stages planned |
 | FR-11 | UC-05 | M1, M3 | AT-11 | partial M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 vector planned |
 | FR-12 | UC-09 | M3 | AT-12 | planned |
 | FR-13 | UC-08 | M4 | AT-13 | planned |
 | FR-14 | UC-12 | M4 | AT-14 | planned |
-| FR-15 | UC-03 | M1, M2 | AT-15 | partial M1: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go), [TestWebRejectsInvalidScoresAndForeignContext](../internal/library/web_test.go); M2 digest links planned |
-| FR-16 | UC-10 | M1, M2 | AT-16 | partial M1: [TestNeedsInputAndManualWinsRace](../internal/library/store_test.go), [TestYouTubeFixtures](../internal/library/source_test.go); M2 enrichment planned |
+| FR-15 | UC-03 | M1, M2 | AT-15 | partial M1: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go), [TestWebRejectsInvalidScoresAndForeignContext](../internal/library/web_test.go); passed digest links: [TestDigestQueueRecoveryAndRatingContext / TestDigestPrimaryUIAndExports](../internal/library/digest_test.go) |
+| FR-16 | UC-10 | M1, M2 | AT-16 | partial M1: [TestNeedsInputAndManualWinsRace](../internal/library/store_test.go), [TestYouTubeFixtures](../internal/library/source_test.go); digest failure/retry: [browser smoke](../scripts/smoke_digest_ui.py); long-source chunking planned |
 | FR-17 | UC-11 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
 | FR-18 | UC-05 | M1, M2, M3 | AT-18 | partial M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M2 Confidence/M3 vector planned |
 | FR-19 | UC-09 | M3 | AT-19 | planned |
@@ -57,3 +57,11 @@ D_pair за замовчуванням не є критерієм прийман
 Перший вимір до/після уточнення оцінок збережено локально в
 `experiments/spec-precision/2026-10-10/` разом із входами, конфігурацією
 та межами інтерпретації. Він не є залежністю публічного checkout.
+
+Додаткове приймання погоджених уточнень:
+- [Міграція, відновлення файлів і failure rollback](../internal/library/files_test.go).
+- [Спільний HTTP-кеш, одночасність, upstream privacy, SSRF і нуль jobs/items](../internal/library/cache_test.go).
+- [Cloud-only adapter, partial/invalid output і safe Markdown](../internal/library/digest_test.go).
+- [Конфігурація та private errors](../cmd/news-library/config_test.go).
+- [Очікування без оцінки та незмінні GET](../internal/library/web_test.go).
+- [Браузерний дайджест: вкладки, clipboard, exports, rating context, failure/retry](../scripts/smoke_digest_ui.py).

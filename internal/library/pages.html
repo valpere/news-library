@@ -1,5 +1,5 @@
 {{define "top"}}<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Особиста бібліотека</title>
-<style>body{font:17px system-ui,sans-serif;max-width:1000px;margin:2rem auto;padding:0 1rem;color:#172d3c;background:#f7f6f1}a{color:#145b7e}header{display:flex;justify-content:space-between;align-items:center}form,article,details{padding:1rem;background:white;border:1px solid #ccd4d7;border-radius:8px;margin:1rem 0}input,select,textarea,button{font:inherit;padding:.45rem;border:1px solid #aebbc1;border-radius:4px;max-width:100%;box-sizing:border-box}button{background:#145b7e;color:white;cursor:pointer}input[type=url],textarea{width:100%}label{display:inline-block;margin:.4rem .5rem .4rem 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.6}small,.muted{color:#52616a}table{width:100%;border-collapse:collapse}td,th{padding:.5rem;text-align:left;border-bottom:1px solid #ddd}.row{display:flex;gap:.5rem;flex-wrap:wrap}.error{color:#8a271a}h1{font-size:1.6rem}h2{font-size:1.25rem}</style></head><body><header><h1><a href="/">Особиста бібліотека</a></h1><a href="">Оновити стан</a></header>{{end}}
+<style>body{font:17px system-ui,sans-serif;max-width:1000px;margin:2rem auto;padding:0 1rem;color:#172d3c;background:#f7f6f1}a{color:#145b7e}header{display:flex;justify-content:space-between;align-items:center}form,article,details{padding:1rem;background:white;border:1px solid #ccd4d7;border-radius:8px;margin:1rem 0}input,select,textarea,button{font:inherit;padding:.45rem;border:1px solid #aebbc1;border-radius:4px;max-width:100%;box-sizing:border-box}button{background:#145b7e;color:white;cursor:pointer}input[type=url],textarea{width:100%}label{display:inline-block;margin:.4rem .5rem .4rem 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.6}small,.muted{color:#52616a}table{width:100%;border-collapse:collapse}td,th{padding:.5rem;text-align:left;border-bottom:1px solid #ddd}.row{display:flex;gap:.5rem;flex-wrap:wrap}.error{color:#8a271a}h1{font-size:1.6rem}h2{font-size:1.25rem}[role=tab][aria-selected=true]{background:#092f43;outline:2px solid #7095a9;outline-offset:2px}</style></head><body><header><h1><a href="/">Особиста бібліотека</a></h1><a href="">Оновити стан</a></header>{{end}}
 {{define "bottom"}}<p class="muted">Час — Europe/Kyiv. Оцінка, збереження та прочитання — окремі дії.</p></body></html>{{end}}
 {{define "list"}}{{template "top" .}}
 <form method="post" action="/items"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="url">Додати статтю або YouTube</label><input id="url" type="url" name="url" placeholder="https://…" required><p><button>Додати URL</button></p></form>
@@ -10,15 +10,75 @@
 <label>Сортування <select name="sort"><option value="added">Час додавання</option><option value="rating" {{if eq .Filters.Sort "rating"}}selected{{end}}>Власна оцінка</option><option value="relevance" {{if eq .Filters.Sort "relevance"}}selected{{end}}>Релевантність</option></select></label>
 <label>Напрямок <select name="direction"><option value="desc">Спадання</option><option value="asc" {{if eq .Filters.Direction "asc"}}selected{{end}}>Зростання</option></select></label><button>Знайти</button></form>
 {{range .Items}}<article><h2><a href="/items/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a></h2><p>{{placement .Placement}} · {{state .State}} · оцінка: {{score .Score}} · {{if .Read}}прочитано{{else}}непрочитано{{end}}</p><small>{{date .AddedAt}} · {{.Tags}}</small>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}</article>{{else}}<p>Матеріалів поки немає або жоден не відповідає фільтрам.</p>{{end}}{{template "bottom" .}}{{end}}
-{{define "detail"}}{{template "top" .}}<h2>{{if .Item.Title}}{{.Item.Title}}{{else}}{{.Item.URL}}{{end}}</h2><p><a href="{{.Item.URL}}" rel="noreferrer">Відкрити джерело</a> · {{date .Item.AddedAt}}</p><p>{{state .Item.State}} · {{placement .Item.Placement}} · {{if .Item.Read}}прочитано{{else}}непрочитано{{end}} · оцінка: {{score .Item.Score}}</p>{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
+{{define "rating"}}
+<form method="post" action="/items/{{.Item.ID}}/rating"><h2>Власна оцінка користі</h2><input type="hidden" name="csrf" value="{{.CSRF}}">{{if .Selected}}<input type="hidden" name="source" value="{{.Selected.ID}}">{{end}}{{if .Digest}}<input type="hidden" name="digest" value="{{.Digest.ID}}">{{end}}<label>Невід’ємне ціле <input name="score" type="number" min="0" step="1" required></label><label>Причина <input name="reason"></label><p><label>Дата рішення (порожньо = зараз) <input name="assessed_at" type="datetime-local"></label><label><input type="checkbox" name="unknown_date" value="1"> Історична дата невідома</label></p><button>Додати оцінку</button></form>
+<div class="row">{{range $n := (quickScores)}}<form method="post" action="/items/{{$.Item.ID}}/rating"><input type="hidden" name="csrf" value="{{$.CSRF}}">{{if $.Selected}}<input type="hidden" name="source" value="{{$.Selected.ID}}">{{end}}{{if $.Digest}}<input type="hidden" name="digest" value="{{$.Digest.ID}}">{{end}}<button name="score" value="{{$n}}">Оцінити {{$n}}</button></form>{{end}}</div>
+{{end}}
+{{define "libraryActions"}}
 <div class="row"><form method="post" action="/items/{{.Item.ID}}/placement"><input type="hidden" name="csrf" value="{{.CSRF}}"><button name="placement" value="library">Зберегти</button> <button name="placement" value="deferred">Відкласти</button> <button name="placement" value="inbox">До вхідних</button></form>
 <form method="post" action="/items/{{.Item.ID}}/read"><input type="hidden" name="csrf" value="{{.CSRF}}">{{if .Item.Read}}<button name="read" value="0">Позначити непрочитаним</button>{{else}}<button name="read" value="1">Позначити прочитаним</button>{{end}}</form></div>
 <form method="post" action="/items/{{.Item.ID}}/tags"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Теги через кому <input name="tags" value="{{.Item.Tags}}"></label><button>Зберегти теги</button></form>
-<h2>Доступний текст</h2>{{if .Selected}}<p>Версія #{{.Selected.ID}} · {{.Selected.Origin}} · {{.Selected.Extractor}} · {{.Selected.Completeness}} · {{date .Selected.RetrievedAt}}</p><p class="muted">{{.Selected.Warning}}</p><article><pre>{{.Selected.Text}}</pre></article>{{else}}<p>Текст ще не отримано. Можна повторити отримання або вставити його вручну.</p>{{end}}
-<form method="post" action="/items/{{.Item.ID}}/rating"><h2>Власна оцінка користі</h2><input type="hidden" name="csrf" value="{{.CSRF}}">{{if .Selected}}<input type="hidden" name="source" value="{{.Selected.ID}}">{{end}}<label>Невід’ємне ціле <input name="score" type="number" min="0" step="1" required></label><label>Причина <input name="reason"></label><p><label>Дата рішення (порожньо = зараз) <input name="assessed_at" type="datetime-local"></label><label><input type="checkbox" name="unknown_date" value="1"> Історична дата невідома</label></p><button>Додати оцінку</button></form>
-<div class="row">{{range $n := (quickScores)}}<form method="post" action="/items/{{$.Item.ID}}/rating"><input type="hidden" name="csrf" value="{{$.CSRF}}">{{if $.Selected}}<input type="hidden" name="source" value="{{$.Selected.ID}}">{{end}}<button name="score" value="{{$n}}">Оцінити {{$n}}</button></form>{{end}}</div>
-<details><summary>Історія оцінок ({{len .Ratings}})</summary>{{range .Ratings}}<p>#{{.ID}} · оцінка {{.Score}} · записано {{date .RecordedAt}} · рішення: {{if .AssessedAt.Valid}}{{date .AssessedAt.String}}{{else}}дата невідома{{end}} · текст: {{if .SourceVersionID.Valid}}#{{.SourceVersionID.Int64}}{{else}}невідомий{{end}}<br>{{.Reason}}</p>{{else}}<p>Власної оцінки немає.</p>{{end}}</details>
+{{end}}
+{{define "detail"}}
+{{template "top" .}}
+<h2>{{if .Item.Title}}{{.Item.Title}}{{else}}{{.Item.URL}}{{end}}</h2>
+<p><a href="{{.Item.URL}}" rel="noreferrer">Відкрити джерело</a> · {{date .Item.AddedAt}}</p>
+<p>{{placement .Item.Placement}} · {{if .Item.Read}}прочитано{{else}}непрочитано{{end}} · оцінка: {{score .Item.Score}}</p>
+<section id="processing" data-pending="{{.Pending}}" aria-live="polite">
+{{if .Digest}}
+{{template "digestContent" .}}<script src="/static/digest.js" defer></script>
+{{else if .Pending}}
+<article><h2>Посилання збережено</h2>
+<p id="processing-message">{{state .Item.State}}. {{if .Selected}}Текст збережено. Дайджест з’явиться тут автоматично.{{else}}Текст ще не отримано. Дайджест з’явиться після завершення обробки.{{end}}</p>
+{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
+<p><a id="processing-refresh" href="" hidden>Показати результат обробки</a></p>
+<noscript><p>Щоб побачити результат, натисніть «Оновити стан».</p></noscript></article>
+{{else if .Selected}}
+<article><h2>Дайджест недоступний</h2><p>{{if .DigestEnabled}}Генерацію не завершено. Збережений текст доступний нижче.{{else}}Генерацію вимкнено в конфігурації. Збережений текст доступний нижче.{{end}}</p>{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
+{{if .CanRetryDigest}}<form method="post" action="/items/{{.Item.ID}}/digest-retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повторити генерацію дайджесту</button></form>{{end}}</article>
+{{else}}
+<article><h2>Текст недоступний</h2>
+{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
+<p>Можна повторити отримання, відкрити джерело або вставити текст вручну.</p></article>
+{{end}}
+{{if .Selected}}
+<details><summary>Повний збережений текст · версія #{{.Selected.ID}}</summary>
+<p>{{.Selected.Origin}} · {{.Selected.Extractor}} · {{.Selected.Completeness}} · {{date .Selected.RetrievedAt}}</p>
+<p class="muted">{{.Selected.Warning}}</p><pre>{{.Selected.Text}}</pre></details>
+{{end}}
+</section>
+{{if or .Digest (and .Selected (not .DigestEnabled))}}
+{{template "rating" .}}
+{{template "libraryActions" .}}
+{{else}}
+{{if .RateWithoutText}}
+<p>Оцінюйте, якщо вже прочитали повний текст або ознайомилися з джерелом поза бібліотекою. Показаний дайджест для цієї оцінки відсутній.</p>
+{{template "rating" .}}
+{{end}}
+<details><summary>Інші дії з матеріалом</summary>
+{{template "libraryActions" .}}
+{{if not .RateWithoutText}}<p><a href="/items/{{.Item.ID}}?rate_without_text=1">Я вже ознайомився з матеріалом — оцінити</a></p>{{end}}
+</details>
+{{end}}
+<details><summary>Історія оцінок ({{len .Ratings}})</summary>{{range .Ratings}}<p>#{{.ID}} · оцінка {{.Score}} · записано {{date .RecordedAt}} · рішення: {{if .AssessedAt.Valid}}{{date .AssessedAt.String}}{{else}}дата невідома{{end}} · текст: {{if .SourceVersionID.Valid}}#{{.SourceVersionID.Int64}}{{else}}невідомий{{end}} · дайджест: {{if .DigestID.Valid}}#{{.DigestID.Int64}}{{else}}невідомий{{end}}<br>{{.Reason}}</p>{{else}}<p>Власної оцінки немає.</p>{{end}}</details>
 <details><summary>Версії тексту ({{len .Snapshots}})</summary>{{range .Snapshots}}<p><a href="/items/{{$.Item.ID}}?source={{.ID}}">#{{.ID}} · {{.Origin}} · {{date .RetrievedAt}} · {{.Completeness}}</a></p>{{end}}</details>
+
+{{if not .Pending}}
 <form method="post" action="/items/{{.Item.ID}}/retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повторити отримання тексту</button></form>
+{{end}}
 <details><summary>Вставити текст вручну</summary><form method="post" action="/items/{{.Item.ID}}/manual"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="manual">Нова версія; попередні залишаться в історії</label><textarea id="manual" name="text" rows="10" required></textarea><button>Зберегти текст</button></form></details>
-<details><summary>Черга та помилки</summary>{{range .Jobs}}<p>Завдання #{{.ID}} · {{state .State}} · спроби: {{.Attempts}}<br>{{.Error}}</p>{{end}}</details>{{template "bottom" .}}{{end}}
+<details><summary>Черга та помилки</summary>{{range .Jobs}}<p>Завдання #{{.ID}} · {{state .State}} · спроби: {{.Attempts}}<br>{{.Error}}</p>{{end}}</details>
+{{if and .Pending (not .RateWithoutText)}}<script src="/static/progress.js" defer></script>{{end}}
+{{template "bottom" .}}
+{{end}}
+
+{{define "export"}}<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="{{.ExportCSP}}"><title>{{.Item.Title}}</title><style>body{font:18px system-ui;max-width:900px;margin:2rem auto;padding:1rem;line-height:1.6}pre{white-space:pre-wrap}a{color:#145b7e}.row{display:flex;gap:.5rem;flex-wrap:wrap}button{font:inherit;padding:.5rem;cursor:pointer}[role=tab][aria-selected=true]{background:#145b7e;color:white}textarea{width:100%;min-height:20rem}</style></head><body><h1>{{.Item.Title}}</h1><p><a href="{{.Item.URL}}" rel="noreferrer">Джерело</a></p>{{template "digestContent" .}}<script>{{.ExportScript}}</script></body></html>{{end}}
+
+{{define "digestContent"}}<article id="digest"><h2>Дайджест</h2>
+<p class="muted">{{.Digest.ActualModel}} · {{date .Digest.CreatedAt}} · текст #{{.Digest.SnapshotID}} · дайджест #{{.Digest.ID}}</p>
+<p>{{.Selected.Completeness}} · {{.Selected.Warning}}</p>
+<div class="row" role="tablist" aria-label="Секції дайджесту">{{range $k,$section := .Sections}}<button type="button" role="tab" id="tab-{{$k}}" aria-controls="section-{{$k}}" aria-selected="false" data-section="section-{{$k}}">{{.Title}}</button>{{end}}</div>
+{{range $k,$section := .Sections}}<section id="section-{{$k}}" role="tabpanel" aria-labelledby="tab-{{$k}}"><h3>{{.Title}}</h3>{{.HTML}}</section>{{end}}
+<p><button id="copy-digest" type="button">Копіювати Markdown</button> <span id="copy-status" role="status"></span>{{if not .ExportScript}} · <a href="/items/{{.Item.ID}}/digests/{{.Digest.ID}}/markdown">Markdown</a> · <a href="/items/{{.Item.ID}}/digests/{{.Digest.ID}}/html">HTML</a>{{end}}</p>
+<textarea id="digest-markdown" hidden>{{.Digest.Markdown}}</textarea>
+</article>{{end}}

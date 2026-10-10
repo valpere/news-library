@@ -211,3 +211,72 @@ func TestWebLocalhostAccessAndOrigin(t *testing.T) {
 		t.Fatal("localhost form did not persist")
 	}
 }
+
+func TestWebShowsContentBeforeRating(t *testing.T) {
+	s, w := testWeb(t)
+	id := add(t, s, "https://example.com/unseen")
+	for _, state := range []string{"queued", "fetching", "retry_wait", "needs_input"} {
+		if _, err := s.DB.Exec("UPDATE items SET state=? WHERE id=?", state, id); err != nil {
+			t.Fatal(err)
+		}
+		rw := webRequest(w, "GET", "/items/1", nil, nil)
+		if rw.Code != 200 {
+			t.Fatal("card failed", rw.Code)
+		}
+		html := rw.Body.String()
+		if strings.Contains(html, `action="/items/1/rating"`) || strings.Contains(html, `name="score"`) {
+			t.Fatal("unseen item prompts for rating", state)
+		}
+		if state != "needs_input" {
+			if !strings.Contains(html, "Посилання збережено") || !strings.Contains(html, `data-pending="true"`) || !strings.Contains(html, `src="/static/progress.js"`) {
+				t.Fatal("missing processing guidance", state)
+			}
+		} else if !strings.Contains(html, "Текст недоступний") || strings.Contains(html, `src="/static/progress.js"`) {
+			t.Fatal("unavailable source still looks pending")
+		}
+	}
+	// Someone who already read the source can explicitly choose the separate path.
+	rw := webRequest(w, "GET", "/items/1?rate_without_text=1", nil, nil)
+	if rw.Code != 200 || !strings.Contains(rw.Body.String(), `action="/items/1/rating"`) || !strings.Contains(rw.Body.String(), "поза бібліотекою") {
+		t.Fatal("explicit external assessment unavailable")
+	}
+	i, _ := s.Item(id)
+	events, _ := s.Ratings(id)
+	if i.Read || i.Score.Valid || len(events) != 0 {
+		t.Fatal("opening assessment path made a judgment")
+	}
+	post(t, w, "/items/1/rating", url.Values{"score": {"3"}})
+	events, _ = s.Ratings(id)
+	if len(events) != 1 || events[0].SourceVersionID.Valid {
+		t.Fatal("invented text provenance for external reading")
+	}
+	manual(t, s, id, "Read this available text first")
+	rw = webRequest(w, "GET", "/items/1", nil, nil)
+	html := rw.Body.String()
+	textPos, ratePos := strings.Index(html, "Read this available text first"), strings.Index(html, `action="/items/1/rating"`)
+	if rw.Code != 200 || textPos < 0 || ratePos < textPos || !strings.Contains(html, `name="source"`) || strings.Contains(html, `src="/static/progress.js"`) {
+		t.Fatal("rating does not follow available text")
+	}
+}
+
+func TestProgressPageReadsDoNotChangeState(t *testing.T) {
+	s, w := testWeb(t)
+	id := add(t, s, "https://example.com/pending")
+	for range 5 {
+		rw := webRequest(w, "GET", "/items/1", nil, nil)
+		if rw.Code != 200 {
+			t.Fatal(rw.Code)
+		}
+	}
+	i, _ := s.Item(id)
+	jobs, _ := s.Jobs(id)
+	snapshots, _ := s.Snapshots(id)
+	ratings, _ := s.Ratings(id)
+	if i.Read || i.Score.Valid || i.State != "queued" || len(jobs) != 1 || jobs[0].Attempts != 0 || len(snapshots) != 0 || len(ratings) != 0 {
+		t.Fatal("progress polling mutates library state")
+	}
+	rw := webRequest(w, "GET", "/static/progress.js", nil, nil)
+	if rw.Code != 200 || !strings.HasPrefix(rw.Header().Get("Content-Type"), "text/javascript") || !strings.Contains(rw.Header().Get("Content-Security-Policy"), "connect-src 'self'") {
+		t.Fatal("progress script unavailable under CSP")
+	}
+}
