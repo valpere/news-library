@@ -194,7 +194,7 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 	}
 	if partial {
 		snap.Completeness = "partial"
-		snap.Warning = "Відповідь обрізано через ліміт або перерване з’єднання; доступну частину збережено"
+		snap.Warning = "Відповідь часткова, обрізана або перервана; доступну частину збережено"
 	}
 	return snap, nil
 }
@@ -260,7 +260,7 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
 	}
 	if partial || pagePartial {
 		s.Completeness = "partial"
-		s.Warning += "; відповідь обрізано через ліміт"
+		s.Warning += "; відповідь часткова або не повністю прочитана"
 	}
 	return s, nil
 }

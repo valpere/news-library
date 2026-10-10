@@ -8,8 +8,8 @@
 
 | Вимога | Сценарії | Етап | Приймання | Статус |
 |---|---|---|---|---|
-| FR-01 | UC-01 | M1 | AT-01 | passed: `internal/library/store_test.go::TestIngestConcurrentRestart` |
-| FR-02 | UC-01 | M1 | AT-02 | passed: `internal/library/store_test.go::TestIngestConcurrentRestart` |
+| FR-01 | UC-01 | M1 | AT-01 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
+| FR-02 | UC-01 | M1 | AT-02 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
 | FR-03 | UC-01, UC-02 | M1 | AT-03 | passed: [TestWorkerFailureAndStoredText](../internal/library/source_test.go) |
 | FR-04 | UC-02, UC-03 | M1, M2 | AT-04 | partial M1: [TestArticleFixtures / TestYouTubeFixtures](../internal/library/source_test.go); M2 artifacts planned |
 | FR-05 | UC-06 | M2 | AT-05 | planned |
