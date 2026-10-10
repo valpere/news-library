@@ -1,4 +1,4 @@
-// Poll the read-only card while its first text is pending.
+// Poll the read-only card while text retrieval or digest generation is pending.
 // Preserve any user input or expanded controls instead of reloading over them.
 (() => {
   const panel = document.getElementById("processing");

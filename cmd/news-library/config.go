@@ -22,12 +22,18 @@ type config struct {
 
 func readConfig(args []string) (config, error) {
 	path := ".env"
+	explicitFile := false
 	for i, a := range args {
 		if a == "-env-file" || a == "--env-file" {
+			explicitFile = true
 			if i+1 < len(args) {
 				path = args[i+1]
 			}
+		} else if strings.HasPrefix(a, "--env-file=") {
+			explicitFile = true
+			path = strings.TrimPrefix(a, "--env-file=")
 		} else if strings.HasPrefix(a, "-env-file=") {
+			explicitFile = true
 			path = strings.TrimPrefix(a, "-env-file=")
 		}
 	}
@@ -35,11 +41,44 @@ func readConfig(args []string) (config, error) {
 	if path != "" {
 		var err error
 		values, err = godotenv.Read(path)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err != nil && (explicitFile || !errors.Is(err, os.ErrNotExist)) {
 			return config{}, errors.New("не вдалося прочитати конфігурацію .env")
 		}
 	}
+	// Resolve supplied values before parsing defaults: an invalid lower-priority
+	// setting must not reject a valid command-line override.
+	flagNames := map[string]string{
+		"data": "NEWS_LIBRARY_DATA", "bind": "NEWS_LIBRARY_BIND", "model": "OLLAMA_MODEL", "ollama-url": "OLLAMA_API_URL",
+		"fetch-timeout": "NEWS_LIBRARY_FETCH_TIMEOUT", "digest-timeout": "NEWS_LIBRARY_DIGEST_TIMEOUT", "lease": "NEWS_LIBRARY_LEASE",
+		"backoff": "NEWS_LIBRARY_BACKOFF", "cache-ttl": "NEWS_LIBRARY_CACHE_TTL", "attempts": "NEWS_LIBRARY_ATTEMPTS",
+		"max-bytes": "NEWS_LIBRARY_MAX_BYTES", "digest-max-bytes": "NEWS_LIBRARY_DIGEST_MAX_BYTES", "no-worker": "NEWS_LIBRARY_NO_WORKER", "no-digests": "NEWS_LIBRARY_NO_DIGESTS",
+	}
+	overrides := map[string]string{}
+	for i := 0; i < len(args); i++ {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		variable, known := flagNames[name]
+		if !known {
+			if name == "env-file" && !hasValue {
+				i++
+			}
+			continue
+		}
+		if !hasValue {
+			if name == "no-worker" || name == "no-digests" {
+				value = "true"
+			} else if i+1 < len(args) {
+				i++
+				value = args[i]
+			} else {
+				continue
+			}
+		}
+		overrides[variable] = value
+	}
 	get := func(name, fallback string) string {
+		if v, ok := overrides[name]; ok {
+			return v
+		}
 		if v, ok := os.LookupEnv(name); ok {
 			return v
 		}

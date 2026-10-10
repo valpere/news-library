@@ -29,13 +29,31 @@ func (f Files) Put(kind string, data []byte) (string, error) {
 	path := filepath.Join(f.Root, relative)
 	if _, err := os.Stat(path); err == nil {
 		_, err = f.Read(relative, hash)
-		return relative, err
+		if err == nil || kind != "cache/http" {
+			return relative, err
+		}
+		// Evictable cache corruption is repaired by the atomic write below.
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
+	}
+	// Persist new directory entries as well as the file's entry below.
+	for parent := filepath.Dir(dir); ; parent = filepath.Dir(parent) {
+		directory, err := os.Open(parent)
+		if err != nil {
+			return "", err
+		}
+		err = directory.Sync()
+		directory.Close()
+		if err != nil {
+			return "", err
+		}
+		if parent == filepath.Clean(f.Root) || parent == filepath.Dir(parent) {
+			break
+		}
 	}
 	tmp, err := os.CreateTemp(dir, ".blob-")
 	if err != nil {

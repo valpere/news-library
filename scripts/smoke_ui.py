@@ -44,7 +44,7 @@ try:
         page.get_by_role('button',name='Зберегти',exact=True).click()
         page.locator('input[name=tags]').fill('go, smoke')
         page.get_by_role('button',name='Зберегти теги',exact=True).click()
-        assert '<script>alert(1)</script>' in page.locator('pre').inner_text()
+        assert '<script>alert(1)</script>' in page.locator('pre').text_content()
         assert page.locator('script').count() == 0
         page.get_by_role('link',name='Особиста бібліотека',exact=True).click()
         page.locator('input[name=q]').fill('knowledge')
@@ -69,7 +69,7 @@ try:
         assert 'Відкладені' in page.locator('body').inner_text()
         assert 'оцінка: 0' in page.locator('body').inner_text()
         assert page.get_by_role('button',name='Позначити непрочитаним',exact=True).count()==1
-        assert 'durable queue' in page.locator('pre').inner_text()
+        assert 'durable queue' in page.locator('pre').text_content()
         page.goto(origin+'/')
         page.get_by_label('Додати статтю або YouTube').fill('http://127.0.0.1/private-smoke')
         page.get_by_role('button',name='Додати URL',exact=True).click()
@@ -88,8 +88,8 @@ try:
         page.screenshot(path=str(root/'build/smoke-pending.png'),full_page=True)
         response=page.request.post(origin+path+'/manual',form={'csrf':token,'text':'Text now available after background processing'},max_redirects=0)
         assert response.status==303
-        page.get_by_role('heading',name='Доступний текст',exact=True).wait_for(timeout=15000)
-        assert 'Text now available' in page.locator('pre').inner_text()
+        page.get_by_role('heading',name='Дайджест недоступний',exact=True).wait_for(timeout=15000)
+        assert 'Text now available' in page.locator('pre').text_content()
         assert page.locator('input[name=score]').count()==1
         path,token=add_pending('https://example.com/pending-ui-edits')
         page.get_by_text('Вставити текст вручну',exact=True).click()
@@ -101,7 +101,7 @@ try:
         assert page.locator('input[name=score]').count()==0
         assert page.locator('pre').count()==0
         page.locator('#processing-refresh').click()
-        assert 'Snapshot from background processing' in page.locator('pre').inner_text()
+        assert 'Snapshot from background processing' in page.locator('pre').text_content()
         assert page.locator('input[name=score]').count()==1
         browser.close()
 finally:

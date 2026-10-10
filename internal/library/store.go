@@ -182,11 +182,19 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 	}
 	defer tx.Rollback()
 	// A crash on the final attempt must terminate instead of retrying forever.
-	if _, err = tx.ExecContext(ctx, `UPDATE items SET state='needs_input',error='fetch attempts exhausted after restart' WHERE selected_snapshot IS NULL AND id IN (SELECT item_id FROM jobs WHERE state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE items SET state='needs_input',error='fetch attempts exhausted after restart' WHERE selected_snapshot IS NULL AND id IN (SELECT item_id FROM jobs WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
 		return nil, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='fetch attempts exhausted after restart' WHERE state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='fetch attempts exhausted after restart' WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
 		return nil, err
+	}
+	if s.DigestConfig != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE items SET state='digest_failed',error='digest attempts exhausted after restart' WHERE NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=items.selected_snapshot) AND selected_snapshot IN (SELECT snapshot_id FROM jobs WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
+			return nil, err
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='digest attempts exhausted after restart' WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
+			return nil, err
+		}
 	}
 	var j Job
 	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot,j.stage,j.snapshot_id,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh FROM jobs j JOIN items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh)
@@ -573,6 +581,7 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 }
 
 type JobStatus struct {
+	SnapshotID              sql.NullInt64
 	ID                      int64
 	State                   string
 	Stage                   string
@@ -582,7 +591,7 @@ type JobStatus struct {
 }
 
 func (s *Store) Jobs(id int64) ([]JobStatus, error) {
-	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage FROM jobs WHERE item_id=? ORDER BY id DESC", id)
+	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage,snapshot_id FROM jobs WHERE item_id=? ORDER BY id DESC", id)
 	if err != nil {
 		return nil, err
 	}
@@ -590,7 +599,7 @@ func (s *Store) Jobs(id int64) ([]JobStatus, error) {
 	var result []JobStatus
 	for rows.Next() {
 		var j JobStatus
-		if err = rows.Scan(&j.ID, &j.State, &j.Attempts, &j.Error, &j.NextAttempt, &j.LeaseUntil, &j.Stage); err != nil {
+		if err = rows.Scan(&j.ID, &j.State, &j.Attempts, &j.Error, &j.NextAttempt, &j.LeaseUntil, &j.Stage, &j.SnapshotID); err != nil {
 			return nil, err
 		}
 		result = append(result, j)
