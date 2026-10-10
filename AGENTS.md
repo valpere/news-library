@@ -14,14 +14,14 @@ some older proposals were superseded. Do not treat proposals as user decisions.
 
 ## Project Structure
 
-This repository currently contains documentation, Python evaluation scripts in
-`scripts/`, and pilot artifacts in `experiments/news-library/`. The upstream
-template provided README, license, and Go-oriented ignore rules; application
-code has not been implemented. The accepted application architecture is one
-Go service, a web interface, SQLite, and a persistent background queue.
+M1 is implemented in `cmd/news-library/` and `internal/library/`: one Go
+service, a web interface, SQLite, and a persistent background queue. Python
+validation and optional browser smoke live in `scripts/`; private evaluation
+scripts and pilot artifacts remain local. The upstream license is preserved.
 
-Start with milestone M1 in `docs/BACKLOG.md`. Add application directories as
-they become necessary. Preserve the upstream license and existing experiments.
+Continue with milestone M2 in `docs/BACKLOG.md`. See `docs/TRACEABILITY.md`
+for passed M1 tests and requirements still awaiting M2–M4. Preserve existing
+experiments; do not publish private corpus data automatically.
 The shared tool library is documented at `~/wrk/common_codex/ONBOARDING.md`.
 
 ## Validation and Development

@@ -31,7 +31,8 @@
 
 Upstream `https://github.com/valpere/news-library` отримано на коміті
 `955c6c321831289112d6ed96eebe6338e15809df`. Це мінімальний шаблон
-із README, LICENSE та `.gitignore`, без застосунку й Go-модуля.
+із README, LICENSE та `.gitignore`, без застосунку й Go-модуля. M1 після цього реалізовано через PR;
+поточні команди запуску та межі див. у README.
 У цей checkout додано документи, скрипти та історичні результати.
 
 1. [REQUIREMENTS.md](docs/REQUIREMENTS.md) — сценарії й приймання.

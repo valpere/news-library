@@ -1,0 +1,81 @@
+package library
+
+import (
+	"context"
+	"errors"
+	"log"
+	"time"
+)
+
+type Source interface {
+	Fetch(context.Context, string) (Snapshot, error)
+}
+type Worker struct {
+	Store                   *Store
+	Source                  Source
+	Timeout, Lease, Backoff time.Duration
+	MaxAttempts             int
+}
+
+func (w *Worker) Step(ctx context.Context) (bool, error) {
+	j, err := w.Store.Claim(ctx, time.Now(), w.Lease, w.MaxAttempts)
+	if err != nil || j == nil {
+		return false, err
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, w.Timeout)
+	defer cancel()
+	done := make(chan struct{})
+	heartbeatDone := make(chan struct{})
+	go func() {
+		defer close(heartbeatDone)
+		ticker := time.NewTicker(w.Lease / 3)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-fetchCtx.Done():
+				return
+			case <-ticker.C:
+				if e := w.Store.Renew(*j, time.Now(), w.Lease); e != nil {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	snap, err := w.Source.Fetch(fetchCtx, j.URL)
+	close(done)
+	<-heartbeatDone
+	// On shutdown leave the persisted lease for recovery instead of consuming a failure.
+	if ctx.Err() != nil {
+		return true, ctx.Err()
+	}
+	if err == nil {
+		return true, w.Store.Complete(*j, snap)
+	}
+	retry := true
+	var sourceError *SourceError
+	if errors.As(err, &sourceError) {
+		retry = sourceError.Retry
+	}
+	return true, w.Store.Fail(*j, err.Error(), retry, w.MaxAttempts, time.Now(), w.Backoff*time.Duration(1<<min(j.Attempts-1, 8)))
+}
+func (w *Worker) Run(ctx context.Context) {
+	for ctx.Err() == nil {
+		worked, err := w.Step(ctx)
+		if err != nil && ctx.Err() == nil {
+			log.Printf("background fetch could not persist its result")
+		}
+		if worked && err == nil {
+			continue
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
+}

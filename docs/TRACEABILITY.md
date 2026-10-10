@@ -8,26 +8,26 @@
 
 | Вимога | Сценарії | Етап | Приймання | Статус |
 |---|---|---|---|---|
-| FR-01 | UC-01 | M1 | AT-01 | passed: `internal/library/store_test.go::TestIngestConcurrentRestart` |
-| FR-02 | UC-01 | M1 | AT-02 | passed: `internal/library/store_test.go::TestIngestConcurrentRestart` |
-| FR-03 | UC-01, UC-02 | M1 | AT-03 | planned |
-| FR-04 | UC-02, UC-03 | M1, M2 | AT-04 | planned |
+| FR-01 | UC-01 | M1 | AT-01 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
+| FR-02 | UC-01 | M1 | AT-02 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
+| FR-03 | UC-01, UC-02 | M1 | AT-03 | passed: [TestWorkerFailureAndStoredText](../internal/library/source_test.go) |
+| FR-04 | UC-02, UC-03 | M1, M2 | AT-04 | partial M1: [TestArticleFixtures / TestYouTubeFixtures](../internal/library/source_test.go); M2 artifacts planned |
 | FR-05 | UC-06 | M2 | AT-05 | planned |
 | FR-06 | UC-05, UC-06 | M2 | AT-06 | planned |
-| FR-07 | UC-02, UC-03 | M1, M2 | AT-07 | planned |
+| FR-07 | UC-02, UC-03 | M1, M2 | AT-07 | partial M1: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go); M2 predictions planned |
 | FR-08 | UC-07 | M2 | AT-08 | planned |
-| FR-09 | UC-04 | M1 | AT-09 | planned |
-| FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | planned |
-| FR-11 | UC-05 | M1, M3 | AT-11 | planned |
+| FR-09 | UC-04 | M1 | AT-09 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
+| FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | partial M1: [TestLeaseRestartRetryAndIdempotency / TestCrashOnLastAttemptTerminates](../internal/library/store_test.go); M2 stages planned |
+| FR-11 | UC-05 | M1, M3 | AT-11 | partial M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 vector planned |
 | FR-12 | UC-09 | M3 | AT-12 | planned |
 | FR-13 | UC-08 | M4 | AT-13 | planned |
 | FR-14 | UC-12 | M4 | AT-14 | planned |
-| FR-15 | UC-03 | M1, M2 | AT-15 | planned |
-| FR-16 | UC-10 | M1, M2 | AT-16 | planned |
-| FR-17 | UC-11 | M1 | AT-17 | planned |
-| FR-18 | UC-05 | M1, M2, M3 | AT-18 | planned |
+| FR-15 | UC-03 | M1, M2 | AT-15 | partial M1: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go), [TestWebRejectsInvalidScoresAndForeignContext](../internal/library/web_test.go); M2 digest links planned |
+| FR-16 | UC-10 | M1, M2 | AT-16 | partial M1: [TestNeedsInputAndManualWinsRace](../internal/library/store_test.go), [TestYouTubeFixtures](../internal/library/source_test.go); M2 enrichment planned |
+| FR-17 | UC-11 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
+| FR-18 | UC-05 | M1, M2, M3 | AT-18 | partial M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M2 Confidence/M3 vector planned |
 | FR-19 | UC-09 | M3 | AT-19 | planned |
-| FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | planned |
+| FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries](../internal/library/web_test.go) |
 
 ## Перевірка специфікації
 

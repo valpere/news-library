@@ -4,7 +4,8 @@
 із можливістю перенесення на VPS. Нижче — технічна конкретизація для
 реалізації [вимог](REQUIREMENTS.md); M1 реалізується в `internal/library`: SQLite-сховище, міграція v1, FTS5,
 транзакційна черга та незмінні snapshots/оцінки. Наступні компоненти M2–M4
-залишаються запланованими.
+залишаються запланованими. Сервер — `cmd/news-library`, адаптери та UI —
+`internal/library/{source,worker,web}.go`, шаблони — `pages.html`.
 
 ## Компоненти
 
@@ -245,3 +246,30 @@ Unknown не повторюється мовчки. Адресат, розкла
 Узгоджена SQLite-копія з перевіркою restore; IDs, snapshots, оцінки та
 черга відновлюються. Worker і доставка на відновленій копії спочатку
 вимкнені, щоб не виконати завдання двічі під час перенесення.
+
+## Деталі реалізації M1
+
+Міграція v1 вбудована в binary (`internal/library/schema.sql`). Новіша
+невідома версія БД відхиляється. SQLite WAL, foreign keys, busy timeout;
+одне DB-з’єднання серіалізує короткі транзакції, мережа виконується поза ними.
+Lease має випадковий fencing token; старий worker не може зберегти результат
+після втрати lease. Heartbeat поновлює lease. Збій останньої спроби також
+завершується діагностикою. Постійна відмова → needs_input; transient →
+обмежений exponential backoff. Спроби та помилки видимі в картці.
+
+Завдання fetch є ключем унікальності snapshot; оцінки та snapshots
+захищено SQLite-тригерами від UPDATE/DELETE. Новіший ручний snapshot
+не перезаписується fetch, що вже працював; явний наступний refresh може
+вибрати нову отриману версію. FTS індексує вибраний текст; старі версії
+читаються в картці. У M1 digest_id завжди NULL; generated artifacts ще немає.
+
+Readability виділяє HTML без додаткових запитів. Повнота виділеного
+оригіналу unknown; ліміт/перервана відповідь → partial. Plain text і
+субтитри з повною відповіддю → full. YouTube watch/caption HTTP-запити
+використовують той самий захищений клієнт; формат caption tracks може
+змінитися й тоді показується needs_input. Без shell/extractor subprocesses.
+
+Початкові параметри й запуск — README. Лише loopback; exact Host та
+Origin, CSRF у POST body, Sec-Fetch-Site, CSP, html/template escaping.
+Authorization не дає доступу до UI-мутацій. Worker вимикається через
+`-no-worker`; runtime каталог поза Git. Тексти джерел не виконуються.

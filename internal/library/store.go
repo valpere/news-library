@@ -86,7 +86,7 @@ func Open(path string) (*Store, error) {
 	return &Store{DB: db}, nil
 }
 func (s *Store) Close() error { return s.DB.Close() }
-func nowUTC() string          { return time.Now().UTC().Format(time.RFC3339Nano) }
+func nowUTC() string          { return time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z") }
 
 func CanonicalURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
@@ -506,4 +506,29 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		items = append(items, i)
 	}
 	return items, rows.Err()
+}
+
+type JobStatus struct {
+	ID                      int64
+	State                   string
+	Attempts                int
+	Error                   string
+	NextAttempt, LeaseUntil int64
+}
+
+func (s *Store) Jobs(id int64) ([]JobStatus, error) {
+	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until FROM jobs WHERE item_id=? ORDER BY id DESC", id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []JobStatus
+	for rows.Next() {
+		var j JobStatus
+		if err = rows.Scan(&j.ID, &j.State, &j.Attempts, &j.Error, &j.NextAttempt, &j.LeaseUntil); err != nil {
+			return nil, err
+		}
+		result = append(result, j)
+	}
+	return result, rows.Err()
 }
