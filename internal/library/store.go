@@ -8,8 +8,10 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,10 +24,14 @@ var schema string
 //go:embed schema_v2.sql
 var schemaV2 string
 
+//go:embed schema_v4.sql
+var schemaV4 string
+
 type Store struct {
 	DB           *sql.DB
 	DigestConfig *DigestConfig
 	Files        Files
+	Rules        RuleSet
 }
 type Item struct {
 	ID                                                        int64
@@ -34,6 +40,8 @@ type Item struct {
 	Selected                                                  sql.NullInt64
 	Score                                                     sql.NullInt64
 	Tags                                                      string
+	FilterState                                               string
+	Confidence                                                sql.NullFloat64
 }
 type Snapshot struct {
 	ID, ItemID                                                               int64
@@ -55,9 +63,12 @@ type Job struct {
 	SnapshotID                                 sql.NullInt64
 	InputLimit                                 int
 	Refresh                                    bool
+	FilterOverride                             bool
+	Interests                                  string
 }
 type Filters struct {
 	Query, Placement, Rating, Read, State, Sort, Direction string
+	Filter, ConfidenceMin, ConfidenceMax                   string
 	Tags                                                   []string
 }
 
@@ -78,7 +89,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 3 {
+	if version > 4 {
 		db.Close()
 		return nil, errors.New("database schema is newer than this application")
 	}
@@ -93,6 +104,9 @@ func Open(path string) (*Store, error) {
 		if err == nil && version < 3 {
 			err = migrateFiles(tx, Files{Root: filepath.Dir(path)})
 		}
+		if err == nil && version < 4 {
+			_, err = tx.Exec(schemaV4)
+		}
 		if err == nil {
 			err = tx.Commit()
 		} else {
@@ -103,7 +117,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Store{DB: db, Files: Files{Root: filepath.Dir(path)}}, nil
+	return &Store{DB: db, Files: Files{Root: filepath.Dir(path)}, Rules: RuleSet{Threshold: 0.8, Rules: []FilterRule{}}}, nil
 }
 func (s *Store) Close() error { return s.DB.Close() }
 func nowUTC() string          { return time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z") }
@@ -169,6 +183,9 @@ func (s *Store) AddURL(raw string) (int64, error) {
 		if _, err = tx.Exec("INSERT INTO item_fts(rowid,title,text,url) VALUES(?,'','',?)", id, canonical); err != nil {
 			return 0, err
 		}
+		if _, err = s.decideFilter(tx, id, nil, false); err != nil {
+			return 0, err
+		}
 	}
 	return id, tx.Commit()
 }
@@ -197,7 +214,7 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 		}
 	}
 	var j Job
-	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot,j.stage,j.snapshot_id,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh FROM jobs j JOIN items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh)
+	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot,j.stage,j.snapshot_id,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests FROM jobs j JOIN items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}
@@ -293,7 +310,7 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 		if err = indexSnapshot(tx, j.ItemID, snap.Title, snap.Text); err != nil {
 			return err
 		}
-		if err = s.queueDigest(tx, j.ItemID, sid); err != nil {
+		if err = s.processSnapshot(tx, j.ItemID, sid, snap, j.FilterOverride); err != nil {
 			return err
 		}
 	}
@@ -338,6 +355,14 @@ func (s *Store) Retry(id int64) error {
 		return err
 	}
 	defer tx.Rollback()
+	var filtered string
+	if err = tx.QueryRow("SELECT filter_state FROM items WHERE id=?", id).Scan(&filtered); err != nil {
+		return err
+	}
+	if filtered == "rejected" {
+		return errors.New("спершу явно поверніть матеріал до обробки")
+	}
+
 	r, err := tx.Exec("INSERT INTO jobs(item_id,refresh) SELECT id,1 FROM items WHERE id=? AND NOT EXISTS(SELECT 1 FROM jobs WHERE item_id=? AND stage='fetch' AND state IN ('queued','running','retry_wait'))", id, id)
 	if err != nil {
 		return err
@@ -377,7 +402,7 @@ func (s *Store) Manual(id int64, text string) error {
 	if err = indexSnapshot(tx, id, title, text); err != nil {
 		return err
 	}
-	if err = s.queueDigest(tx, id, sid); err != nil {
+	if err = s.processSnapshot(tx, id, sid, Snapshot{Text: text, Title: title}, false); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -455,12 +480,13 @@ func (s *Store) SetTags(id int64, tags []string) error {
 	return tx.Commit()
 }
 
-const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.placement,i.state,i.error,i.is_read,i.selected_snapshot,(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)) FROM items i`
+const confidenceExpr = `(SELECT p.probability FROM generated_artifacts a LEFT JOIN interest_predictions p ON p.digest_id=a.id WHERE a.snapshot_id=i.selected_snapshot ORDER BY a.id DESC LIMIT 1)`
+const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.placement,i.state,i.error,i.is_read,i.selected_snapshot,(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM items i`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var i Item
 	var tags sql.NullString
-	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.Placement, &i.State, &i.Error, &i.Read, &i.Selected, &i.Score, &tags)
+	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.Placement, &i.State, &i.Error, &i.Read, &i.Selected, &i.Score, &tags, &i.FilterState, &i.Confidence)
 	i.Tags = tags.String
 	return i, err
 }
@@ -522,6 +548,32 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 			args = append(args, pair.v)
 		}
 	}
+	if f.Filter != "" {
+		if f.Filter != "not_checked" && f.Filter != "passed" && f.Filter != "rejected" && f.Filter != "overridden" {
+			return nil, errors.New("invalid filter decision")
+		}
+		query += " AND i.filter_state=?"
+		args = append(args, f.Filter)
+	}
+	var minimum, maximum *float64
+	for _, entry := range []struct {
+		raw, operator string
+		target        **float64
+	}{{f.ConfidenceMin, ">=", &minimum}, {f.ConfidenceMax, "<=", &maximum}} {
+		if entry.raw == "" {
+			continue
+		}
+		value, err := strconv.ParseFloat(entry.raw, 64)
+		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 100 {
+			return nil, errors.New("Confidence має бути 0..100")
+		}
+		*entry.target = &value
+		query += " AND " + confidenceExpr + " " + entry.operator + " ?"
+		args = append(args, value/100)
+	}
+	if minimum != nil && maximum != nil && *minimum > *maximum {
+		return nil, errors.New("мінімальний Confidence перевищує максимальний")
+	}
 	if f.Read != "" {
 		if f.Read != "0" && f.Read != "1" {
 			return nil, errors.New("invalid read filter")
@@ -547,6 +599,8 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		direction = "ASC"
 	}
 	switch f.Sort {
+	case "confidence":
+		query += " ORDER BY " + confidenceExpr + " IS NULL," + confidenceExpr + " " + direction + ",i.id ASC"
 	case "rating":
 		query += " ORDER BY " + scoreExpr + " IS NULL," + scoreExpr + " " + direction + ",i.id ASC"
 	case "relevance":

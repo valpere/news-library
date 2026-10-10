@@ -160,3 +160,62 @@ func TestV2DigestMigrationPreservesArtifactContext(t *testing.T) {
 		t.Fatal("artifact rating migration", r, e)
 	}
 }
+
+func TestV3MigrationKeepsPreviouslyGeneratedData(t *testing.T) {
+	path := legacyDB(t)
+	db, e := sql.Open("sqlite", path)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = db.Exec(schemaV2); e != nil {
+		t.Fatal(e)
+	}
+	_, e = db.Exec(`INSERT INTO jobs(id,item_id,stage,state,snapshot_id,model,prompt_version,config_version) VALUES(56,7,'digest','done',12,'fixture:cloud','uk-sections-v1','fixture:cloud|uk-sections-v1|4096'); INSERT INTO generated_artifacts(id,item_id,snapshot_id,job_id,markdown,model,actual_model,provider,prompt_version,created_at) VALUES(5,7,12,56,?,'fixture:cloud','fixture:cloud','fixture','uk-sections-v1','2020-01-01T00:00:00Z');`, fixtureDigest)
+	if e != nil {
+		t.Fatal(e)
+	}
+	tx, e := db.Begin()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = migrateFiles(tx, Files{Root: filepath.Dir(path)}); e != nil {
+		t.Fatal(e)
+	}
+	if e = tx.Commit(); e != nil {
+		t.Fatal(e)
+	}
+	db.Close()
+	s, e := Open(path)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer s.Close()
+	d, e := s.Digest(5, 7)
+	if e != nil || d.Markdown != fixtureDigest || d.Prediction != nil {
+		t.Fatal("migration invented/lost prediction", e)
+	}
+	i, e := s.Item(7)
+	if e != nil || i.Score.Int64 != 3 || i.Confidence.Valid || i.FilterState != "not_checked" {
+		t.Fatal("migration changed human data", e)
+	}
+	history, e := s.FilterDecisions(7)
+	if e != nil || len(history) != 0 {
+		t.Fatal("migration ran rules", e)
+	}
+	enableDigests(t, s)
+	configureRules(t, s, .8, []FilterRule{{ID: "legacy", Reason: "legacy fixture", Field: "text", Contains: "legacy", Probability: .95}})
+	if e = s.RegenerateDigest(7, 12); e != nil {
+		t.Fatal(e)
+	}
+	i, _ = s.Item(7)
+	if i.FilterState != "rejected" || i.Score.Int64 != 3 {
+		t.Fatal("unchecked migrated source bypassed rules")
+	}
+	if e = s.OverrideFilter(7); e != nil {
+		t.Fatal(e)
+	}
+	jobs, _ := s.Jobs(7)
+	if jobs[0].Stage != "digest" || jobs[0].State != "queued" || jobs[0].ID <= 56 {
+		t.Fatal("override did not create a fresh generation job")
+	}
+}

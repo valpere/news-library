@@ -2,7 +2,7 @@
 
 Основа погоджена: один Go-сервіс, SQLite, стійка черга, локальний запуск
 із можливістю перенесення на VPS. Нижче — технічна конкретизація для
-реалізації [вимог](REQUIREMENTS.md); M1 реалізується в `internal/library`: SQLite-сховище, міграції v1–v3, FTS5,
+реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v4, FTS5,
 транзакційна черга та незмінні snapshots/оцінки. Наступні компоненти M2–M4
 залишаються запланованими. Сервер — `cmd/news-library`, адаптери та UI —
 `internal/library/{source,worker,web}.go`, шаблони — `pages.html`.
@@ -40,6 +40,7 @@ flowchart LR
 ## Потік обробки
 
 1. Перевірити URL. В одній транзакції отримати/створити запис і завдання.
+   URL-правила можуть одразу зберегти відсів і скасувати fetch без ШІ.
 2. Worker отримує метадані й доступний текст; одразу зберігає snapshot.
    Текст додається до FTS навіть за відсутності моделі.
 3. Дешеві правила обчислюють рішення. Якщо `R > T`, зберегти пояснення,
@@ -87,6 +88,7 @@ Rollback може лишити файл без посилання, але не �
 | jobs | Етап, payload IDs, спроби, next_attempt, lease, стан, помилка |
 | generated_artifacts | Дайджест/оцінка, snapshot, модель і фактичний провайдер, prompt/profile version, час, usage |
 | rating_events | Датовані незмінні події; детальний контракт — FUN-NL-RATING |
+| interest_predictions | Confidence, Reasoning, snapshot профілю та hash; metadata конкретного digest artifact |
 | digest_feedback | Відгук на конкретну версію дайджесту, окремо від rating_events |
 | tags, item_tags | Теги та походження; модельні пропозиції відрізняються від користувацьких |
 | filter_rules, filter_decisions | Версії правил, збіги, внески, сумарний R, T, override |
@@ -198,7 +200,7 @@ source_version_id nullable int64, digest_id nullable int64, reason string.
 реалізацією; масовий імпорт не входить у M1.
 
 @constraint Оцінка 3 допустима; від'ємне, дробове, переповнене значення
-відхиляється без нової події. Модель пише тільки generated_artifacts;
+відхиляється без нової події. Модель пише тільки generated_artifacts та пов’язані interest_predictions;
 відгук на дайджест — тільки digest_feedback.
 
 ### FUN-NL-LIBRARY
@@ -307,3 +309,38 @@ Web очікує fetch і digest, після чого показує секці�
 режим no-digests з доступним текстом. READ polling не змінює даних.
 Markdown/HTML exports читають конкретний immutable artifact цього item.
 `.env` завантажується як дані через godotenv; ключі не друкуються.
+
+## Реалізовані правила, прогноз і feedback (schema v4)
+
+`filter.go` обчислює буквальні URL/title/text збіги. Версія правил — hash
+JSON конфігурації з порогом. `filter_rule_versions` і `filter_decisions`
+незмінні; filter_state незалежний від користувацьких дій. Одна reason
+без регістру/зовнішніх пробілів дає max p; різні причини дають R через
+добуток доповнень. Порожній набір проходить. URL-рішення записується з
+item/job; source-рішення — після первинного файла і snapshot, до digest job.
+Відсів скасовує queued/retry jobs цього проходу, зберігаючи джерело й FTS.
+Override додає рішення з override_of, явно створює fetch job з прапором
+filter_override або digest job для вибраного тексту. Новий snapshot із
+наступного ручного введення/звичайного refresh перевіряється окремо.
+Конфігурація застосовується до нової обробки, без автоматичного rescan.
+
+`prediction.go` перевіряє JSON wrapper: markdown та prediction із числом
+0..1 і непорожнім Reasoning. Cloud format parameter не використовується;
+JSON запитується інструкцією й перевіряється локально. Prompt v1 Markdown
+збережено для старих завдань і режиму без профілю. Jobs фіксують interests;
+version key містить profile hash. Interest_predictions прив’язана до
+immutable digest artifact; модель/provider/prompt/source/date/usage беруться
+з нього. Поточний Confidence — лише prediction останнього digest вибраного
+snapshot; новий результат без prediction не успадковує старий прогноз.
+Помилка JSON/probability не публікує недійсний прогноз; URL і текст лишаються.
+Без профілю генерація повертає тільки дайджест, без вигаданої персоналізації.
+
+`feedback.go` додає незалежні immutable digest_feedback з ownership trigger.
+Запис feedback не запускає AI. Regeneration має новий unique config key,
+фіксує поточну модель/профіль і створює immutable artifact; активний job для
+snapshot блокує паралельний повтор. Старі посилання rating/feedback незмінні.
+Web може вибирати source/digest IDs, показує історію версій та збережений
+результат під час регенерації, використовує readonly polling із захистом
+unsent input. Confidence sorting/filtering SQL не змінює людських даних.
+Міграція v3→v4 додає metadata; не генерує прогнозів/історичних оцінок і не
+запускає правил. OpenRouter free та long-source chunking ще planned.

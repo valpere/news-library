@@ -5,27 +5,39 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type DigestConfig struct {
 	Model, PromptVersion string
 	MaxInputBytes        int
+	Interests            string
 }
 
 func (c DigestConfig) Version() string {
-	return fmt.Sprintf("%s|%s|%d", c.Model, c.PromptVersion, c.MaxInputBytes)
+	version := fmt.Sprintf("%s|%s|%d", c.Model, c.PromptVersion, c.MaxInputBytes)
+	if c.Interests != "" {
+		version += "|" + profileHash(c.Interests)
+	}
+	return version
 }
 
 type Digest struct {
 	ID, ItemID, SnapshotID, JobID                                    int64
 	Markdown, Model, ActualModel, Provider, PromptVersion, CreatedAt string
 	InputTokens, OutputTokens                                        int64
+	Prediction                                                       *InterestPrediction
 }
 
 // EnableDigests schedules the first digest for existing unprocessed snapshots.
 // Changing configuration leaves existing results and decisions alone.
 func (s *Store) EnableDigests(c DigestConfig) error {
-	if !cloudModelID(c.Model) || c.PromptVersion != DigestPromptVersion || c.MaxInputBytes < 1024 {
+	c.Interests = strings.TrimSpace(c.Interests)
+	if len(c.Interests) > 8000 || (c.Interests != "" && c.PromptVersion != DigestPredictionPromptVersion) || (c.Interests == "" && c.PromptVersion == DigestPredictionPromptVersion) {
+		return errors.New("invalid interest profile configuration")
+	}
+
+	if !cloudModelID(c.Model) || (c.PromptVersion != DigestPromptVersion && c.PromptVersion != DigestPredictionPromptVersion) || c.MaxInputBytes < 1024 {
 		return errors.New("invalid digest configuration")
 	}
 	tx, err := s.DB.Begin()
@@ -68,8 +80,12 @@ func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
 	if s.DigestConfig == nil {
 		return nil
 	}
+	rejected, err := s.ensureFilterForSnapshot(tx, itemID, snapshotID)
+	if err != nil || rejected {
+		return err
+	}
 	c := s.DigestConfig
-	_, err := tx.Exec(`INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit) VALUES(?,'digest',?,?,?,?,?) ON CONFLICT DO NOTHING`, itemID, snapshotID, c.Version(), c.Model, c.PromptVersion, c.MaxInputBytes)
+	_, err = tx.Exec(`INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests) VALUES(?,'digest',?,?,?,?,?,?) ON CONFLICT DO NOTHING`, itemID, snapshotID, c.Version(), c.Model, c.PromptVersion, c.MaxInputBytes, c.Interests)
 	if err != nil {
 		return err
 	}
@@ -94,6 +110,16 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	if _, err := SplitDigest(d.Markdown); err != nil {
 		return err
 	}
+	if j.Interests != "" {
+		if err := validatePrediction(d.Prediction); err != nil {
+			return err
+		}
+		if d.Prediction.Profile != j.Interests {
+			return errors.New("prediction profile mismatch")
+		}
+	} else if d.Prediction != nil {
+		return errors.New("prediction requires a configured profile")
+	}
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
@@ -107,8 +133,19 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 		return err
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(d.Markdown)))
-	if _, err = tx.Exec(`INSERT INTO generated_artifacts(item_id,snapshot_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, j.ItemID, j.SnapshotID.Int64, j.ID, path, j.Model, d.ActualModel, d.Provider, j.PromptVersion, nowUTC(), d.InputTokens, d.OutputTokens, hash); err != nil {
+	result, err := tx.Exec(`INSERT INTO generated_artifacts(item_id,snapshot_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, j.ItemID, j.SnapshotID.Int64, j.ID, path, j.Model, d.ActualModel, d.Provider, j.PromptVersion, nowUTC(), d.InputTokens, d.OutputTokens, hash)
+	if err != nil {
 		return err
+	}
+	if d.Prediction != nil {
+		id, err := result.LastInsertId()
+		if err != nil {
+			return err
+		}
+		p := d.Prediction
+		if _, err = tx.Exec("INSERT INTO interest_predictions(digest_id,probability,reason,profile,profile_hash) VALUES(?,?,?,?,?)", id, p.Probability, p.Reason, j.Interests, profileHash(j.Interests)); err != nil {
+			return err
+		}
 	}
 	if _, err = tx.Exec(`UPDATE jobs SET state='done',lease_until=0,error='' WHERE id=?`, j.ID); err != nil {
 		return err
@@ -137,10 +174,17 @@ func (s *Store) DigestForSnapshot(id int64) (*Digest, error) {
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, nil
 	}
+	if e == nil {
+		d.Prediction, e = s.Prediction(d.ID)
+	}
 	return &d, e
 }
 func (s *Store) Digest(id, itemID int64) (Digest, error) {
-	return s.scanDigest(s.DB.QueryRow(digestSelect+" WHERE id=? AND item_id=?", id, itemID))
+	d, e := s.scanDigest(s.DB.QueryRow(digestSelect+" WHERE id=? AND item_id=?", id, itemID))
+	if e == nil {
+		d.Prediction, e = s.Prediction(d.ID)
+	}
+	return d, e
 }
 func (s *Store) RetryDigest(itemID int64) error {
 	if s.DigestConfig == nil {
@@ -157,6 +201,20 @@ func (s *Store) RetryDigest(itemID int64) error {
 	}
 	if !sid.Valid {
 		return errors.New("спершу потрібен текст")
+	}
+	var filtered string
+	if err = tx.QueryRow("SELECT filter_state FROM items WHERE id=?", itemID).Scan(&filtered); err != nil {
+		return err
+	}
+	if filtered == "rejected" {
+		return errors.New("спершу явно поверніть матеріал до обробки")
+	}
+	var active int
+	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE stage='digest' AND snapshot_id=? AND state IN ('queued','running','retry_wait')", sid).Scan(&active); err != nil {
+		return err
+	}
+	if active > 0 {
+		return errors.New("генерація вже активна")
 	}
 	c := s.DigestConfig
 	var state string
@@ -175,4 +233,34 @@ func (s *Store) RetryDigest(itemID int64) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// A migrated source may not have a rule decision yet. Evaluate it before its
+// first new generation; configuration changes leave existing decisions alone.
+func (s *Store) ensureFilterForSnapshot(tx *sql.Tx, itemID, snapshotID int64) (bool, error) {
+	var decisions int
+	if err := tx.QueryRow("SELECT count(*) FROM filter_decisions WHERE item_id=? AND snapshot_id=?", itemID, snapshotID).Scan(&decisions); err != nil {
+		return false, err
+	}
+	if decisions == 0 {
+		var snap Snapshot
+		var path, hash string
+		if err := tx.QueryRow("SELECT text_path,hash,title FROM source_versions WHERE id=? AND item_id=?", snapshotID, itemID).Scan(&path, &hash, &snap.Title); err != nil {
+			return false, err
+		}
+		data, err := s.Files.Read(path, hash)
+		if err != nil {
+			return false, err
+		}
+		snap.Text = string(data)
+		snap.ID = snapshotID
+		if rejected, err := s.decideFilter(tx, itemID, &snap, false); err != nil || rejected {
+			return rejected, err
+		}
+	}
+	var filter string
+	if err := tx.QueryRow("SELECT filter_state FROM items WHERE id=?", itemID).Scan(&filter); err != nil {
+		return false, err
+	}
+	return filter == "rejected", nil
 }
