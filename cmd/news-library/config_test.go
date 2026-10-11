@@ -118,3 +118,19 @@ func TestTelegramConfigPrecedenceAndPrivateErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestYouTubeConfigPrecedence(t *testing.T) {
+	t.Setenv("NEWS_LIBRARY_YT_DLP", "fixture-helper")
+	t.Setenv("NEWS_LIBRARY_YOUTUBE_LANGUAGES", "uk,en")
+	c, err := readConfig([]string{"-env-file", ""})
+	if err != nil || c.YTDLP != "fixture-helper" || c.YouTubeLanguages != "uk,en" {
+		t.Fatal(c.YTDLP, c.YouTubeLanguages, err)
+	}
+	c, err = readConfig([]string{"-env-file", "", "-yt-dlp=", "-youtube-languages", "en,uk"})
+	if err != nil || c.YTDLP != "" || c.YouTubeLanguages != "en,uk" {
+		t.Fatal(c.YTDLP, c.YouTubeLanguages, err)
+	}
+	if _, err = readConfig([]string{"-env-file", "", "-youtube-languages", "en;bad"}); err == nil {
+		t.Fatal("invalid language codes accepted")
+	}
+}

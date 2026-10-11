@@ -104,3 +104,11 @@ partial acceptance, canonical duplicates/repeated submit, перезапуск �
 DB failure, CSRF/Origin/agent guards і escaped correction form.
 Browser fixture: `scripts/smoke_batch_ui.py` — пачка, виправлення рядка,
 повтор, непрочитані вхідні та збереження черги після restart.
+
+
+YouTube failover FR-03/04/16: `youtube_metadata_test.go` — мовний перебір,
+metadata fallback/ASR provenance, private targets denial у helper proxy,
+output bounds/context termination і language validation; config precedence
+у `cmd/news-library/config_test.go`. Попередні source XML/srv3/json3 fixtures
+та pipeline tests лишаються чинними. Explicit live helper:
+`go run ./minions/source-smoke -fetch-url URL`, без userDB/models.

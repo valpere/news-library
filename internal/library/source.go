@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,6 +28,10 @@ type SourceError struct {
 func (e *SourceError) Error() string { return e.Message }
 
 type Fetcher struct {
+	YTDLP            string
+	YouTubeLanguages []string
+	metadataResolver func(context.Context, string) (youtubeMetadata, error)
+
 	client   *http.Client
 	MaxBytes int64
 	Cache    *HTTPCache
@@ -41,7 +46,7 @@ func NewFetcher(timeout time.Duration, maxBytes int64) *Fetcher {
 		_, err := CanonicalURL(req.URL.String())
 		return err
 	}}
-	return &Fetcher{client: client, MaxBytes: maxBytes}
+	return &Fetcher{client: client, MaxBytes: maxBytes, YTDLP: "yt-dlp", YouTubeLanguages: []string{"uk", "en"}}
 }
 
 var deniedNetworks = []netip.Prefix{
@@ -257,59 +262,79 @@ func captionTracks(data []byte) ([]captionTrack, error) {
 	return tracks, err
 }
 func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
-	data, _, _, pagePartial, err := f.get(ctx, "https://www.youtube.com/watch?v="+id)
-	if err != nil {
-		return Snapshot{}, err
+	data, _, _, pagePartial, pageErr := f.get(ctx, "https://www.youtube.com/watch?v="+id)
+	tracks, _ := captionTracks(data)
+	title := "YouTube: " + id
+	languages := f.YouTubeLanguages
+	if len(languages) == 0 {
+		languages = []string{"uk", "en"}
 	}
-	tracks, err := captionTracks(data)
-	if err != nil || len(tracks) == 0 {
-		return Snapshot{}, &SourceError{Message: "доступних YouTube-субтитрів немає або формат сторінки змінився; вставте текст вручну"}
-	}
-	// Prefer human captions, then Ukrainian/English when available.
-	best := 0
-	rank := func(t captionTrack) int {
-		n := 0
-		if t.Kind != "asr" {
-			n += 4
+	try := func(candidates []captionTrack, extractor string) (Snapshot, bool) {
+		sort.SliceStable(candidates, func(i, j int) bool {
+			return subtitleRank(candidates[i], languages) > subtitleRank(candidates[j], languages)
+		})
+		// Bounded failover, not a download of every translated language.
+		for i, track := range candidates {
+			if i >= 8 || ctx.Err() != nil {
+				break
+			}
+			body, _, _, partial, e := f.get(ctx, track.BaseURL)
+			if e != nil {
+				continue
+			}
+			text, decodeErr := decodeCaptions(body)
+			if strings.TrimSpace(text) == "" {
+				continue
+			}
+			snap := Snapshot{Text: text, Title: title, Origin: "fetch", Extractor: extractor, Completeness: "full", Warning: "Субтитри: " + track.LanguageCode}
+			if track.Kind == "asr" {
+				snap.Warning += "; автоматичні"
+			}
+			if u, e := url.Parse(track.BaseURL); e == nil && u.Query().Get("tlang") != "" {
+				snap.Warning += "; автоматичний переклад"
+			}
+			if partial || decodeErr != nil || (extractor == "youtube-timedtext-v1" && pagePartial) {
+				snap.Completeness = "partial"
+				snap.Warning += "; відповідь часткова або не повністю прочитана"
+			}
+			if meta, ok := ctx.Value(cacheMetaKey{}).(*NetworkMeta); ok {
+				snap.RetrievedAt = meta.FetchedAt
+				if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" || meta.CacheStatus == "REVALIDATED" {
+					snap.Warning += "; субтитри з кешу, отримано " + meta.FetchedAt
+				}
+			}
+			return snap, true
 		}
-		if t.LanguageCode == "uk" {
-			n += 2
-		} else if t.LanguageCode == "en" {
-			n++
-		}
-		return n
+		return Snapshot{}, false
 	}
-	for k := range tracks {
-		if rank(tracks[k]) > rank(tracks[best]) {
-			best = k
-		}
+	if snap, ok := try(tracks, "youtube-timedtext-v1"); ok {
+		return snap, nil
 	}
-	body, _, _, partial, err := f.get(ctx, tracks[best].BaseURL)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	text, err := decodeCaptions(body)
-	if strings.TrimSpace(text) == "" {
-		return Snapshot{}, &SourceError{Message: "субтитри недоступні або не вдалося їх прочитати"}
-	}
-	if err != nil {
-		partial = true
-	}
-	s := Snapshot{Text: text, Title: "YouTube: " + id, Origin: "fetch", Extractor: "youtube-timedtext-v1", Completeness: "full", Warning: "Субтитри: " + tracks[best].LanguageCode}
-	if tracks[best].Kind == "asr" {
-		s.Warning += "; автоматичні"
-	}
-	if partial || pagePartial {
-		s.Completeness = "partial"
-		s.Warning += "; відповідь часткова або не повністю прочитана"
-	}
-	if meta, ok := ctx.Value(cacheMetaKey{}).(*NetworkMeta); ok {
-		s.RetrievedAt = meta.FetchedAt
-		if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" || meta.CacheStatus == "REVALIDATED" {
-			s.Warning += "; субтитри з кешу, отримано " + meta.FetchedAt
+	if pageErr != nil {
+		var se *SourceError
+		if errors.As(pageErr, &se) && !se.Retry {
+			return Snapshot{}, pageErr
 		}
 	}
-	return s, nil
+	resolver := f.metadataResolver
+	if resolver == nil && f.YTDLP != "" {
+		resolver = f.youtubeMetadata
+	}
+	if resolver != nil {
+		info, e := resolver(ctx, id)
+		if e == nil {
+			if strings.TrimSpace(info.Title) != "" {
+				title = info.Title
+			}
+			if snap, ok := try(metadataTracks(info), "youtube-yt-dlp-metadata-v1"); ok {
+				return snap, nil
+			}
+		}
+	}
+	if ctx.Err() != nil {
+		return Snapshot{}, &SourceError{Message: "час отримання YouTube-субтитрів вичерпано; спробуйте повторити", Retry: true}
+	}
+	return Snapshot{}, &SourceError{Message: "не вдалося отримати доступні субтитри у вибраних чи інших мовах; перевірте yt-dlp або вставте текст вручну"}
 }
 func decodeCaptions(data []byte) (string, error) {
 	if bytes.HasPrefix(bytes.TrimSpace(data), []byte("{")) {

@@ -14,6 +14,8 @@ import (
 )
 
 type config struct {
+	YTDLP, YouTubeLanguages string
+
 	Telegram                                              library.TelegramConfig
 	TelegramTimeout                                       time.Duration
 	Embeddings                                            bool
@@ -60,6 +62,7 @@ func readConfig(args []string) (config, error) {
 	// Resolve supplied values before parsing defaults: an invalid lower-priority
 	// setting must not reject a valid command-line override.
 	flagNames := map[string]string{
+		"yt-dlp": "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
 		"telegram": "NEWS_LIBRARY_TELEGRAM_ENABLED", "telegram-chat": "NEWS_LIBRARY_TELEGRAM_CHAT_ID", "telegram-daily": "NEWS_LIBRARY_TELEGRAM_DAILY", "telegram-size": "NEWS_LIBRARY_TELEGRAM_SIZE",
 		"embeddings": "NEWS_LIBRARY_EMBEDDINGS", "embed-url": "NEWS_LIBRARY_EMBED_URL", "embed-timeout": "NEWS_LIBRARY_EMBED_TIMEOUT", "read-token": "NEWS_LIBRARY_READ_TOKEN",
 		"chunk-max-parts": "NEWS_LIBRARY_CHUNK_MAX_PARTS", "cache-max-bytes": "NEWS_LIBRARY_CACHE_MAX_BYTES", "cache-retention": "NEWS_LIBRARY_CACHE_RETENTION", "cache-cleanup-interval": "NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL",
@@ -124,7 +127,7 @@ func readConfig(args []string) (config, error) {
 		}
 		return v, nil
 	}
-	c := config{EmbedURL: get("NEWS_LIBRARY_EMBED_URL", "http://localhost:11434/api/embed"), ReadToken: get("NEWS_LIBRARY_READ_TOKEN", ""), Interests: get("NEWS_LIBRARY_INTERESTS", ""), FilterRules: get("NEWS_LIBRARY_FILTER_RULES", "[]"), Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
+	c := config{YTDLP: get("NEWS_LIBRARY_YT_DLP", "yt-dlp"), YouTubeLanguages: get("NEWS_LIBRARY_YOUTUBE_LANGUAGES", "uk,en"), EmbedURL: get("NEWS_LIBRARY_EMBED_URL", "http://localhost:11434/api/embed"), ReadToken: get("NEWS_LIBRARY_READ_TOKEN", ""), Interests: get("NEWS_LIBRARY_INTERESTS", ""), FilterRules: get("NEWS_LIBRARY_FILTER_RULES", "[]"), Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
 	var thresholdErr error
 	c.FilterThreshold, thresholdErr = strconv.ParseFloat(get("NEWS_LIBRARY_FILTER_THRESHOLD", "0.8"), 64)
 	if thresholdErr != nil {
@@ -195,6 +198,8 @@ func readConfig(args []string) (config, error) {
 	}
 	c.ChunkMaxParts = int(parts)
 	flags := flag.NewFlagSet("news-library", flag.ContinueOnError)
+	flags.StringVar(&c.YTDLP, "yt-dlp", c.YTDLP, "yt-dlp executable for YouTube metadata fallback; empty disables")
+	flags.StringVar(&c.YouTubeLanguages, "youtube-languages", c.YouTubeLanguages, "preferred subtitle languages, comma-separated")
 	flags.BoolVar(&c.Telegram.Enabled, "telegram", c.Telegram.Enabled, "увімкнути Telegram доставку")
 	flags.StringVar(&c.Telegram.ChatID, "telegram-chat", c.Telegram.ChatID, "numeric destination chat ID")
 	flags.StringVar(&c.Telegram.DailyTime, "telegram-daily", c.Telegram.DailyTime, "щоденна добірка HH:MM за Києвом; порожньо = лише вручну")
@@ -233,6 +238,9 @@ func readConfig(args []string) (config, error) {
 	}
 	if flags.NArg() != 0 {
 		return c, errors.New("неочікувані аргументи")
+	}
+	if _, e = library.ParseYouTubeLanguages(c.YouTubeLanguages); e != nil {
+		return c, e
 	}
 	if e = c.Telegram.Validate(); e != nil {
 		return c, e

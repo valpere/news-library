@@ -368,3 +368,14 @@ FTS та ранній відсів. Ні fetch, ні генерація не в�
 не позначають матеріали прочитаними й не вимагають негайної оцінки.
 Стійкі jobs переживають перезапуск так само, як одиночні. Діють чинні
 Host/Origin/CSRF та заборона агентських мутацій. Розширення FR-01/02/10/17.
+
+
+YouTube language/metadata failover уточнює FR-03/04/16: configured languages
+(uk,en типово), fallback на інші доріжки після порожньої відповіді, bounded
+metadata-only yt-dlp за потреби. Автоматичні субтитри та переклад позначені,
+відео/аудіо не завантажуються, генерація не запускається під час fetch.
+Сторонні конфігурації/плагіни yt-dlp не завантажуються. Резерв теж блокує
+private/loopback/link-local destinations і не обходить DNS/redirect guards.
+Успіх зберігає текст із extractor/language/completeness, збій — URL та явний
+стан/retry/manual text. Рутинне приймання fixture-only; live source smoke
+окремо, без models чи мутації бібліотеки користувача.

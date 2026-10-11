@@ -273,7 +273,8 @@ Readability виділяє HTML без додаткових запитів. По
 оригіналу unknown; ліміт/перервана відповідь → partial. Plain text і
 субтитри з повною відповіддю → full. YouTube watch/caption HTTP-запити
 використовують той самий захищений клієнт; формат caption tracks може
-змінитися й тоді показується needs_input. Без shell/extractor subprocesses.
+змінитися; тоді використовується metadata-only yt-dlp fallback, а після
+вичерпання обох шляхів показується needs_input. Shell не використовується.
 
 Початкові параметри й запуск — README. Лише loopback; дозволені
 налаштований Host та `localhost` із тим самим портом. Origin має
@@ -523,3 +524,27 @@ RowsAffected INSERT і публікується лише після commit. Зб
 потребує окремої persisted сутності, самі items/jobs стійкі. Нова schema
 не потрібна. Передача пачки не запускає мережевих/source/model викликів;
 обробка лишається у чинному worker. Читання та оцінювання незалежні.
+
+
+## YouTube: мовний і metadata failover
+
+`source.go` ранжує configured languages перед іншими, manual перед ASR
+у межах мови, перебирає до 8 доріжок; порожня/непрочитана доріжка не доводить
+відсутність інших. Збережений доступний частковий текст лишається partial.
+`youtube_metadata.go` fallback викликає yt-dlp тільки з валідованим 11-символьним
+YouTube ID, фіксованим HTTPS watch URL і argument vector (без shell). JSON
+metadata до 4 MiB, без media/subtitle files на диску, без config/plugins/cache;
+stderr не показується, timeout 25s/parent context і process-group cancellation.
+Виділяються json3/srv3/srv1/ttml tracks (без live_chat), скачування caption
+URL відбувається через чинний safe HTTP client/shared cache. Snapshot фіксує
+реальну назву, extractor youtube-yt-dlp-metadata-v1, мову, ASR/translation,
+час і completeness; model calls відсутні.
+
+Metadata helper теж використовує public-address guard: ephemeral loopback
+HTTP proxy із safeDial, CONNECT лише 80/443, HTTP лише GET/port 80; кожна нова
+адреса/redirect повторно проходить DNS/IP checks. Context/закриття завершує
+процесну групу, proxy та tunnels, output bounded. Резерв optional, відсутній
+executable дає діагностику й manual/retry без втрати URL/тексту. Конфігурація
+NEWS_LIBRARY_YT_DLP (типово yt-dlp, empty disables) та YOUTUBE_LANGUAGES
+(типово uk,en), flag/environment/.env precedence як в інших settings.
+Офіційні параметри: [yt-dlp](https://github.com/yt-dlp/yt-dlp#usage-and-options).
