@@ -1,7 +1,7 @@
 # Вимоги та сценарії першої версії
 
 Статус: основні продуктові й технічні рішення погоджені користувачем.
-Деталі поведінки нижче конкретизують їх для реалізації. M1 реалізовано; основний цикл M2 із правилами, дайджестом, прогнозом і відгуками реалізований; обробка довгих текстів частинами й очищення HTTP-кешу реалізовані; free-only fallback і M3–M4 заплановані. Архітектура — [HLD.md](HLD.md), етапи — [BACKLOG.md](BACKLOG.md).
+Деталі поведінки нижче конкретизують їх для реалізації. M1 реалізовано; основний цикл M2 із правилами, дайджестом, прогнозом і відгуками реалізований; обробка довгих текстів частинами й очищення HTTP-кешу реалізовані; M3 semantic search/read API реалізовані; free-only fallback і M4 заплановані. Архітектура — [HLD.md](HLD.md), етапи — [BACKLOG.md](BACKLOG.md).
 
 ## Статус контракту
 
@@ -242,3 +242,36 @@ URL, якщо залишилось інше посилання. Для бюдж�
 облік не множить розмір shared bodies. Після збою orphan files відновні
 та очищуються. Primary файли, assessments і read/placement не змінюються.
 Отриманий upstream текст не губиться через неможливість запису кешу.
+
+
+## Приймання M3
+
+Пошук має modes fts/vector/hybrid. bge-m3 працює локально, без генерації;
+індексуються дозволені вибрані snapshots із recorded source rule decision.
+Зміна моделі/розбиття не змішує vector versions. Фрагменти покривають весь
+UTF-8 текст, мають source ID і byte offsets; checkpoints переживають restart.
+Index failure не приховує текст і не змінює людську оцінку. Explicit rebuild
+відновлює похідні дані й перевіряє legacy snapshots без rule decision.
+Відсіяний до обробки snapshot викликає нуль generation та embedding calls.
+
+Фільтри AND і NULL/zero semantics спільні з FTS; при semantic ranking рівні
+значення впорядковані за ID. Hybrid використовує rank fusion, а не суму
+BM25/cosine. Coverage неповного індексу явне; unavailable embeddings дають
+FTS fallback із повідомленням. Snippet має точну версію й межі; не видає
+частковий/обрізаний текст за весь оригінал.
+
+`GET /api/read/search`, `/api/read/items/{id}`, `/fragment` і `/context`
+потребують private bearer token; без token API вимкнено. Item включає source,
+збережений digest і provenance, користувацький стан та rating history.
+Context містить saved digest або bounded excerpt, source/URL/completeness,
+власну оцінку з датою чи null та deferred/tags. Fragment чужого item,
+неправильні UTF-8 boundaries і завеликий діапазон відхиляються. Reads не
+генерують текст, не ставлять jobs і не змінюють людські дані. Агентські
+credentials не дають права mutation, включно з rebuild.
+
+Приймання: semantic synonym retrieval відкладеного через metadata filters,
+FTS fallback і zero inference у fts/context; restart checkpoints/fencing,
+model/snapshot version isolation, rejected source zero calls, explicit rebuild
+без зміни rating history; authentication/denied mutation, saved digest context,
+unknown dates/null і source ownership. Offline fixtures та окремий local
+bge-m3 smoke; cloud generation у цих перевірках не потрібна.
