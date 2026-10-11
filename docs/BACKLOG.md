@@ -36,7 +36,7 @@ FR-01–04, FR-09–11, FR-15–18, FR-20; ручні оцінки з FR-07.
 версійна регенерація та історія. `.env`, файлове сховище й спільний
 HTTP-кеш також працюють. Bounded chunking довгих текстів із checkpoints і budgeted HTTP cache
 cleanup реалізовані. OpenRouter free fallback залишається запланованим; без ключа резерв неактивний.
-Кеш потребує conditional upstream revalidation.
+Conditional upstream revalidation через ETag/Last-Modified реалізована.
 
 1. Правила з версіями, внесками та порогом; порожній набір типово
    пропускає всі записи. Ручне повернення відсіяного до обробки.

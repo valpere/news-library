@@ -72,6 +72,8 @@ M2 також перевіряють [JSON/probability validation](../internal/l
 [M2 config validation](../cmd/news-library/config_test.go).
 
 Довгі джерела: [UTF-8 coverage, checkpoint restart/retry, bounds/fencing](../internal/library/chunk_digest_test.go).
+HTTP validation: [persisted validators/restart, 304/changed 200/privacy, exact redirect target,
+missing body/unexpected 304, failure/explicit stale, concurrent cleanup, v5 migration](../internal/library/cache_revalidation_test.go).
 HTTP eviction: [shared physical size/LRU, orphan cleanup, primary preservation, write failure](../internal/library/cache_cleanup_test.go).
 
 [Браузерний multipart/exports/periodic-cleanup smoke](../scripts/smoke_long_digest_ui.py).

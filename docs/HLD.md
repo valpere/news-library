@@ -2,7 +2,7 @@
 
 Основа погоджена: один Go-сервіс, SQLite, стійка черга, локальний запуск
 із можливістю перенесення на VPS. Нижче — технічна конкретизація для
-реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v5, FTS5,
+реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v6, FTS5,
 транзакційна черга та незмінні snapshots/оцінки. Наступні компоненти M2–M4
 залишаються запланованими. Сервер — `cmd/news-library`, адаптери та UI —
 `internal/library/{source,worker,web}.go`, шаблони — `pages.html`.
@@ -302,7 +302,20 @@ Singleflight зводить однакові одночасні запити; с
 використаний кеш не видається за нове отримання. Cache GET не додає items,
 не змінює judgments/read і не викликає генерацію; raw HTML має attachment
 і sandbox CSP. TTL визначає свіжість; cache body eviction реалізована окремо від
-primary storage. Conditional upstream revalidation ще запланована.
+primary storage. Schema v6 зберігає тільки validation/policy headers і checked_at;
+legacy entries мають порожні валідатори/невідомий checked_at. Після TTL або
+explicit refresh кеш надсилає If-None-Match/If-Modified-Since тільки до
+точного збереженого final URL (також після redirect); safeDial/redirect guards
+залишаються спільними. 304 використовує перевірене in-memory тіло, об'єднує
+policy headers і поновлює TTL; fetched_at тіла не змінюється, checked_at
+оновлюється. Змінений ETag у 304 спричиняє один unconditional retry.
+200 замінює тіло/валідатори; partial/privacy відповіді BYPASS і видаляють
+cache reference. Відсутній/corrupt body не дає права conditional request;
+неочікуваний 304 — помилка. Network failure не приховує помилку stale тілом.
+Публікація після concurrent cleanup знову забезпечує blob перед DB reference.
+TTL=0 вимикає conditional requests. Первинні snapshots/оцінки незмінні.
+Принципи validation звірені з [RFC 9111 §4.3](https://www.rfc-editor.org/rfc/rfc9111.html#section-4.3);
+endpoint лишається обмеженим anonymous GET кешем, не універсальним HTTP proxy.
 
 Web очікує fetch і digest, після чого показує секції й лише тоді звичайне
 оцінювання. Виняток — явно обрана оцінка вже прочитаного джерела або

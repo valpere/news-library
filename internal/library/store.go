@@ -30,6 +30,9 @@ var schemaV4 string
 //go:embed schema_v5.sql
 var schemaV5 string
 
+//go:embed schema_v6.sql
+var schemaV6 string
+
 type Store struct {
 	DB           *sql.DB
 	DigestConfig *DigestConfig
@@ -93,7 +96,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 5 {
+	if version > 6 {
 		db.Close()
 		return nil, errors.New("database schema is newer than this application")
 	}
@@ -113,6 +116,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 5 {
 			_, err = tx.Exec(schemaV5)
+		}
+		if err == nil && version < 6 {
+			_, err = tx.Exec(schemaV6)
 		}
 		if err == nil {
 			err = tx.Commit()

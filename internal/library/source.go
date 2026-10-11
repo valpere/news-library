@@ -99,7 +99,28 @@ func (f *Fetcher) getNetwork(ctx context.Context, raw string, meta *NetworkMeta)
 		return nil, nil, "", false, err
 	}
 	req.Header.Set("User-Agent", "news-library/0.1 (personal text archive)")
-	resp, err := f.client.Do(req)
+	client := *f.client
+	applyValidators := func(r *http.Request) {
+		r.Header.Del("If-None-Match")
+		r.Header.Del("If-Modified-Since")
+		if meta != nil && r.URL.String() == meta.ValidatorURL {
+			for name, values := range meta.RequestHeaders {
+				r.Header[name] = append([]string(nil), values...)
+			}
+		}
+	}
+	applyValidators(req)
+	client.CheckRedirect = func(r *http.Request, via []*http.Request) error {
+		applyValidators(r)
+		if f.client.CheckRedirect != nil {
+			return f.client.CheckRedirect(r, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("redirect limit")
+		}
+		return nil
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		var se *SourceError
 		if errors.As(err, &se) {
@@ -108,6 +129,13 @@ func (f *Fetcher) getNetwork(ctx context.Context, raw string, meta *NetworkMeta)
 		return nil, nil, "", false, &SourceError{Message: "отримання джерела не вдалося (мережа або redirect)", Retry: true}
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotModified && meta != nil && resp.Request.URL.String() == meta.ValidatorURL &&
+		(resp.Request.Header.Get("If-None-Match") != "" || resp.Request.Header.Get("If-Modified-Since") != "") {
+		meta.Headers = resp.Header.Clone()
+		meta.FetchedAt = nowUTC()
+		meta.NotModified = true
+		return nil, resp.Request.URL, "", false, nil
+	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		return nil, nil, "", false, &SourceError{Message: fmt.Sprintf("джерело повернуло HTTP %d", resp.StatusCode), Retry: resp.StatusCode == 429 || resp.StatusCode >= 500}
 	}
@@ -198,7 +226,7 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 		return Snapshot{}, &SourceError{Message: "непідтримуваний формат джерела: потрібен HTML або text/plain"}
 	}
 	snap.RetrievedAt = meta.FetchedAt
-	if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" {
+	if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" || meta.CacheStatus == "REVALIDATED" {
 		snap.Warning += "; джерело з кешу, отримано " + meta.FetchedAt
 	}
 	snap.Text = strings.TrimSpace(snap.Text)
@@ -277,7 +305,7 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
 	}
 	if meta, ok := ctx.Value(cacheMetaKey{}).(*NetworkMeta); ok {
 		s.RetrievedAt = meta.FetchedAt
-		if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" {
+		if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" || meta.CacheStatus == "REVALIDATED" {
 			s.Warning += "; субтитри з кешу, отримано " + meta.FetchedAt
 		}
 	}
