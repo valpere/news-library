@@ -182,12 +182,17 @@ HTTP-кеш обслуговує бібліотеку та інші інстру
 `GET /cache?url=…`. Має TTL, явні refresh/stale, той самий SSRF-захист;
 не змінює матеріалів/оцінок/стану читання й не викликає ШІ. Anonymous
 відповіді з private/no-store/no-cache/cookies або непідтримуваним Vary обходять
-кеш. HTML не виконується як сторінка застосунку. TTL не видаляє первинні
+кеш. Після TTL або explicit refresh є умовна перевірка ETag/Last-Modified:
+304 поновлює свіжість перевіреного тіла, 200 замінює відповідь. Час отримання
+тіла відокремлений від часу перевірки; redirect не переносить валідатори
+на інший URL. Збій перевірки не видається за успіх; stale лише явно.
+Пошкоджене/відсутнє тіло отримується без валідаторів; TTL=0 їх вимикає.
+HTML не виконується як сторінка застосунку. TTL не видаляє первинні
 тексти чи дайджести; очищення HTTP-файлів обмежене їх власним каталогом і конфігураційним бюджетом.
 
 Приймання: міграція v1 зі старими ID/unknown dates/чергою/FTS, failure rollback,
 missing/corrupt blobs, cloud-only guard, fencing/retry, незмінна підстава
-оцінки; cache HIT/MISS/refresh/stale/bypass, одночасні запити, SSRF і
+оцінки; cache HIT/MISS/REVALIDATED/refresh/stale/bypass, migration/restart/304/changed 200/privacy/redirect, одночасні запити, SSRF і
 нуль мутацій/генерації; browser waiting→digest→rating та model failure→retry.
 
 ## Приймання основного циклу M2

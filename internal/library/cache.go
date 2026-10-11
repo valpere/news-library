@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -19,6 +20,9 @@ type cacheMetaKey struct{}
 type cacheRefreshKey struct{}
 type NetworkMeta struct {
 	Headers                http.Header
+	RequestHeaders         http.Header
+	ValidatorURL           string
+	NotModified            bool
 	FetchedAt, CacheStatus string
 }
 type CacheResponse struct {
@@ -26,6 +30,8 @@ type CacheResponse struct {
 	URL, ContentType, Hash, FetchedAt, Status string
 	Partial                                   bool
 	ExpiresAt                                 int64
+	Headers                                   http.Header
+	CheckedAt                                 string
 }
 type HTTPCache struct {
 	Store     *Store
@@ -59,13 +65,27 @@ func (f *Fetcher) get(ctx context.Context, raw string) ([]byte, *url.URL, string
 }
 func (c *HTTPCache) lookup(raw string) (CacheResponse, error) {
 	var r CacheResponse
-	var path string
-	err := c.Store.DB.QueryRow(`SELECT final_url,content_type,body_path,hash,fetched_at,expires_at,partial FROM cache_entries WHERE url=?`, raw).Scan(&r.URL, &r.ContentType, &path, &r.Hash, &r.FetchedAt, &r.ExpiresAt, &r.Partial)
+	var path, headers string
+	err := c.Store.DB.QueryRow(`SELECT final_url,content_type,body_path,hash,fetched_at,expires_at,partial,response_headers,checked_at FROM cache_entries WHERE url=?`, raw).Scan(&r.URL, &r.ContentType, &path, &r.Hash, &r.FetchedAt, &r.ExpiresAt, &r.Partial, &headers, &r.CheckedAt)
 	if err != nil {
+		return r, err
+	}
+	if err = json.Unmarshal([]byte(headers), &r.Headers); err != nil {
 		return r, err
 	}
 	r.Body, err = c.Store.Files.Read(path, r.Hash)
 	return r, err
+}
+
+// Persist only fields used for validation and storage policy, never cookies.
+func cacheHeaders(h http.Header) http.Header {
+	out := http.Header{}
+	for _, name := range []string{"ETag", "Last-Modified", "Cache-Control", "Expires", "Vary"} {
+		if values := h.Values(name); len(values) > 0 {
+			out[http.CanonicalHeaderKey(name)] = append([]string(nil), values...)
+		}
+	}
+	return out
 }
 func cacheLifetime(headers http.Header, limit time.Duration, now time.Time) time.Duration {
 	if len(headers.Values("Set-Cookie")) > 0 {
@@ -148,15 +168,47 @@ func (c *HTTPCache) Get(ctx context.Context, raw string, force, allowStale bool)
 			}
 		}
 		meta := &NetworkMeta{}
+		if cachedErr == nil && c.TTL > 0 && !cached.Partial {
+			meta.ValidatorURL = cached.URL
+			meta.RequestHeaders = http.Header{}
+			if tag := cached.Headers.Get("ETag"); tag != "" {
+				meta.RequestHeaders.Set("If-None-Match", tag)
+			}
+			if date := cached.Headers.Get("Last-Modified"); date != "" {
+				meta.RequestHeaders.Set("If-Modified-Since", date)
+			}
+		}
 		body, final, kind, partial, err := c.Fetcher.getNetwork(ctx, canonical, meta)
 		if err != nil {
 			return CacheResponse{}, err
 		}
 		r := CacheResponse{Body: body, URL: final.String(), ContentType: kind, Partial: partial, Hash: fmt.Sprintf("%x", sha256.Sum256(body)), FetchedAt: meta.FetchedAt, Status: "MISS"}
+		if meta.NotModified {
+			// A different ETag cannot validate the stored representation.
+			if tag := meta.Headers.Get("ETag"); tag != "" && cached.Headers.Get("ETag") != "" && tag != cached.Headers.Get("ETag") {
+				meta = &NetworkMeta{}
+				body, final, kind, partial, err = c.Fetcher.getNetwork(ctx, canonical, meta)
+				if err != nil {
+					return CacheResponse{}, err
+				}
+				r = CacheResponse{Body: body, URL: final.String(), ContentType: kind, Partial: partial, Hash: fmt.Sprintf("%x", sha256.Sum256(body)), FetchedAt: meta.FetchedAt, Status: "MISS"}
+			} else {
+				r = cached
+				r.Status = "REVALIDATED"
+				headers := cached.Headers.Clone()
+				headers.Del("Age")
+				for name, values := range meta.Headers {
+					headers[name] = values
+				}
+				meta.Headers = headers
+			}
+		}
+		r.Headers = cacheHeaders(meta.Headers)
+		r.CheckedAt = meta.FetchedAt
 		lifetime := cacheLifetime(meta.Headers, c.TTL, time.Now())
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		if lifetime <= 0 || partial || (c.MaxBytes > 0 && int64(len(body)) > c.MaxBytes) {
+		if lifetime <= 0 || r.Partial || (c.MaxBytes > 0 && int64(len(r.Body)) > c.MaxBytes) {
 			r.Status = "BYPASS"
 			if _, e := c.Store.DB.Exec("DELETE FROM cache_entries WHERE url=?", canonical); e != nil {
 				r.Status = "BYPASS"
@@ -169,12 +221,13 @@ func (c *HTTPCache) Get(ctx context.Context, raw string, force, allowStale bool)
 			r.Status = "BYPASS"
 			return r, nil
 		}
-		path, err := c.Store.Files.Put("cache/http", body)
+		path, err := c.Store.Files.Put("cache/http", r.Body)
 		if err != nil {
 			r.Status = "BYPASS"
 			return r, nil
 		}
-		_, err = c.Store.DB.Exec(`INSERT INTO cache_entries(url,final_url,content_type,body_path,hash,fetched_at,expires_at,partial,last_accessed) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET final_url=excluded.final_url,content_type=excluded.content_type,body_path=excluded.body_path,hash=excluded.hash,fetched_at=excluded.fetched_at,expires_at=excluded.expires_at,partial=excluded.partial,last_accessed=excluded.last_accessed`, canonical, r.URL, r.ContentType, path, r.Hash, r.FetchedAt, r.ExpiresAt, partial, time.Now().UnixMilli())
+		headersJSON, _ := json.Marshal(r.Headers)
+		_, err = c.Store.DB.Exec(`INSERT INTO cache_entries(url,final_url,content_type,body_path,hash,fetched_at,expires_at,partial,last_accessed,response_headers,checked_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET final_url=excluded.final_url,content_type=excluded.content_type,body_path=excluded.body_path,hash=excluded.hash,fetched_at=excluded.fetched_at,expires_at=excluded.expires_at,partial=excluded.partial,last_accessed=excluded.last_accessed,response_headers=excluded.response_headers,checked_at=excluded.checked_at`, canonical, r.URL, r.ContentType, path, r.Hash, r.FetchedAt, r.ExpiresAt, r.Partial, time.Now().UnixMilli(), string(headersJSON), r.CheckedAt)
 		if err != nil {
 			r.Status = "BYPASS"
 			return r, nil
@@ -233,6 +286,7 @@ func (w *Web) cache(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("X-News-Library-Cache", response.Status)
 	rw.Header().Set("X-Source-URL", response.URL)
 	rw.Header().Set("X-Source-Fetched-At", response.FetchedAt)
+	rw.Header().Set("X-Source-Checked-At", response.CheckedAt)
 	if response.Partial {
 		rw.Header().Set("X-Content-Completeness", "partial")
 	} else {
