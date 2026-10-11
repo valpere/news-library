@@ -55,7 +55,7 @@ def main():
     data = Path(tempfile.mkdtemp(prefix="live-digest-", dir=scratch))
     interests = "ТЕСТОВИЙ ПРОФІЛЬ: API Ollama та моделі прийняття рішень." if args.prediction else ""
     command = [str(ROOT / "build/news-library"), "-data", str(data), "-bind", "127.0.0.1:0",
-               "-filter-rules", "[]", "-interests", interests, "-no-worker=false", "-no-digests=false"]
+               "-embeddings=false", "-filter-rules", "[]", "-interests", interests, "-no-worker=false", "-no-digests=false"]
     # Application loads private .env itself; never source or print credentials.
     with (data / "service.log").open("w") as log:
         process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=log, text=True)

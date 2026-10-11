@@ -21,7 +21,9 @@ in private `.env`; `.env.example` documents defaults. Backup needs DB + primary 
 validation and optional browser smoke live in `scripts/`; private evaluation
 scripts and pilot artifacts remain local. The upstream license is preserved.
 
-See remaining M2 integration work and M3 in `docs/BACKLOG.md`.
+See remaining M2 integration work and M4 in `docs/BACKLOG.md`.
+M3 uses local bge-m3 with versioned persistent derived indexes and read-only
+agent API. FTS/context need no inference; semantic queries never generate text.
 Rules default to empty; predictions require an explicit current interest profile.
 Digest-quality feedback must not alter human usefulness ratings.
 Long sources use persisted digest checkpoints; cache cleanup must preserve

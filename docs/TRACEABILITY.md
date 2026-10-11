@@ -18,15 +18,15 @@
 | FR-08 | UC-07 | M2 | AT-08 | passed: [TestFeedbackAndRegenerationPreserveExactContext](../internal/library/feedback_test.go) |
 | FR-09 | UC-04 | M1 | AT-09 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
 | FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | partial M1: [TestLeaseRestartRetryAndIdempotency / TestCrashOnLastAttemptTerminates](../internal/library/store_test.go); digest recovery: [TestDigestQueueRecoveryAndRatingContext](../internal/library/digest_test.go); future filter stages planned |
-| FR-11 | UC-05 | M1, M3 | AT-11 | partial M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 vector planned |
-| FR-12 | UC-09 | M3 | AT-12 | planned |
+| FR-11 | UC-05 | M1, M3 | AT-11 | passed M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
+| FR-12 | UC-09 | M3 | AT-12 | passed: [read authentication/denied mutations](../internal/library/semantic_test.go) |
 | FR-13 | UC-08 | M4 | AT-13 | planned |
 | FR-14 | UC-12 | M4 | AT-14 | planned |
 | FR-15 | UC-03 | M1, M2 | AT-15 | partial M1: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go), [TestWebRejectsInvalidScoresAndForeignContext](../internal/library/web_test.go); passed digest links: [TestDigestQueueRecoveryAndRatingContext / TestDigestPrimaryUIAndExports](../internal/library/digest_test.go) |
 | FR-16 | UC-10 | M1, M2 | AT-16 | partial M1: [TestNeedsInputAndManualWinsRace](../internal/library/store_test.go), [TestYouTubeFixtures](../internal/library/source_test.go); digest failure/retry: [browser smoke](../scripts/smoke_digest_ui.py); passed long-source processing: [TestLongDigestResumesSavedPartsAndPreservesSource](../internal/library/chunk_digest_test.go) |
 | FR-17 | UC-11 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
-| FR-18 | UC-05 | M1, M2, M3 | AT-18 | partial M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); passed M2 Confidence: [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go); M3 vector planned |
-| FR-19 | UC-09 | M3 | AT-19 | planned |
+| FR-18 | UC-05 | M1, M2, M3 | AT-18 | passed M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); passed M2 Confidence: [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
+| FR-19 | UC-09 | M3 | AT-19 | passed: [saved digest/excerpt, dated context, ownership/UTF-8 bounds](../internal/library/semantic_test.go) |
 | FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries / TestWebLocalhostAccessAndOrigin](../internal/library/web_test.go) |
 
 ## Перевірка специфікації
@@ -77,3 +77,9 @@ missing body/unexpected 304, failure/explicit stale, concurrent cleanup, v5 migr
 HTTP eviction: [shared physical size/LRU, orphan cleanup, primary preservation, write failure](../internal/library/cache_cleanup_test.go).
 
 [Браузерний multipart/exports/periodic-cleanup smoke](../scripts/smoke_long_digest_ui.py).
+
+M3 acceptance: [index restart/fencing, reject zero calls, explicit rebuild/migration,
+model/snapshot isolation, metadata filters, FTS fallback and read API](../internal/library/semantic_test.go),
+[config precedence/token errors](../cmd/news-library/config_test.go),
+[browser/API fixture](../scripts/smoke_m3_ui.py).
+Explicit real local embedding integration: [synthetic multilingual retrieval smoke](../minions/live_semantic_smoke.go).

@@ -14,6 +14,9 @@ import (
 )
 
 type config struct {
+	Embeddings                                            bool
+	EmbedURL, ReadToken                                   string
+	EmbedTimeout                                          time.Duration
 	Data, Bind, Model, OllamaURL, OllamaKey               string
 	Interests, FilterRules                                string
 	FilterThreshold                                       float64
@@ -54,6 +57,7 @@ func readConfig(args []string) (config, error) {
 	// Resolve supplied values before parsing defaults: an invalid lower-priority
 	// setting must not reject a valid command-line override.
 	flagNames := map[string]string{
+		"embeddings": "NEWS_LIBRARY_EMBEDDINGS", "embed-url": "NEWS_LIBRARY_EMBED_URL", "embed-timeout": "NEWS_LIBRARY_EMBED_TIMEOUT", "read-token": "NEWS_LIBRARY_READ_TOKEN",
 		"chunk-max-parts": "NEWS_LIBRARY_CHUNK_MAX_PARTS", "cache-max-bytes": "NEWS_LIBRARY_CACHE_MAX_BYTES", "cache-retention": "NEWS_LIBRARY_CACHE_RETENTION", "cache-cleanup-interval": "NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL",
 		"interests": "NEWS_LIBRARY_INTERESTS", "filter-rules": "NEWS_LIBRARY_FILTER_RULES", "filter-threshold": "NEWS_LIBRARY_FILTER_THRESHOLD",
 		"data": "NEWS_LIBRARY_DATA", "bind": "NEWS_LIBRARY_BIND", "model": "OLLAMA_MODEL", "ollama-url": "OLLAMA_API_URL",
@@ -72,7 +76,7 @@ func readConfig(args []string) (config, error) {
 			continue
 		}
 		if !hasValue {
-			if name == "no-worker" || name == "no-digests" {
+			if name == "no-worker" || name == "no-digests" || name == "embeddings" {
 				value = "true"
 			} else if i+1 < len(args) {
 				i++
@@ -116,7 +120,7 @@ func readConfig(args []string) (config, error) {
 		}
 		return v, nil
 	}
-	c := config{Interests: get("NEWS_LIBRARY_INTERESTS", ""), FilterRules: get("NEWS_LIBRARY_FILTER_RULES", "[]"), Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
+	c := config{EmbedURL: get("NEWS_LIBRARY_EMBED_URL", "http://localhost:11434/api/embed"), ReadToken: get("NEWS_LIBRARY_READ_TOKEN", ""), Interests: get("NEWS_LIBRARY_INTERESTS", ""), FilterRules: get("NEWS_LIBRARY_FILTER_RULES", "[]"), Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
 	var thresholdErr error
 	c.FilterThreshold, thresholdErr = strconv.ParseFloat(get("NEWS_LIBRARY_FILTER_THRESHOLD", "0.8"), 64)
 	if thresholdErr != nil {
@@ -125,7 +129,7 @@ func readConfig(args []string) (config, error) {
 	for _, entry := range []struct {
 		name, value string
 		target      *time.Duration
-	}{{"NEWS_LIBRARY_CACHE_RETENTION", "168h", &c.CacheRetention}, {"NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL", "1h", &c.CacheCleanupInterval}, {"NEWS_LIBRARY_FETCH_TIMEOUT", "30s", &c.FetchTimeout}, {"NEWS_LIBRARY_DIGEST_TIMEOUT", "300s", &c.DigestTimeout}, {"NEWS_LIBRARY_LEASE", "1m", &c.Lease}, {"NEWS_LIBRARY_BACKOFF", "10s", &c.Backoff}, {"NEWS_LIBRARY_CACHE_TTL", "24h", &c.CacheTTL}} {
+	}{{"NEWS_LIBRARY_EMBED_TIMEOUT", "30s", &c.EmbedTimeout}, {"NEWS_LIBRARY_CACHE_RETENTION", "168h", &c.CacheRetention}, {"NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL", "1h", &c.CacheCleanupInterval}, {"NEWS_LIBRARY_FETCH_TIMEOUT", "30s", &c.FetchTimeout}, {"NEWS_LIBRARY_DIGEST_TIMEOUT", "300s", &c.DigestTimeout}, {"NEWS_LIBRARY_LEASE", "1m", &c.Lease}, {"NEWS_LIBRARY_BACKOFF", "10s", &c.Backoff}, {"NEWS_LIBRARY_CACHE_TTL", "24h", &c.CacheTTL}} {
 		v, e := duration(entry.name, entry.value)
 		if e != nil {
 			return c, e
@@ -149,6 +153,10 @@ func readConfig(args []string) (config, error) {
 	}
 	c.Attempts = int(attempts)
 	c.InputLimit = int(limit)
+	c.Embeddings, e = boolean("NEWS_LIBRARY_EMBEDDINGS", "false")
+	if e != nil {
+		return c, e
+	}
 	c.NoWorker, e = boolean("NEWS_LIBRARY_NO_WORKER", "false")
 	if e != nil {
 		return c, e
@@ -170,6 +178,12 @@ func readConfig(args []string) (config, error) {
 	}
 	c.ChunkMaxParts = int(parts)
 	flags := flag.NewFlagSet("news-library", flag.ContinueOnError)
+	flags.BoolVar(&c.Embeddings, "embeddings", c.Embeddings, "локальна bge-m3 індексація")
+	flags.StringVar(&c.EmbedURL, "embed-url", c.EmbedURL, "локальний Ollama /api/embed")
+	flags.DurationVar(&c.EmbedTimeout, "embed-timeout", c.EmbedTimeout, "таймаут одного embedding запиту")
+	flags.StringVar(&c.ReadToken, "read-token", c.ReadToken, "bearer token read API")
+	// Do not expose the configured credential in -h / PrintDefaults.
+	flags.Lookup("read-token").DefValue = ""
 	flags.Int64Var(&c.CacheMaxBytes, "cache-max-bytes", c.CacheMaxBytes, "ліміт HTTP cache bodies")
 	flags.DurationVar(&c.CacheRetention, "cache-retention", c.CacheRetention, "скільки тримати прострочений кеш для explicit stale")
 	flags.DurationVar(&c.CacheCleanupInterval, "cache-cleanup-interval", c.CacheCleanupInterval, "інтервал очищення HTTP-кешу")
@@ -197,6 +211,17 @@ func readConfig(args []string) (config, error) {
 	}
 	if flags.NArg() != 0 {
 		return c, errors.New("неочікувані аргументи")
+	}
+	if c.EmbedTimeout <= 0 || c.EmbedTimeout > 10*time.Minute {
+		return c, errors.New("некоректний embed timeout")
+	}
+	if c.ReadToken != "" && (len(c.ReadToken) < 32 || len(c.ReadToken) > 256 || strings.ContainsAny(c.ReadToken, " \t\r\n")) {
+		return c, errors.New("read token must have 32..256 non-whitespace bytes")
+	}
+	if c.Embeddings {
+		if _, e = library.NewBGE(c.EmbedURL, c.EmbedTimeout); e != nil {
+			return c, errors.New("некоректний embedding endpoint")
+		}
 	}
 	if c.FetchTimeout <= 0 || c.DigestTimeout <= 0 || c.Lease < time.Second || c.Backoff <= 0 || c.CacheTTL < 0 || c.Attempts < 1 || c.Attempts > 100 || c.MaxBytes < 1024 || c.MaxBytes > 64<<20 || c.InputLimit < 1024 || c.InputLimit > 4<<20 {
 		return c, errors.New("некоректні таймаути/ліміти конфігурації")

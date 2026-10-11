@@ -32,33 +32,39 @@ var digestJS string
 type Web struct {
 	Store        *Store
 	Cache        *HTTPCache
+	Semantic     *Semantic
+	ReadToken    string
 	Origin, CSRF string
 	MaxText      int64
 	tmpl         *template.Template
 	zone         *time.Location
 }
 type pageData struct {
-	CSRF            string
-	Filters         Filters
-	Items           []Item
-	Item            Item
-	Snapshots       []Snapshot
-	Selected        *Snapshot
-	Ratings         []RatingEvent
-	Jobs            []JobStatus
-	Digest          *Digest
-	Sections        []DigestSection
-	DigestEnabled   bool
-	CanRetryDigest  bool
-	ExportScript    template.JS
-	ExportCSP       string
-	FilterDecisions []FilterDecision
-	Feedback        []DigestFeedback
-	Digests         []Digest
-	CanRegenerate   bool
-	DigestError     string
-	Pending         bool
-	RateWithoutText bool
+	CSRF                      string
+	SearchMode, SearchWarning string
+	EmbeddingStatus           string
+	EmbeddingsEnabled         bool
+	Indexed, Eligible         int
+	Filters                   Filters
+	Items                     []Item
+	Item                      Item
+	Snapshots                 []Snapshot
+	Selected                  *Snapshot
+	Ratings                   []RatingEvent
+	Jobs                      []JobStatus
+	Digest                    *Digest
+	Sections                  []DigestSection
+	DigestEnabled             bool
+	CanRetryDigest            bool
+	ExportScript              template.JS
+	ExportCSP                 string
+	FilterDecisions           []FilterDecision
+	Feedback                  []DigestFeedback
+	Digests                   []Digest
+	CanRegenerate             bool
+	DigestError               string
+	Pending                   bool
+	RateWithoutText           bool
 }
 
 func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
@@ -144,6 +150,18 @@ func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", w.list)
 	mux.HandleFunc("GET /cache", w.cache)
+	mux.HandleFunc("/api/read/", w.readAPI)
+	mux.HandleFunc("POST /reindex", func(rw http.ResponseWriter, r *http.Request) {
+		if w.Semantic == nil {
+			http.Error(rw, "indexing is disabled", 503)
+			return
+		}
+		if err := w.Store.RebuildEmbeddings(); err != nil {
+			http.Error(rw, "index unavailable", 503)
+			return
+		}
+		http.Redirect(rw, r, "/", http.StatusSeeOther)
+	})
 	mux.HandleFunc("GET /static/progress.js", func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		rw.Write([]byte(progressJS))
@@ -226,12 +244,12 @@ func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	items, err := w.Store.Search(f)
+	result, err := w.search(r, f, q.Get("mode"))
 	if err != nil {
 		http.Error(rw, "некоректні параметри пошуку", 400)
 		return
 	}
-	w.render(rw, "list", pageData{Items: items, Filters: f})
+	w.render(rw, "list", pageData{Items: result.Items, Filters: f, SearchMode: q.Get("mode"), SearchWarning: result.Warning, Indexed: result.Indexed, Eligible: result.Eligible, EmbeddingStatus: w.Store.EmbeddingStatus(), EmbeddingsEnabled: w.Semantic != nil})
 }
 func pathID(r *http.Request) (int64, error) {
 	id, e := strconv.ParseInt(r.PathValue("id"), 10, 64)

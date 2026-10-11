@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,5 +61,45 @@ func TestChunkAndCacheLimits(t *testing.T) {
 		if _, e := readConfig(append([]string{"-env-file", ""}, args...)); e == nil {
 			t.Fatal("invalid maintenance limit accepted", args)
 		}
+	}
+}
+
+func TestM3ConfigPrecedenceAndSecretErrors(t *testing.T) {
+	token := strings.Repeat("t", 32)
+	c, err := readConfig([]string{"-env-file", "", "-embeddings", "-embed-url", "http://127.0.0.1:11434/api/embed", "-read-token", token})
+	if err != nil || !c.Embeddings || c.ReadToken != token {
+		t.Fatal(c.Embeddings, err)
+	}
+	t.Setenv("NEWS_LIBRARY_EMBEDDINGS", "bad-private-value")
+	if _, err = readConfig([]string{"-env-file", ""}); err == nil || strings.Contains(err.Error(), "bad-private-value") {
+		t.Fatal(err)
+	}
+	c, err = readConfig([]string{"-env-file", "", "-embeddings=false"})
+	if err != nil || c.Embeddings {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"-read-token", "short-private-token"}, {"-embed-timeout", "0s"}, {"-embeddings", "-embed-url", "http://external.example/api/embed"}} {
+		if _, err = readConfig(append([]string{"-env-file", "", "-embeddings=false"}, args...)); err == nil || strings.Contains(err.Error(), "short-private-token") {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestHelpDoesNotExposeReadToken(t *testing.T) {
+	token := strings.Repeat("private-fixture-", 3)
+	t.Setenv("NEWS_LIBRARY_READ_TOKEN", token)
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stderr
+	os.Stderr = writer
+	defer func() { os.Stderr = old; reader.Close(); writer.Close() }()
+	_, err = readConfig([]string{"-env-file", "", "-h"})
+	writer.Close()
+	os.Stderr = old
+	output, readErr := io.ReadAll(reader)
+	if readErr != nil || err == nil || strings.Contains(string(output), token) || !strings.Contains(string(output), "read-token") {
+		t.Fatal("CLI help exposed a credential or was unavailable")
 	}
 }

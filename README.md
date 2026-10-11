@@ -240,3 +240,36 @@ PR gate лише читає GitHub; його результат не замін�
 Для локального виявлення Codex підключіть їх symlink у `.agents/skills/`;
 створюйте тимчасові артефакти в `tmp/`, а придатні до повторного використання
 скрипти переносіть до `minions/`.
+
+
+Пошук за змістом (M3): увімкніть `NEWS_LIBRARY_EMBEDDINGS=true` у `.env`.
+Потрібна встановлена local `bge-m3:latest`; програма не завантажує модель.
+Default endpoint `NEWS_LIBRARY_EMBED_URL=http://localhost:11434/api/embed`,
+таймаут `NEWS_LIBRARY_EMBED_TIMEOUT=30s`. Генерація дайджестів лишається cloud.
+На сайті доступні «За словами», «За змістом» і «Слова та зміст»; автоматичне
+semantic сортування — relevance, можна явно обрати дату/оцінку/Confidence.
+Неповний індекс і FTS fallback позначені. «Перебудувати індекс» змінює
+лише похідні дані; первинні тексти, дайджести й власні рішення збережені.
+
+Агентський read API: задайте `NEWS_LIBRARY_READ_TOKEN` у приватному `.env`
+(32..256 random non-whitespace bytes). Порожній token вимикає API.
+Запити мають `Authorization: Bearer …`; секрет не вставляйте в чат/репозиторій.
+
+- `GET /api/read/search?q=…&mode=hybrid&placement=deferred&limit=20` — спільні
+  UI metadata filters; mode fts/vector/hybrid, default fts, limit1..100.
+- `GET /api/read/items/1` — збережений текст, digest/model provenance і rating history.
+- `GET /api/read/items/1/context` — до4000 UTF-8 bytes saved digest/excerpt,
+  власна оцінка з датою/null, source completeness, placement і tags.
+- `GET /api/read/items/1/fragment?start=0&end=100` — source byte boundaries,
+  до16384 bytes; optional `source=ID` дозволяє historical snapshot цього item.
+
+GET не ставить read, не генерує текст і не індексує бібліотеку; semantic
+query використовує лише local embedding. Агентські credentials відхиляються
+в усіх mutation endpoints. База зберігає похідні vectors/offsets; первинні
+source files залишаються окремо. Точний vector scan розрахований на особисту
+бібліотеку; ANN для значно більшого обсягу — майбутня оптимізація.
+
+Offline M3 browser/API smoke: `python3 scripts/smoke_m3_ui.py`.
+Окрема real local bge-m3 перевірка на трьох synthetic sources:
+`go run minions/live_semantic_smoke.go -run-local-embeddings`.
+Вона не запускає generation і зберігає fixture evidence в `tmp/`.

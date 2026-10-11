@@ -84,11 +84,27 @@ func run() error {
 		return err
 	}
 	web.Cache = cache
+	web.ReadToken = c.ReadToken
+	var semantic *library.Semantic
+	if c.Embeddings {
+		embedder, e := library.NewBGE(c.EmbedURL, c.EmbedTimeout)
+		if e != nil {
+			return e
+		}
+		semantic = &library.Semantic{Store: s, Embedder: embedder, ChunkBytes: 4096, Dimensions: 1024, Timeout: c.EmbedTimeout}
+		web.Semantic = semantic
+	}
 	if _, err = cache.Prune(time.Now()); err != nil {
 		log.Print("HTTP cache initial cleanup failed")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	embeddingDone := make(chan struct{})
+	if semantic != nil && !c.NoWorker {
+		go func() { defer close(embeddingDone); semantic.Run(ctx) }()
+	} else {
+		close(embeddingDone)
+	}
 	cleanupDone := make(chan struct{})
 	go func() { defer close(cleanupDone); cache.RunCleanup(ctx, c.CacheCleanupInterval) }()
 	done := make(chan struct{})
@@ -98,7 +114,7 @@ func run() error {
 	} else {
 		close(done)
 	}
-	server := &http.Server{Handler: web.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: max(30*time.Second, c.FetchTimeout+5*time.Second), IdleTimeout: time.Minute, MaxHeaderBytes: 32 << 10}
+	server := &http.Server{Handler: web.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: max(30*time.Second, c.FetchTimeout+5*time.Second, c.EmbedTimeout+5*time.Second), IdleTimeout: time.Minute, MaxHeaderBytes: 32 << 10}
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)
@@ -113,6 +129,7 @@ func run() error {
 	<-shutdownDone
 	<-done
 	<-cleanupDone
+	<-embeddingDone
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}

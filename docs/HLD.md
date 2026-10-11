@@ -2,8 +2,8 @@
 
 Основа погоджена: один Go-сервіс, SQLite, стійка черга, локальний запуск
 із можливістю перенесення на VPS. Нижче — технічна конкретизація для
-реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v6, FTS5,
-транзакційна черга та незмінні snapshots/оцінки. Наступні компоненти M2–M4
+реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v7, FTS5,
+транзакційна черга та незмінні snapshots/оцінки. M3 реалізовано нижче; optional M2 fallback та M4
 залишаються запланованими. Сервер — `cmd/news-library`, адаптери та UI —
 `internal/library/{source,worker,web}.go`, шаблони — `pages.html`.
 
@@ -381,3 +381,49 @@ crash лишає orphan, який наступне cleanup прибирає. GET
 пам’яті перед евікцією. Новий body більший за бюджет bypasses storage;
 cache write failures повертають доступну upstream відповідь для збереження
 source snapshot. Primary paths та human data не входять у cleanup.
+
+
+## Schema v7: індексація, пошук і read API
+
+`embedding.go` використовує лише local bge-m3:latest через loopback `/api/embed`,
+без redirects/proxy, cloud/local generation чи implicit download. API звірено з
+[Ollama embed](https://docs.ollama.com/api/embed): truncate=false, один vector,
+1024 finite dimensions і ненульова норма. Inventory revision перевіряється
+перед/після inference. Version key включає weight digest, dimensions та
+UTF-8 chunk algorithm/4096 bytes; різні версії не змішуються.
+
+Окремі embedding_runs/chunks — похідні SQLite-дані. Chunk зберігає snapshot,
+part і byte offsets, не дублює повний текст. Schedule допускає тільки вибрані
+passed/overridden snapshots із recorded source decision. Legacy not_checked
+лишаться в FTS; explicit rebuild спершу фіксує початкове правило для snapshot
+без decision, не переглядаючи історичні рішення. Lease/token на один chunk,
+request deadline коротший за lease; completed chunks і next_part зберігаються
+транзакційно. Три спроби з backoff, final-attempt crash → failed. Збій/shutdown
+не змінює item ready/digest/rating; next_part відновлюється після restart.
+Після зміни вибраного snapshot або відсіву результат не публікується.
+Explicit rebuild скидає тільки похідні chunks/runs і fence старого worker.
+
+`semantic_search.go`: metadata filters перед ranking, тільки selected snapshot
+і повністю готова поточна version. Cosine по chunks, best chunk per item;
+streaming scan vectors у SQLite без сторонньої vector extension. RRF k=60
+по item ranks поєднує lexical і semantic результати. Equal ranks → item ID;
+explicit rating/confidence/date sort зберігає SQL порядок і NULL last.
+Автоматичне сортування vector/hybrid — relevance; FTS зберігає date default.
+Snippet читається з hash-verified source, максимум800 bytes на UTF-8 boundary,
+із exact snapshot/offsets. UI semantic results bounded100; API limit1..100.
+Coverage/warning явні, неіндексовані/відсіяні доступні у FTS. Model/inventory
+failure або відсутній current index → FTS fallback із діагностикою. FTS і
+context читання не викликають inference. Мережа не утримує DB connection.
+Точний scan обрано для особистого обсягу; ANN для великих колекцій не заявлено.
+
+`read_api.go` має окремий `/api/read/` namespace: authenticated GET search,
+item, fragment і context. Private bearer token порожній → API disabled.
+Глобальний Host guard зберігається; browser Origin відхиляється, відповідь
+no-store. Mutation із Authorization відхиляється до handlers. Search може
+використовувати лише local query embedding; ніколи generation/index writes.
+Item включає source та saved digest/model provenance і dated rating history,
+unknown date → null. Fragment перевіряє ownership/UTF-8 boundaries/16KiB.
+Context бере saved digest або source excerpt, обмежує його4000 bytes і
+повертає current explicit rating event, placement/tags, source completeness,
+truncation і text_kind: offsets digest не видаються за source offsets.
+Жоден read endpoint не змінює read/placement/ratings і не ставить jobs.
