@@ -86,6 +86,8 @@ func run() error {
 		}
 	}
 	fetcher := library.NewFetcher(c.FetchTimeout, c.MaxBytes)
+	fetcher.YTDLP = c.YTDLP
+	fetcher.YouTubeLanguages, _ = library.ParseYouTubeLanguages(c.YouTubeLanguages)
 	cache := &library.HTTPCache{Store: s, Fetcher: fetcher, TTL: c.CacheTTL, MaxBytes: c.CacheMaxBytes, Retention: c.CacheRetention}
 	fetcher.Cache = cache
 	origin := "http://" + listener.Addr().String()
