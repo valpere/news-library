@@ -30,6 +30,9 @@ M3 uses local bge-m3 with versioned persistent derived indexes and read-only
 agent API. FTS/context need no inference; semantic queries never generate text.
 Rules default to empty; predictions require an explicit current interest profile.
 Digest-quality feedback must not alter human usefulness ratings.
+Generation failures have typed reasons and immutable history; rejected replies
+are diagnostics, never accepted digests. Format/configuration/limit/source
+failures must not retry automatically; diagnostic files belong in backups.
 Long sources use persisted digest checkpoints; cache cleanup must preserve
 primary texts/digests and never follow cache-directory symlinks. See `docs/TRACEABILITY.md`
 for passed M1 tests and requirements still awaiting M2–M4. Preserve existing

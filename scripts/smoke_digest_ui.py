@@ -94,9 +94,12 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-digest-smo
             submit_source('http://127.0.0.1/digest-failure','Preserved source after model failure')
             page.get_by_role('heading',name='Дайджест недоступний',exact=True).wait_for(timeout=15000)
             assert page.locator('input[name=score]').count() == 0
-            assert 'Preserved source' in page.locator('pre').text_content(), (page.url, page.locator('pre').text_content(), page.locator('body').inner_text())
+            assert 'Preserved source' in page.locator('pre').filter(has_text='Preserved source').first.text_content(), (page.url, page.locator('pre').all_text_contents(), page.locator('body').inner_text())
+            assert page.locator('#digest-failure').get_attribute('data-kind') == 'format'
+            assert 'Автоматичного повтору немає' in page.locator('#digest-failure').inner_text()
+            assert Gateway.calls == 2
             Gateway.fail=False
-            page.get_by_role('button',name='Повторити генерацію дайджесту',exact=True).click()
+            page.get_by_role('button',name='Запросити інший варіант дайджесту',exact=True).click()
             page.locator('#digest').wait_for(timeout=15000)
             assert Gateway.calls == 3
             browser.close()

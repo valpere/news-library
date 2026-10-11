@@ -38,7 +38,7 @@
 <section id="processing" data-pending="{{.Pending}}" aria-live="polite">
 {{if .Digest}}
 {{if .Pending}}<article><p id="processing-message">Оновлюється дайджест. Нижче показано збережену версію #{{.Digest.ID}}.</p><a id="processing-refresh" href="" hidden>Показати результат обробки</a></article>{{else if .DigestError}}<p class="error">Оновлення дайджесту не вдалося: {{.DigestError}}. Попередня версія збережена.</p>{{end}}
-{{template "digestContent" .}}<script src="/static/digest.js" defer></script>
+{{if and .DigestError (not .Pending)}}{{template "digestFailure" .}}{{end}}{{template "digestContent" .}}<script src="/static/digest.js" defer></script>
 {{else if .Pending}}
 <article><h2>Посилання збережено</h2>
 <p id="processing-message">{{state .Item.State}}. {{if .Selected}}Текст збережено. Дайджест з’явиться тут автоматично.{{else}}Текст ще не отримано. Дайджест з’явиться після завершення обробки.{{end}}</p>
@@ -49,7 +49,7 @@
 <p>Пояснення відсіву доступне в «Рішення правил».</p>
 {{else if .Selected}}
 <article><h2>Дайджест недоступний</h2><p>{{if .DigestEnabled}}Генерацію не завершено. Збережений текст доступний нижче.{{else}}Генерацію вимкнено в конфігурації. Збережений текст доступний нижче.{{end}}</p>{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
-{{if .CanRetryDigest}}<form method="post" action="/items/{{.Item.ID}}/digest-retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повторити генерацію дайджесту</button></form>{{end}}</article>
+{{template "digestFailure" .}}{{if .CanRetryDigest}}<form method="post" action="/items/{{.Item.ID}}/digest-retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>{{.DigestRetryLabel}}</button></form>{{end}}</article>
 {{else}}
 <article><h2>Текст недоступний</h2>
 {{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
@@ -87,7 +87,7 @@
 <form method="post" action="/items/{{.Item.ID}}/retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повторити отримання тексту</button></form>
 {{end}}
 <details><summary>Вставити текст вручну</summary><form method="post" action="/items/{{.Item.ID}}/manual"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="manual">Нова версія; попередні залишаться в історії</label><textarea id="manual" name="text" rows="10" required></textarea><button>Зберегти текст</button></form></details>
-<details><summary>Черга та помилки</summary>{{range .Jobs}}<p>Завдання #{{.ID}} · {{state .State}} · спроби: {{.Attempts}}<br>{{.Error}}</p>{{end}}</details>
+<details><summary>Черга та помилки</summary>{{range .Jobs}}<p>Завдання #{{.ID}} · {{state .State}} · спроби: {{.Attempts}}{{if .FailureKind}} · {{failureLabel .FailureKind}}{{end}}<br>{{.Error}}</p>{{end}}</details>
 {{if and .Pending (not .RateWithoutText)}}<script src="/static/progress.js" defer></script>{{end}}
 {{template "bottom" .}}
 {{end}}
@@ -124,3 +124,5 @@
 
 {{define "batchForm"}}<form method="post" action="/items/batch"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="batch-urls">Посилання — по одному на рядок</label><textarea id="batch-urls" name="urls" rows="8" required maxlength="65536" placeholder="https://example.com/article&#10;https://www.youtube.com/watch?v=…">{{.BatchInput}}</textarea><p class="muted">До 500 посилань. Вони збережуться у вхідних і оброблятимуться у фоні. Дублікати не запускають нову обробку; помилка одного рядка не заважає решті.</p><button>Додати пачку</button></form>{{end}}
 {{define "batch"}}{{template "top" .}}<h2>Результат додавання пачки</h2>{{if .BatchError}}<p class="error" role="alert">{{.BatchError}}</p>{{else}}<p>Нових: {{.BatchAdded}} · Уже були: {{.BatchExisting}} · Не додано: {{.BatchFailed}}</p><p><a href="/?placement=inbox&amp;read=0&amp;sort=added">Переглянути непрочитані вхідні</a></p><p>Поки матеріали обробляються, можна залишити цю сторінку й повернутися пізніше. Відкриття матеріалу не позначає його прочитаним.</p><table><thead><tr><th>Рядок</th><th>Посилання</th><th>Результат</th></tr></thead><tbody>{{range .BatchResults}}<tr><td>{{.Line}}</td><td>{{if .ItemID}}<a href="/items/{{.ItemID}}">{{.URL}}</a>{{else}}{{.URL}}{{end}}</td><td>{{if eq .Status "added"}}Додано{{else if eq .Status "existing"}}Уже є{{else}}<span class="error">{{.Error}}</span>{{end}}</td></tr>{{end}}</tbody></table>{{end}}{{if .BatchInput}}<h3>Виправити й повторити</h3><p>{{if not .BatchError}}У формі залишені лише рядки, які не вдалося додати.{{else}}Список не додано; виправте його та повторіть.{{end}}</p>{{template "batchForm" .}}{{else}}<p><a href="/">Додати ще матеріали</a></p>{{end}}{{template "bottom" .}}{{end}}
+
+{{define "digestFailure"}}{{if .DigestFailureKind}}<div id="digest-failure" data-kind="{{.DigestFailureKind}}"><h3>{{.DigestFailureLabel}}</h3><p>{{.DigestFailureAdvice}}</p>{{if .DigestRejectedResponse}}<details><summary>Неприйнята відповідь моделі</summary><p class="muted">Це відповідь, яку перевірка відхилила. Вона не є збереженим дайджестом.</p><pre>{{.DigestRejectedResponse}}</pre></details>{{end}}</div>{{end}}{{end}}

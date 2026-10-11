@@ -134,3 +134,10 @@ public-address proxy. Автосубтитри/переклад позначен
 доріжки не прирівнюється до відсутності субтитрів. Live smoke одного проблемного
 українського відео пройшов без cloud calls/userDB writes; retry старих failed
 records виконує користувач із картки після перезапуску застосунку.
+
+Розрізнення відмов дайджесту реалізовано: typed reasons/advice/action labels,
+non-auto-retry для format/config/limit/source, immutable failure history і
+raw rejected responses у backup. Виправлено хибне відхилення заголовка «Факти»
+та заголовків у code examples; обов’язкові секції лишаються перевіреними.
+Offline перевірка captured response можлива без нової генерації. Реальна
+бібліотека не змінювалася агентом; user retry після оновлення застосунку.

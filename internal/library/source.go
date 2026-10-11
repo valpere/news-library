@@ -21,6 +21,8 @@ import (
 )
 
 type SourceError struct {
+	Kind, Diagnostic string
+
 	Message string
 	Retry   bool
 }

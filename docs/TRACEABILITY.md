@@ -112,3 +112,12 @@ output bounds/context termination і language validation; config precedence
 у `cmd/news-library/config_test.go`. Попередні source XML/srv3/json3 fixtures
 та pipeline tests лишаються чинними. Explicit live helper:
 `go run ./minions/source-smoke -fetch-url URL`, без userDB/models.
+
+Digest validation/failure classification FR-04/08/10/14/16:
+`digest_validation_test.go` — heading equivalence/code blocks/optional facts,
+specific invalid sections/limits, immutable failure events/retry/backup,
+permanent-vs-temporary automatic policy, escaped advice/response UI і
+збережений source при втраті diagnostics. `scripts/smoke_digest_ui.py`
+перевіряє явний format label, no automatic repeat і запит іншого варіанту.
+`minions/validate-digest` перевіряє локальний Markdown або captured Ollama
+response offline без моделей/запису; private actual replies не публікуються.

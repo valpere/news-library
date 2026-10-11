@@ -9,3 +9,7 @@ not print URLs or modify the source. Exit 1 reports invalid input or read errors
 Explicit read-only source smoke: `go run ./minions/source-smoke -fetch-url URL`.
 Fetches one source live with a 30s context, prints extractor/completeness/text
 size/warnings, does not write a database or invoke models. Not routine CI.
+
+Offline digest check: `go run ./minions/validate-digest -file PATH` or add
+`-ollama-response` for a captured `/api/chat` JSON envelope. Read-only, no
+network/model calls, uses the application's validator and prints only result.
