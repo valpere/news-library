@@ -230,7 +230,7 @@ func (s *Semantic) Search(ctx context.Context, f Filters, mode string) (SearchRe
 		if e != nil {
 			return out, e
 		}
-		if hit.start < 0 || hit.end > len(snapshot.Text) || hit.end < hit.start || !utf8.ValidString(snapshot.Text[hit.start:hit.end]) {
+		if !byteBoundary(snapshot.Text, hit.start) || !byteBoundary(snapshot.Text, hit.end) || hit.end < hit.start || !utf8.ValidString(snapshot.Text[hit.start:hit.end]) {
 			return out, errors.New("invalid chunk offsets")
 		}
 		excerpt := snapshot.Text[hit.start:hit.end]

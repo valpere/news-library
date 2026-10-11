@@ -10,6 +10,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Embeddings are derived data, separate from immutable sources and judgments.
@@ -53,6 +54,9 @@ func (b *BGE) Revision(ctx context.Context) (string, error) {
 		}
 	}
 	return "", errors.New("local bge-m3 is unavailable")
+}
+func byteBoundary(text string, offset int) bool {
+	return offset >= 0 && offset <= len(text) && (offset == len(text) || utf8.RuneStart(text[offset]))
 }
 func normalized(vector []float64, dimensions int) ([]float64, error) {
 	if len(vector) != dimensions {

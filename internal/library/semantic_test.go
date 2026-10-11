@@ -204,6 +204,10 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	if rw.Code != 400 {
 		t.Fatal("split UTF8 accepted", rw.Code)
 	}
+	rw = webRequest(w, "GET", "/api/read/items/1/fragment?start=1&end=1", nil, auth)
+	if rw.Code != 400 {
+		t.Fatal("empty fragment inside UTF8 accepted", rw.Code)
+	}
 	rw = webRequest(w, "GET", "/api/read/items/1/fragment?start=0&end=20", nil, auth)
 	if rw.Code != 200 {
 		t.Fatal(rw.Code)

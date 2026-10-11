@@ -184,7 +184,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 					*entry.target = value
 				}
 			}
-			if start < 0 || end < start || end > len(text) || end-start > 16384 || !utf8.ValidString(text[start:end]) {
+			if !byteBoundary(text, start) || !byteBoundary(text, end) || end < start || end-start > 16384 || !utf8.ValidString(text[start:end]) {
 				http.Error(rw, "fragment needs UTF-8 byte boundaries and at most 16384 bytes", 400)
 				return
 			}
