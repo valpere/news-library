@@ -190,42 +190,49 @@ func CanonicalURL(raw string) (string, error) {
 	return u.String(), nil
 }
 func (s *Store) AddURL(raw string) (int64, error) {
+	id, _, err := s.addURL(raw)
+	return id, err
+}
+func (s *Store) addURL(raw string) (int64, bool, error) {
 	canonical, err := CanonicalURL(raw)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	defer tx.Rollback()
 	res, err := tx.Exec("INSERT INTO items(original_url,canonical_url,added_at) VALUES(?,?,?) ON CONFLICT(canonical_url) DO NOTHING", strings.TrimSpace(raw), canonical, nowUTC())
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	count, err := res.RowsAffected()
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	var id int64
 	if err = tx.QueryRow("SELECT id FROM items WHERE canonical_url=?", canonical).Scan(&id); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if _, err = tx.Exec("INSERT INTO source_aliases(url,item_id) VALUES(?,?) ON CONFLICT(url) DO NOTHING", strings.TrimSpace(raw), id); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if count == 1 {
 		if _, err = tx.Exec("INSERT INTO jobs(item_id) VALUES(?)", id); err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		if _, err = tx.Exec("INSERT INTO item_fts(rowid,title,text,url) VALUES(?,'','',?)", id, canonical); err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		if _, err = s.decideFilter(tx, id, nil, false); err != nil {
-			return 0, err
+			return 0, false, err
 		}
 	}
-	return id, tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return id, count == 1, nil
 }
 
 var ErrLeaseLost = errors.New("job lease lost")

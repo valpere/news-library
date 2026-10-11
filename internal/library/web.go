@@ -42,6 +42,10 @@ type Web struct {
 	zone             *time.Location
 }
 type pageData struct {
+	BatchResults                           []BatchURLResult
+	BatchInput, BatchError                 string
+	BatchAdded, BatchExisting, BatchFailed int
+
 	ConnectionHTML       template.HTML
 	ConnectionVocabulary map[string][]string
 
@@ -173,6 +177,7 @@ func (w *Web) Handler() http.Handler {
 	mux.HandleFunc("GET /connections/{id}", w.connectionPage)
 	mux.HandleFunc("GET /connections/{id}/edit", w.connectionForm)
 	mux.HandleFunc("GET /connections/{id}/{format}", w.connectionPage)
+	mux.HandleFunc("POST /items/batch", w.addBatch)
 	mux.HandleFunc("POST /connections", w.saveConnection)
 	mux.HandleFunc("POST /connections/{id}", w.saveConnection)
 	mux.HandleFunc("GET /{$}", w.list)

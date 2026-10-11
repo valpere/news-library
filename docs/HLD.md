@@ -507,3 +507,19 @@ Backup schema9 додає всі connection_versions Markdown до primaryRefs;
 restore зберігає stable IDs, revisions, members і вихідні статті. Первинні
 файли зв’язкових не підлягають cache cleanup. Наступна ітерація може додати
 cloud-пропозиції зв’язків із provenance, але ручний прототип не викликає AI.
+
+## Пакетне прийняття посилань
+
+`batch.go`: `AddURLs` перевіряє межі всього списку (500 непорожніх рядків,
+64 КіБ UTF-8) до записів, потім ізолює результати рядків. `AddURL` і batch
+використовують спільний `addURL` із canonical dedup та атомарною транзакцією
+item/alias/fetch job/FTS/filter. Повернений created flag визначається
+RowsAffected INSERT і публікується лише після commit. Збій запису одного
+рядка залишає URL у звіті для повтору; інші транзакції незалежні.
+
+`POST /items/batch` захищений чинними UI guards і показує екран результатів
+із escaped URL/errors, переходом у непрочитані вхідні та correction form
+лише для помилок. Повтор POST безпечний через canonical dedup; звіт не
+потребує окремої persisted сутності, самі items/jobs стійкі. Нова schema
+не потрібна. Передача пачки не запускає мережевих/source/model викликів;
+обробка лишається у чинному worker. Читання та оцінювання незалежні.
