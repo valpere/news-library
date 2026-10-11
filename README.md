@@ -216,8 +216,27 @@ CI збирає прилад із зафіксованого коміту. Те�
 `python3 scripts/smoke_ui.py`, `python3 scripts/smoke_digest_ui.py` і
 `python3 scripts/smoke_m2_ui.py` і `python3 scripts/smoke_long_digest_ui.py`. За потреби `SMOKE_CHROME=/path/to/chrome`.
 Він запускає binary у тимчасовому каталозі, перевіряє форми, текст,
-оцінки, FTS і рестарт; знімки — `build/smoke-{search,detail}.png`.
+оцінки, FTS і рестарт; знімки — `tmp/smoke-{search,detail}.png`.
 Потребує попереднього `make build`. Другий smoke використовує fake cloud
 шлюз і перевіряє вкладки, clipboard, exports, provenance та failure/retry;
 третій перевіряє відсів/override, Confidence, feedback і версії;
 живих запитів до моделей немає.
+
+Повторювані агентські дії — у `minions/`, тимчасові файли — у `tmp/`:
+
+```sh
+python3 minions/project_check.py                 # make check + public HEAD docs/spec
+python3 minions/project_check.py --public-only   # лише committed public docs/spec
+python3 minions/pr_gate.py 8 --head <reviewed-head-sha> --base <reviewed-base-sha>
+# Окремий живий cloud smoke, коли потрібна інтеграційна перевірка:
+python3 minions/live_digest_smoke.py --run-cloud  # isolated fixture у tmp/
+# --prediction додає synthetic test profile
+```
+
+PR gate лише читає GitHub; його результат не замінює рев’ю та локальні перевірки.
+Навички: [project-check](minions/skills/project-check/SKILL.md),
+[pr-gate](minions/skills/pr-gate/SKILL.md),
+[live-digest-smoke](minions/skills/live-digest-smoke/SKILL.md).
+Для локального виявлення Codex підключіть їх symlink у `.agents/skills/`;
+створюйте тимчасові артефакти в `tmp/`, а придатні до повторного використання
+скрипти переносіть до `minions/`.

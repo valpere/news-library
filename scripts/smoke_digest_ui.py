@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
 
 root = Path(__file__).resolve().parents[1]
+(root/'tmp').mkdir(exist_ok=True)
 markdown = "## Про що матеріал\nСтислий огляд бібліотеки.\n## Ключові тези\n- Збереження тексту.\n## Деталі\nСтійка черга відновлюється.\n## Практичне застосування\nПошук прочитаного.\n## Факти / цитати\nОдин сервіс."
 class Gateway(BaseHTTPRequestHandler):
     calls = 0
@@ -35,7 +36,7 @@ class Gateway(BaseHTTPRequestHandler):
 
 gateway = ThreadingHTTPServer(('127.0.0.1', 0), Gateway)
 threading.Thread(target=gateway.serve_forever, daemon=True).start()
-with tempfile.TemporaryDirectory(prefix='news-library-digest-smoke-') as data:
+with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-digest-smoke-') as data:
     process = subprocess.Popen([str(root/'build/news-library'), '-env-file', '', '-data', data,
         '-bind', '127.0.0.1:0', '-model', 'fixture:cloud', '-ollama-url',
         f'http://127.0.0.1:{gateway.server_port}/api/chat'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -88,7 +89,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-digest-smoke-') as data:
             page.get_by_role('button',name='Оцінити 2',exact=True).click()
             page.get_by_text('Історія оцінок (1)',exact=True).click()
             assert f'дайджест: #{digest_id}' in page.locator('body').inner_text()
-            page.screenshot(path=str(root/'build/smoke-digest.png'),full_page=True)
+            page.screenshot(path=str(root/'tmp/smoke-digest.png'),full_page=True)
             Gateway.fail=True
             submit_source('http://127.0.0.1/digest-failure','Preserved source after model failure')
             page.get_by_role('heading',name='Дайджест недоступний',exact=True).wait_for(timeout=15000)
