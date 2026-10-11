@@ -103,3 +103,18 @@ func TestHelpDoesNotExposeReadToken(t *testing.T) {
 		t.Fatal("CLI help exposed a credential or was unavailable")
 	}
 }
+
+func TestTelegramConfigPrecedenceAndPrivateErrors(t *testing.T) {
+	token := "123:fixture-secret-token-1234567890"
+	t.Setenv("NEWS_LIBRARY_TELEGRAM_BOT_TOKEN", token)
+	t.Setenv("NEWS_LIBRARY_TELEGRAM_CHAT_ID", "42")
+	c, err := readConfig([]string{"-env-file", "", "-telegram", "-telegram-daily", "09:00", "-telegram-size", "5"})
+	if err != nil || !c.Telegram.Enabled || c.Telegram.DailyTime != "09:00" || c.Telegram.Size != 5 {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"-telegram-daily", "25:99"}, {"-telegram-size", "0"}, {"-telegram-chat", "invalid-private-chat"}} {
+		if _, err = readConfig(append([]string{"-env-file", "", "-telegram"}, args...)); err == nil || strings.Contains(err.Error(), token) || strings.Contains(err.Error(), "invalid-private-chat") {
+			t.Fatal(err)
+		}
+	}
+}

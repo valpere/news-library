@@ -20,6 +20,9 @@ import (
 )
 
 func run() error {
+	if len(os.Args) > 1 && (os.Args[1] == "backup" || os.Args[1] == "restore" || os.Args[1] == "verify-backup") {
+		return archiveCommand(os.Args[1], os.Args[2:])
+	}
 	c, err := readConfig(os.Args[1:])
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
@@ -54,6 +57,13 @@ func run() error {
 		return err
 	}
 	defer s.Close()
+	if err = applyRestorePause(&c, path); err != nil {
+		return err
+	}
+	if library.RestoredPaused(path) {
+		log.Print("restored data: background execution paused; use -resume-restored to resume")
+	}
+
 	rules, err := library.NewRuleSet(c.FilterThreshold, c.FilterRules)
 	if err != nil {
 		return err
@@ -84,6 +94,11 @@ func run() error {
 		return err
 	}
 	web.Cache = cache
+	web.Telegram = c.Telegram
+	web.BackgroundPaused = c.NoWorker
+	if err = s.RecoverDeliveries(); err != nil {
+		return err
+	}
 	web.ReadToken = c.ReadToken
 	var semantic *library.Semantic
 	if c.Embeddings {
@@ -99,6 +114,17 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	deliveryDone := make(chan struct{})
+	if c.Telegram.Enabled && !c.NoWorker {
+		sender, e := library.NewTelegram(c.Telegram.Token, c.TelegramTimeout)
+		if e != nil {
+			return e
+		}
+		delivery := &library.DeliveryWorker{Store: s, Sender: sender, Config: c.Telegram, Timeout: c.TelegramTimeout}
+		go func() { defer close(deliveryDone); delivery.Run(ctx) }()
+	} else {
+		close(deliveryDone)
+	}
 	embeddingDone := make(chan struct{})
 	if semantic != nil && !c.NoWorker {
 		go func() { defer close(embeddingDone); semantic.Run(ctx) }()
@@ -130,6 +156,7 @@ func run() error {
 	<-done
 	<-cleanupDone
 	<-embeddingDone
+	<-deliveryDone
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
@@ -140,4 +167,14 @@ func main() {
 		log.Print(err)
 		os.Exit(1)
 	}
+}
+
+func applyRestorePause(c *config, path string) error {
+	if c.ResumeRestored {
+		return library.ResumeRestored(path)
+	}
+	if library.RestoredPaused(path) {
+		c.NoWorker = true
+	}
+	return nil
 }

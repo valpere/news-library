@@ -20,8 +20,8 @@
 | FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | partial M1: [TestLeaseRestartRetryAndIdempotency / TestCrashOnLastAttemptTerminates](../internal/library/store_test.go); digest recovery: [TestDigestQueueRecoveryAndRatingContext](../internal/library/digest_test.go); future filter stages planned |
 | FR-11 | UC-05 | M1, M3 | AT-11 | passed M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
 | FR-12 | UC-09 | M3 | AT-12 | passed: [read authentication/denied mutations](../internal/library/semantic_test.go) |
-| FR-13 | UC-08 | M4 | AT-13 | planned |
-| FR-14 | UC-12 | M4 | AT-14 | planned |
+| FR-13 | UC-08 | M4 | AT-13 | passed offline: [preview/partial retry, unknown/no replay, Kyiv slots](../internal/library/delivery_test.go) |
+| FR-14 | UC-12 | M4 | AT-14 | passed: [live backup/restore primary/history/queue/checkpoints and corruption guards](../internal/library/backup_test.go), [CLI/paused activation](../cmd/news-library/archive_test.go) |
 | FR-15 | UC-03 | M1, M2 | AT-15 | partial M1: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go), [TestWebRejectsInvalidScoresAndForeignContext](../internal/library/web_test.go); passed digest links: [TestDigestQueueRecoveryAndRatingContext / TestDigestPrimaryUIAndExports](../internal/library/digest_test.go) |
 | FR-16 | UC-10 | M1, M2 | AT-16 | partial M1: [TestNeedsInputAndManualWinsRace](../internal/library/store_test.go), [TestYouTubeFixtures](../internal/library/source_test.go); digest failure/retry: [browser smoke](../scripts/smoke_digest_ui.py); passed long-source processing: [TestLongDigestResumesSavedPartsAndPreservesSource](../internal/library/chunk_digest_test.go) |
 | FR-17 | UC-11 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
@@ -83,3 +83,9 @@ model/snapshot isolation, metadata filters, FTS fallback and read API](../intern
 [config precedence/token errors](../cmd/news-library/config_test.go),
 [browser/API fixture](../scripts/smoke_m3_ui.py).
 Explicit real local embedding integration: [synthetic multilingual retrieval smoke](../minions/live_semantic_smoke.go).
+
+M4: [Telegram statuses/secret-safe adapter/agent denial/restored delivery quarantine](../internal/library/delivery_test.go),
+[backup integrity and no-overwrite/no-symlink](../internal/library/backup_test.go),
+[Telegram config errors/precedence](../cmd/news-library/config_test.go),
+[browser preview and real CLI restore smoke](../scripts/smoke_m4_ui.py).
+Real bot/destination activation is pending private setup; no live Telegram calls in acceptance.
