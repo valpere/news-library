@@ -40,6 +40,9 @@ var schemaV7 string
 //go:embed schema_v8.sql
 var schemaV8 string
 
+//go:embed schema_v9.sql
+var schemaV9 string
+
 type Store struct {
 	DB           *sql.DB
 	DigestConfig *DigestConfig
@@ -138,6 +141,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 8 {
 			_, err = tx.Exec(schemaV8)
+		}
+		if err == nil && version < 9 {
+			_, err = tx.Exec(schemaV9)
 		}
 		if err == nil {
 			err = tx.Commit()

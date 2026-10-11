@@ -36,6 +36,10 @@ for passed M1 tests and requirements still awaiting M2–M4. Preserve existing
 experiments; do not publish private corpus data automatically.
 The shared tool library is documented at `~/wrk/common_codex/ONBOARDING.md`.
 
+Connection notes use immutable revisions and exact source references; current
+backlinks are derived, never added by rewriting article files. The existing
+`~/doc/llm-wiki/wiki` is frozen and its import is deferred.
+
 ## Validation and Development
 
 Store temporary agent scripts, fixtures and review evidence under `./tmp/`.
