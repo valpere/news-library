@@ -42,6 +42,8 @@ type Web struct {
 	zone             *time.Location
 }
 type pageData struct {
+	DigestFailureKind, DigestFailureLabel, DigestFailureAdvice, DigestRetryLabel, DigestRejectedResponse string
+
 	BatchResults                           []BatchURLResult
 	BatchInput, BatchError                 string
 	BatchAdded, BatchExisting, BatchFailed int
@@ -98,8 +100,9 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 		return nil, errors.New("invalid local UI origin")
 	}
 	funcs := template.FuncMap{
-		"probability": func(p float64) string { return strconv.FormatFloat(p, 'g', -1, 64) },
-		"percent":     func(p float64) string { return strconv.FormatFloat(p*100, 'f', 0, 64) + "%" },
+		"failureLabel": func(kind string) string { label, _, _ := FailureAdvice(kind); return label },
+		"probability":  func(p float64) string { return strconv.FormatFloat(p, 'g', -1, 64) },
+		"percent":      func(p float64) string { return strconv.FormatFloat(p*100, 'f', 0, 64) + "%" },
 		"confidence": func(p sql.NullFloat64) string {
 			if !p.Valid {
 				return "відсутній"
@@ -392,6 +395,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 	}
 	pending := snap == nil && (i.State == "queued" || i.State == "fetching" || i.State == "retry_wait")
 	digestError := ""
+	var digestFailure *JobFailure
 	if snap != nil && w.Store.DigestConfig != nil {
 		for _, job := range jobs {
 			if job.Stage != "digest" || job.SnapshotID.Int64 != snap.ID {
@@ -402,6 +406,17 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 			}
 			if digestError == "" && job.State == "failed" {
 				digestError = job.Error
+				failures, e := w.Store.JobFailures(job.ID)
+				if e != nil {
+					http.Error(rw, "діагностика генерації недоступна", 503)
+					return
+				}
+				if len(failures) > 0 {
+					f := failures[0]
+					digestFailure = &f
+				} else {
+					digestFailure = &JobFailure{Kind: legacyFailureKind(job.Error)}
+				}
 			}
 			// The newest job determines whether an old regeneration error is relevant.
 			if job.State == "done" || job.State == "failed" {
@@ -414,8 +429,17 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "зв’язки недоступні", 503)
 		return
 	}
+	failureKind, failureLabel, failureAdvice, retryLabel, rejected := "", "", "", "Повторити генерацію дайджесту", ""
+	if digestFailure != nil {
+		failureKind = digestFailure.Kind
+		failureLabel, failureAdvice, retryLabel = FailureAdvice(failureKind)
+		rejected = digestFailure.Response
+		if digestFailure.DiagnosticError != "" {
+			failureAdvice += " Збережена діагностична відповідь недоступна; перевірте каталог даних або backup."
+		}
+	}
 	current := snap != nil && snap.ID == i.Selected.Int64
-	w.render(rw, "detail", pageData{Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
+	w.render(rw, "detail", pageData{DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))

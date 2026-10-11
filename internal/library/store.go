@@ -43,6 +43,9 @@ var schemaV8 string
 //go:embed schema_v9.sql
 var schemaV9 string
 
+//go:embed schema_v10.sql
+var schemaV10 string
+
 type Store struct {
 	DB           *sql.DB
 	DigestConfig *DigestConfig
@@ -144,6 +147,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 9 {
 			_, err = tx.Exec(schemaV9)
+		}
+		if err == nil && version < 10 {
+			_, err = tx.Exec(schemaV10)
 		}
 		if err == nil {
 			err = tx.Commit()
@@ -365,6 +371,9 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 	return tx.Commit()
 }
 func (s *Store) Fail(j Job, message string, retry bool, maxAttempts int, now time.Time, backoff time.Duration) error {
+	return s.fail(j, message, retry, maxAttempts, now, backoff, nil)
+}
+func (s *Store) fail(j Job, message string, retry bool, maxAttempts int, now time.Time, backoff time.Duration, failure *JobFailure) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
@@ -372,6 +381,11 @@ func (s *Store) Fail(j Job, message string, retry bool, maxAttempts int, now tim
 	defer tx.Rollback()
 	if err = leaseValid(tx, j); err != nil {
 		return err
+	}
+	if failure != nil {
+		if err = s.recordFailure(tx, j, *failure); err != nil {
+			return err
+		}
 	}
 	state, itemState := "failed", "needs_input"
 	if retry && j.Attempts < maxAttempts {
@@ -680,6 +694,8 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 }
 
 type JobStatus struct {
+	FailureKind string
+
 	SnapshotID              sql.NullInt64
 	ID                      int64
 	State                   string
@@ -690,7 +706,7 @@ type JobStatus struct {
 }
 
 func (s *Store) Jobs(id int64) ([]JobStatus, error) {
-	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage,snapshot_id FROM jobs WHERE item_id=? ORDER BY id DESC", id)
+	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage,snapshot_id,coalesce((SELECT kind FROM job_failures WHERE job_id=jobs.id ORDER BY id DESC LIMIT 1),'') FROM jobs WHERE item_id=? ORDER BY id DESC", id)
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +714,7 @@ func (s *Store) Jobs(id int64) ([]JobStatus, error) {
 	var result []JobStatus
 	for rows.Next() {
 		var j JobStatus
-		if err = rows.Scan(&j.ID, &j.State, &j.Attempts, &j.Error, &j.NextAttempt, &j.LeaseUntil, &j.Stage, &j.SnapshotID); err != nil {
+		if err = rows.Scan(&j.ID, &j.State, &j.Attempts, &j.Error, &j.NextAttempt, &j.LeaseUntil, &j.Stage, &j.SnapshotID, &j.FailureKind); err != nil {
 			return nil, err
 		}
 		result = append(result, j)

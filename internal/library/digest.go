@@ -41,43 +41,101 @@ type DigestSection struct {
 	HTML            template.HTML
 }
 
+type DigestValidationError struct{ Reason, Kind string }
+
+func (e *DigestValidationError) Error() string {
+	return "Формат відповіді моделі: " + e.Reason
+}
+func canonicalDigestHeading(title string) string {
+	title = strings.TrimSpace(title)
+	title = strings.TrimSpace(strings.TrimRight(title, "#"))
+	title = strings.TrimSpace(strings.TrimSuffix(title, ":"))
+	title = strings.TrimSpace(strings.Trim(title, "*_"))
+	title = strings.TrimSpace(strings.TrimSuffix(title, ":"))
+	key := strings.ToLower(strings.Join(strings.Fields(title), " "))
+	switch key {
+	case "про що матеріал", "про що стаття", "про що відео":
+		return "Про що матеріал"
+	case "ключові тези":
+		return "Ключові тези"
+	case "деталі":
+		return "Деталі"
+	case "практичне застосування":
+		return "Практичне застосування"
+	case "факти / цитати", "факти/цитати", "факти", "цитати", "факти та цитати":
+		return "Факти / цитати"
+	}
+	return title
+}
 func SplitDigest(raw string) ([]DigestSection, error) {
 	raw = strings.TrimSpace(raw)
-	if len(raw) < 80 || len(raw) > 32<<10 {
-		return nil, errors.New("дайджест порожній або перевищує ліміт")
+	invalid := func(reason string) ([]DigestSection, error) {
+		return nil, &DigestValidationError{Reason: reason, Kind: "format"}
+	}
+	if len(raw) < 80 {
+		return invalid("дайджест порожній або закороткий")
+	}
+	if len(raw) > 32<<10 {
+		return nil, &DigestValidationError{Reason: "дайджест перевищує ліміт 32 КіБ", Kind: "limit"}
 	}
 	var sections []DigestSection
 	var body strings.Builder
 	title := ""
 	flush := func() {
 		if title != "" {
-			sections = append(sections, DigestSection{Title: title, Markdown: strings.TrimSpace(body.String())})
+			sections = append(sections, DigestSection{Title: canonicalDigestHeading(title), Markdown: strings.TrimSpace(body.String())})
 		}
 		body.Reset()
 	}
+	fence := byte(0)
+	fenceLength := 0
 	for _, line := range strings.Split(raw, "\n") {
-		if strings.HasPrefix(line, "## ") {
+		trimmed := strings.TrimSpace(line)
+		structural := len(line)-len(strings.TrimLeft(line, " ")) <= 3 && !strings.HasPrefix(line, "\t")
+		if structural && len(trimmed) >= 3 && (strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")) {
+			char := trimmed[0]
+			count := 0
+			for count < len(trimmed) && trimmed[count] == char {
+				count++
+			}
+			if fence == 0 {
+				fence = char
+				fenceLength = count
+			} else if fence == char && count >= fenceLength && strings.TrimSpace(trimmed[count:]) == "" {
+				fence = 0
+			}
+			if title == "" {
+				return invalid("дайджест має починатися із секції")
+			}
+			body.WriteString(line)
+			body.WriteByte('\n')
+			continue
+		}
+		if structural && fence == 0 && (strings.HasPrefix(trimmed, "## ") || strings.HasPrefix(trimmed, "##\t")) {
 			flush()
-			title = strings.TrimSpace(strings.TrimPrefix(line, "## "))
+			title = strings.TrimSpace(trimmed[2:])
 		} else if title != "" {
 			body.WriteString(line)
 			body.WriteByte('\n')
-		} else if strings.TrimSpace(line) != "" {
-			return nil, errors.New("дайджест має починатися із секції")
+		} else if trimmed != "" {
+			return invalid("дайджест має починатися із секції")
 		}
 	}
 	flush()
 	if len(sections) < 4 || len(sections) > 5 {
-		return nil, errors.New("неправильна структура дайджесту")
+		return invalid(fmt.Sprintf("очікувано 4 обов’язкові секції та необов’язкові факти; отримано %d", len(sections)))
 	}
 	expected := []string{"Про що матеріал", "Ключові тези", "Деталі", "Практичне застосування", "Факти / цитати"}
 	for i := range sections {
-		t := sections[i].Title
-		if i == 0 && (t == "Про що стаття" || t == "Про що відео") {
-			t = expected[0]
+		if sections[i].Title != expected[i] {
+			return invalid(fmt.Sprintf("секція %d має назву %q; очікувано %q", i+1, sections[i].Title, expected[i]))
 		}
-		if t != expected[i] || sections[i].Markdown == "" {
-			return nil, errors.New("відсутня або порожня секція дайджесту")
+		if sections[i].Markdown == "" {
+			if i == 4 {
+				sections = sections[:4]
+				break
+			}
+			return invalid(fmt.Sprintf("секція %q порожня", expected[i]))
 		}
 		var b bytes.Buffer
 		if err := mdhtml.New().Render(&b, []byte(sections[i].Markdown), parser.New().Parse([]byte(sections[i].Markdown))); err != nil {
@@ -124,21 +182,26 @@ func (o *Ollama) request(ctx context.Context, method, endpoint string, data []by
 	}
 	resp, err := o.client.Do(req)
 	if err != nil {
-		return nil, &SourceError{Message: "Ollama cloud-шлюз недоступний або перевищено час очікування", Retry: true}
+		return nil, &SourceError{Kind: "temporary", Message: "Ollama cloud-шлюз недоступний або перевищено час очікування", Retry: true}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, &SourceError{Message: fmt.Sprintf("Ollama HTTP %d", resp.StatusCode), Retry: resp.StatusCode == 429 || resp.StatusCode >= 500}
+		kind := "configuration"
+		retry := resp.StatusCode == 429 || resp.StatusCode >= 500
+		if retry {
+			kind = "temporary"
+		}
+		return nil, &SourceError{Kind: kind, Message: fmt.Sprintf("Ollama HTTP %d", resp.StatusCode), Retry: retry}
 	}
 	data, err = io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if err != nil {
-		return nil, &SourceError{Message: "відповідь Ollama перервано", Retry: true}
+		return nil, &SourceError{Kind: "temporary", Message: "відповідь Ollama перервано", Retry: true}
 	}
 	return data, nil
 }
 func (o *Ollama) cloudAlias(ctx context.Context, requested string) (string, error) {
 	if !cloudModelID(requested) {
-		return "", &SourceError{Message: "локальна генерація заборонена; потрібна cloud-модель"}
+		return "", &SourceError{Kind: "configuration", Message: "локальна генерація заборонена; потрібна cloud-модель"}
 	}
 	body, err := o.request(ctx, "GET", strings.TrimSuffix(o.URL, "/api/chat")+"/api/tags", nil)
 	if err != nil {
@@ -152,7 +215,7 @@ func (o *Ollama) cloudAlias(ctx context.Context, requested string) (string, erro
 		} `json:"models"`
 	}
 	if err = json.Unmarshal(body, &decoded); err != nil {
-		return "", &SourceError{Message: "некоректний список моделей Ollama"}
+		return "", &SourceError{Kind: "configuration", Message: "некоректний список моделей Ollama"}
 	}
 	valid := func(remote string) bool {
 		u, e := url.Parse(remote)
@@ -171,17 +234,17 @@ func (o *Ollama) cloudAlias(ctx context.Context, requested string) (string, erro
 			return m.Name, nil
 		}
 	}
-	return "", &SourceError{Message: "cloud-модель не зареєстрована в Ollama; налаштуйте доступну cloud-модель"}
+	return "", &SourceError{Kind: "configuration", Message: "cloud-модель не зареєстрована в Ollama; налаштуйте доступну cloud-модель"}
 }
 func (o *Ollama) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, error) {
 	if strings.TrimSpace(snap.Text) == "" {
 		return Digest{}, &SourceError{Message: "для дайджесту потрібен текст"}
 	}
 	if j.InputLimit <= 0 || len(snap.Text) > j.InputLimit {
-		return Digest{}, &SourceError{Message: "текст перевищує ліміт дайджесту; весь текст збережено, збільште ліміт або подайте коротшу версію"}
+		return Digest{}, &SourceError{Kind: "limit", Message: "текст перевищує ліміт дайджесту; весь текст збережено, збільште ліміт або подайте коротшу версію"}
 	}
 	if j.PromptVersion != DigestPromptVersion && j.PromptVersion != DigestPredictionPromptVersion {
-		return Digest{}, &SourceError{Message: "версія промпту не підтримується; потрібен явний повтор із поточною конфігурацією"}
+		return Digest{}, &SourceError{Kind: "configuration", Message: "версія промпту не підтримується; потрібен явний повтор із поточною конфігурацією"}
 	}
 	model, err := o.cloudAlias(ctx, j.Model)
 	if err != nil {
@@ -190,7 +253,7 @@ func (o *Ollama) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, er
 	system := digestSystem
 	if j.PromptVersion == DigestPredictionPromptVersion {
 		if strings.TrimSpace(j.Interests) == "" {
-			return Digest{}, &SourceError{Message: "для прогнозу потрібен профіль поточних інтересів"}
+			return Digest{}, &SourceError{Kind: "configuration", Message: "для прогнозу потрібен профіль поточних інтересів"}
 		}
 		system = strings.Replace(system, "Поверни тільки Markdown без обгортки у code fence.", "Створи Markdown для поля markdown у JSON.", 1) + "\n\n" + predictionInstruction
 	}
@@ -220,21 +283,31 @@ func (o *Ollama) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, er
 		Output int64 `json:"eval_count"`
 	}
 	if err = json.Unmarshal(body, &response); err != nil || !response.Done || response.Message.Content == "" {
-		return Digest{}, &SourceError{Message: "неповна або некоректна відповідь Ollama"}
+		return Digest{}, &SourceError{Kind: "format", Diagnostic: string(body), Message: "неповна або некоректна відповідь Ollama"}
 	}
-	markdown := strings.TrimSpace(response.Message.Content)
+	rawReply := strings.TrimSpace(response.Message.Content)
+	markdown := rawReply
 	var prediction *InterestPrediction
 	if j.PromptVersion == DigestPredictionPromptVersion {
 		markdown, prediction, err = parsePredictedDigest(markdown, j.Interests)
 		if err != nil {
-			return Digest{}, &SourceError{Message: err.Error()}
+			return Digest{}, digestFailureError(err, rawReply)
 		}
 	}
 	if strings.HasPrefix(markdown, "```markdown\n") && strings.HasSuffix(markdown, "\n```") {
 		markdown = strings.TrimSuffix(strings.TrimPrefix(markdown, "```markdown\n"), "\n```")
 	}
 	if _, err = SplitDigest(markdown); err != nil {
-		return Digest{}, &SourceError{Message: err.Error()}
+		return Digest{}, digestFailureError(err, rawReply)
 	}
 	return Digest{Markdown: markdown, Model: j.Model, ActualModel: model, Provider: "ollama-cloud", PromptVersion: j.PromptVersion, InputTokens: response.Input, OutputTokens: response.Output, Prediction: prediction}, nil
+}
+
+func digestFailureError(err error, raw string) *SourceError {
+	kind := "format"
+	var validation *DigestValidationError
+	if errors.As(err, &validation) && validation.Kind == "limit" {
+		kind = "limit"
+	}
+	return &SourceError{Kind: kind, Diagnostic: raw, Message: err.Error()}
 }

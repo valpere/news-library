@@ -2,7 +2,7 @@
 
 Основа погоджена: один Go-сервіс, SQLite, стійка черга, локальний запуск
 із можливістю перенесення на VPS. Нижче — технічна конкретизація для
-реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v9, FTS5,
+реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v10, FTS5,
 транзакційна черга та незмінні snapshots/оцінки. M3–M4 реалізовано нижче; optional M2 fallback
 залишається запланованим. Сервер — `cmd/news-library`, адаптери та UI —
 `internal/library/{source,worker,web}.go`, шаблони — `pages.html`.
@@ -548,3 +548,29 @@ executable дає діагностику й manual/retry без втрати URL
 NEWS_LIBRARY_YT_DLP (типово yt-dlp, empty disables) та YOUTUBE_LANGUAGES
 (типово uk,en), flag/environment/.env precedence як в інших settings.
 Офіційні параметри: [yt-dlp](https://github.com/yt-dlp/yt-dlp#usage-and-options).
+
+## Валідація дайджестів та історія відмов (schema v10)
+
+`SplitDigest` має обмежену карту рівнозначних українських заголовків,
+canonical UI names і чіткий `DigestValidationError` (format/limit). Він
+зберігає body Markdown, не приймає довільних назв і не вигадує відсутніх
+секцій. Fenced/indented code не стає H2 секцією; optional facts без body
+пропускається. Safe HTML renderer незмінний. `Ollama.Generate` додає typed
+SourceError.Kind, bounded Diagnostic response; transports/429/5xx separate
+від validation/config/profile/input-size, prediction errors також format.
+
+Schema 10 додає immutable `job_failures` (job FK, attempt, kind, message,
+retryable, recorded_at, response_path/hash). `Worker.FailError` і `Store.fail`
+перевіряють lease та атомарно записують failure event і job/item state. Якщо
+є raw reply, Files.Put/fsync у digests/hash.md передує DB publication. Reset
+manual retry не стирає failure history. Format/configuration/limit/source
+примусово non-auto-retry; unknown legacy label не є вигаданим діагнозом.
+Нормальний код користувацьких оцінок/source versions не змінюється.
+
+Web показує клас, пояснення й відповідний текст кнопки, escaped rejected
+response у details; не показує стару відмову під час нового pending job.
+JobFailures читає до 20 подій, bad diagnostic hash/file відображається як
+попередження без приховування primary content. DB errors залишаються явними.
+Backup primaryRefs schema 10 додає непорожні diagnostic paths; cache cleanup
+не видаляє їх. Restore зберігає всю історію та normal pause semantics.
+Прийняті старі artifacts immutable, первинний Markdown не нормалізується.

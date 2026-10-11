@@ -45,21 +45,21 @@ func (g *ChunkGenerator) Generate(ctx context.Context, j Job, snap Snapshot) (Di
 		return g.Leaf.Generate(ctx, j, snap)
 	}
 	if j.ChunkLimit < 1024 || j.ChunkLimit > j.InputLimit || j.ChunkMaxParts < 2 || j.ChunkMaxParts > 512 {
-		return Digest{}, &SourceError{Message: "некоректна конфігурація обробки частинами"}
+		return Digest{}, &SourceError{Kind: "configuration", Message: "некоректна конфігурація обробки частинами"}
 	}
 	parts, err := SplitText(snap.Text, j.ChunkLimit)
 	if err != nil {
-		return Digest{}, &SourceError{Message: err.Error()}
+		return Digest{}, &SourceError{Kind: "configuration", Message: err.Error()}
 	}
 	if len(parts) > j.ChunkMaxParts {
-		return Digest{}, &SourceError{Message: "текст перевищує ліміт кількості частин; повне джерело збережено"}
+		return Digest{}, &SourceError{Kind: "limit", Message: "текст перевищує ліміт кількості частин; повне джерело збережено"}
 	}
 	sourceParts := len(parts)
 	totalInput, totalOutput := int64(0), int64(0)
 	// Bound reduction calls and require progress, even if a provider expands notes.
 	for round := 0; round < 8; round++ {
 		if len(parts) > j.ChunkMaxParts {
-			return Digest{}, &SourceError{Message: "перевищено ліміт частин етапу; джерело й готові частини збережені"}
+			return Digest{}, &SourceError{Kind: "limit", Message: "перевищено ліміт частин етапу; джерело й готові частини збережені"}
 		}
 		notes := make([]string, 0, len(parts))
 		for index, part := range parts {
@@ -85,10 +85,10 @@ func (g *ChunkGenerator) Generate(ctx context.Context, j Job, snap Snapshot) (Di
 					return Digest{}, e
 				}
 				if _, e = SplitDigest(result.Markdown); e != nil {
-					return Digest{}, &SourceError{Message: e.Error()}
+					return Digest{}, digestFailureError(e, result.Markdown)
 				}
 				if len(result.Markdown) > j.ChunkLimit {
-					return Digest{}, &SourceError{Message: "нотатки частини перевищують ліміт; джерело й попередні частини збережені"}
+					return Digest{}, &SourceError{Kind: "limit", Message: "нотатки частини перевищують ліміт; джерело й попередні частини збережені"}
 				}
 				if e = g.Store.SaveDigestCheckpoint(j, round, index, textHash(part), result); e != nil {
 					return Digest{}, e
@@ -118,14 +118,14 @@ func (g *ChunkGenerator) Generate(ctx context.Context, j Job, snap Snapshot) (Di
 			priorLength += len(part)
 		}
 		if len(combined) >= priorLength {
-			return Digest{}, &SourceError{Message: "модель не скоротила нотатки для синтезу; повне джерело й частини збережені"}
+			return Digest{}, &SourceError{Kind: "limit", Message: "модель не скоротила нотатки для синтезу; повне джерело й частини збережені"}
 		}
 		parts, err = SplitText(combined, j.ChunkLimit)
 		if err != nil {
 			return Digest{}, err
 		}
 	}
-	return Digest{}, &SourceError{Message: "перевищено кількість етапів скорочення; джерело й частини збережені"}
+	return Digest{}, &SourceError{Kind: "limit", Message: "перевищено кількість етапів скорочення; джерело й частини збережені"}
 }
 func (s *Store) DigestCheckpoint(j Job, round, part int, inputHash string) (*Digest, error) {
 	var d Digest

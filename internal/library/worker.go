@@ -88,7 +88,7 @@ func (w *Worker) Step(ctx context.Context) (bool, error) {
 	if errors.As(err, &sourceError) {
 		retry = sourceError.Retry
 	}
-	return true, w.Store.Fail(*j, err.Error(), retry, w.MaxAttempts, time.Now(), w.Backoff*time.Duration(1<<min(j.Attempts-1, 8)))
+	return true, w.Store.FailError(*j, err, retry, w.MaxAttempts, time.Now(), w.Backoff*time.Duration(1<<min(j.Attempts-1, 8)))
 }
 func (w *Worker) Run(ctx context.Context) {
 	for ctx.Err() == nil {
