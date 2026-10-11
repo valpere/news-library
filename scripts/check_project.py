@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     failures = []
-    for path in sorted((ROOT/'scripts').glob('*.py')):
+    for path in sorted(list((ROOT/'scripts').glob('*.py')) + list((ROOT/'minions').glob('*.py'))):
         try:
             ast.parse(path.read_text(), filename=str(path))
         except SyntaxError as error:

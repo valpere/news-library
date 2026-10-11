@@ -7,7 +7,8 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 root=Path(__file__).resolve().parents[1]
-smoke_tmp=tempfile.TemporaryDirectory(prefix="news-library-smoke-")
+(root/'tmp').mkdir(exist_ok=True)
+smoke_tmp=tempfile.TemporaryDirectory(dir=root/'tmp', prefix="news-library-smoke-")
 data=Path(smoke_tmp.name)
 data.mkdir(parents=True,exist_ok=True)
 def start(no_worker=False):
@@ -53,7 +54,7 @@ try:
         page.locator('input[name=tags]').fill('smoke')
         page.get_by_role('button',name='Знайти',exact=True).click()
         assert page.locator('article').count()==1
-        page.screenshot(path=str(root/'build/smoke-search.png'),full_page=True)
+        page.screenshot(path=str(root/'tmp/smoke-search.png'),full_page=True)
         page.locator('article h2 a').click()
         assert 'непрочитано' in page.locator('body').inner_text()
         page.get_by_role('button',name='Відкласти',exact=True).click()
@@ -62,7 +63,7 @@ try:
         page.get_by_text('Історія оцінок (2)',exact=True).click()
         assert 'оцінка 3' in page.locator('body').inner_text()
         assert 'оцінка 0' in page.locator('body').inner_text()
-        page.screenshot(path=str(root/'build/smoke-detail.png'),full_page=True)
+        page.screenshot(path=str(root/'tmp/smoke-detail.png'),full_page=True)
         stop(p)
         p,origin=start()
         page.goto(origin+'/items/1')
@@ -85,7 +86,7 @@ try:
             assert page.locator('input[name=score]').count()==0
             return page.url.removeprefix(origin),page.locator('input[name=csrf]').first.get_attribute('value')
         path,token=add_pending('https://example.com/pending-ui')
-        page.screenshot(path=str(root/'build/smoke-pending.png'),full_page=True)
+        page.screenshot(path=str(root/'tmp/smoke-pending.png'),full_page=True)
         response=page.request.post(origin+path+'/manual',form={'csrf':token,'text':'Text now available after background processing'},max_redirects=0)
         assert response.status==303
         page.get_by_role('heading',name='Дайджест недоступний',exact=True).wait_for(timeout=15000)
@@ -107,4 +108,4 @@ try:
 finally:
     if p.poll() is None: stop(p)
     smoke_tmp.cleanup()
-print('PASS browser smoke: needs_input, manual text, score 3→0, save/defer, tags/FTS, explicit read, escaped HTML, history, restart/duplicates, queued card without ratings, automatic result display and preserved unsent input. Screenshots: build/smoke-search.png, build/smoke-detail.png, build/smoke-pending.png')
+print('PASS browser smoke: needs_input, manual text, score 3→0, save/defer, tags/FTS, explicit read, escaped HTML, history, restart/duplicates, queued card without ratings, automatic result display and preserved unsent input. Screenshots: tmp/smoke-search.png, tmp/smoke-detail.png, tmp/smoke-pending.png')

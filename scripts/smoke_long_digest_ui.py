@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from playwright.sync_api import sync_playwright,expect
 
 root=Path(__file__).resolve().parents[1]
+(root/'tmp').mkdir(exist_ok=True)
 markdown="## Про що матеріал\nСтислий огляд джерела.\n## Ключові тези\n- Збереження фактів.\n## Деталі\nЧерга обробляє частини.\n## Практичне застосування\nПерегляд довгих матеріалів.\n## Факти / цитати\nОдне джерело."
 class Gateway(BaseHTTPRequestHandler):
     calls=0
@@ -23,7 +24,7 @@ class Gateway(BaseHTTPRequestHandler):
     def respond(self,value):
         body=json.dumps(value).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
 gateway=ThreadingHTTPServer(('127.0.0.1',0),Gateway);threading.Thread(target=gateway.serve_forever,daemon=True).start()
-with tempfile.TemporaryDirectory(prefix='news-library-long-smoke-') as data:
+with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-long-smoke-') as data:
     process=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,'-bind','127.0.0.1:0','-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat','-digest-max-bytes','1024','-cache-cleanup-interval','1s','-cache-max-bytes','1024'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     try:
         line=process.stdout.readline().strip();assert line.startswith('news-library: http://'),line
@@ -46,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-long-smoke-') as data:
             page.get_by_role('button',name='Оцінити 2',exact=True).click()
             with page.expect_download() as info:page.get_by_role('link',name='Markdown',exact=True).click()
             assert 'частин:' in Path(info.value.path()).read_text()
-            page.screenshot(path=str(root/'build/smoke-long-digest.png'),full_page=True)
+            page.screenshot(path=str(root/'tmp/smoke-long-digest.png'),full_page=True)
             # Several periodic cleanups must leave every primary result intact.
             page.wait_for_timeout(2200);page.reload()
             assert 'Оброблено частинами:' in page.locator('#digest').inner_text()

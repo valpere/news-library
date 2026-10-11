@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
 
 root = Path(__file__).resolve().parents[1]
+(root/'tmp').mkdir(exist_ok=True)
 markdown = "## Про що матеріал\nСтислий огляд новин.\n## Ключові тези\n- Доступний текст.\n## Деталі\nВерсії залишаються.\n## Практичне застосування\nПошук прочитаного.\n## Факти / цитати\nОдин сервіс."
 class Gateway(BaseHTTPRequestHandler):
     calls = 0
@@ -33,7 +34,7 @@ gateway = ThreadingHTTPServer(('127.0.0.1',0),Gateway)
 threading.Thread(target=gateway.serve_forever,daemon=True).start()
 rules = json.dumps([{'id':'url-commercial','reason':'commercial','field':'url','contains':'/blocked-fixture','probability':.95},
     {'id':'text-commercial','reason':'commercial','field':'text','contains':'advertisement','probability':.95}])
-with tempfile.TemporaryDirectory(prefix='news-library-m2-smoke-') as data:
+with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-') as data:
     process = subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,'-bind','127.0.0.1:0',
         '-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat',
         '-interests','Fixture interests: libraries and queues','-filter-rules',rules],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
@@ -88,7 +89,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-m2-smoke-') as data:
             page.get_by_text('Якість дайджесту',exact=True).click()
             assert 'Fixture feedback' in page.locator('body').inner_text()
             assert page.locator('input[name=digest]').first.input_value() == first_digest
-            page.screenshot(path=str(root/'build/smoke-m2.png'),full_page=True)
+            page.screenshot(path=str(root/'tmp/smoke-m2.png'),full_page=True)
             page.get_by_role('link',name='Особиста бібліотека',exact=True).click()
             page.locator('input[name=confidence_min]').fill('70')
             page.locator('input[name=confidence_max]').fill('80')

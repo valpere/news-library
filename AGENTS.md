@@ -32,6 +32,13 @@ The shared tool library is documented at `~/wrk/common_codex/ONBOARDING.md`.
 
 ## Validation and Development
 
+Store temporary agent scripts, fixtures and review evidence under `./tmp/`.
+Keep recurring helper scripts in `./minions/`; promote reusable temporary
+scripts there. Project skills are in `minions/skills/`, with local discovery
+links under `.agents/skills/`. Use `project_check.py` for local/public checks
+and `pr_gate.py` for read-only final remote gates. Live digest smoke is explicit
+and excluded from routine checks. See README for commands.
+
 Run `make check` for offline validation of this preparation package. Pilot
 `run` commands make cloud requests; do not include them in routine checks.
 Use `gofmt` and meaningful Go tests when implementing application code, and add

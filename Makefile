@@ -11,6 +11,7 @@ spec-check:
 test:
 	go test -race ./...
 	go vet ./...
+	python3 -m unittest discover -s minions -p 'test_*.py'
 
 .PHONY: build run
 build:
