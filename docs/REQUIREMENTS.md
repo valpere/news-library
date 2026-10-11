@@ -1,7 +1,7 @@
 # Вимоги та сценарії першої версії
 
 Статус: основні продуктові й технічні рішення погоджені користувачем.
-Деталі поведінки нижче конкретизують їх для реалізації. M1 реалізовано; основний цикл M2 із правилами, дайджестом, прогнозом і відгуками реалізований; обробка довгих текстів частинами й очищення HTTP-кешу реалізовані; M3 semantic search/read API реалізовані; free-only fallback і M4 заплановані. Архітектура — [HLD.md](HLD.md), етапи — [BACKLOG.md](BACKLOG.md).
+Деталі поведінки нижче конкретизують їх для реалізації. M1 реалізовано; основний цикл M2 із правилами, дайджестом, прогнозом і відгуками реалізований; обробка довгих текстів частинами й очищення HTTP-кешу реалізовані; M3 semantic search/read API реалізовані; M4 backup/restore і Telegram workflow реалізовані; free-only fallback запланований. Архітектура — [HLD.md](HLD.md), етапи — [BACKLOG.md](BACKLOG.md).
 
 ## Статус контракту
 
@@ -275,3 +275,40 @@ model/snapshot version isolation, rejected source zero calls, explicit rebuild
 без зміни rating history; authentication/denied mutation, saved digest context,
 unknown dates/null і source ownership. Offline fixtures та окремий local
 bge-m3 smoke; cloud generation у цих перевірках не потрібна.
+
+
+## Приймання M4
+
+Backup CLI створює consistent SQLite snapshot без зміни original DB і копіює
+всі referenced primary texts/digests/checkpoints/frozen delivery messages.
+Manifest перевіряє SHA-256/size, DB integrity і foreign keys. Cache/config/secrets
+не копіюються. Existing destination, traversal/symlink або corruption дають
+помилку; incomplete transfer не відкривається застосунком. Restore пише тільки
+новий каталог, зберігає IDs/history/unknown dates/source queue та primary files.
+Workers/delivery paused до explicit `-resume-restored`. Незавершені імпортовані
+доставки стають unknown: активність після snapshot не можна відтворити.
+Confirmed message IDs/sent parts збережені; жодного автоматичного replay.
+
+Telegram preview використовує saved digests без нової generation/embeddings.
+Default selection: до configured size latest unread records із digest,
+без rejected/explicit user rating0, без confirmed/active/unknown доставки цього
+digest до того самого chat. Source/digest IDs, text і recipient/bot фіксуються
+до send; зміна налаштувань не перенаправляє стару добірку. Повідомлення корисне
+самостійно: digest, original URL, own rating/placement і completeness; bounded
+message позначає скорочення. Send не ставить read і не змінює usefulness.
+
+User погодив daily09:00 Europe/Kyiv, до5 матеріалів. Реальна доставка default
+вимкнена до private bot token/numeric chat ID та explicit enable. Manual send
+тільки після preview; агентські credentials не дають права write/send. Daily
+slot один на local date; due window5min, пропущені/empty випуски фіксуються
+як missed, без late catchup. Один worker послідовно пише sending до network,
+підтверджений message ID — до переходу до наступної частини. Definite API
+rejection → failed, timeout/malformed/невідомий transport outcome → unknown;
+restart sending → unknown. Manual retry тільки failed, sent parts не повторюються.
+Unknown не retry і не включається до нової добірки. Exactly-once не заявлено.
+
+Приймання: live WAL backup/verify/restore в інший каталог, source/digest/history/
+checkpoint/queue retention, corrupt/missing/symlink/overwrite refusal і restored
+pause; frozen preview/partial retry/message IDs, unknown/restart no replay,
+Kyiv due/missed slots, source exclusion, secret-safe adapter/UI й agent denial.
+Offline mocks; real Telegram bot integration лишається неналаштованою.

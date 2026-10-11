@@ -306,6 +306,8 @@ func TestCacheV5MigrationPreservesBodyWithoutInventingValidators(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP TABLE delivery_parts",
+		"DROP TABLE deliveries",
 		"DROP TABLE embedding_chunks",
 		"DROP TABLE embedding_runs",
 		"ALTER TABLE cache_entries DROP COLUMN response_headers",

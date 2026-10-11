@@ -2,9 +2,9 @@
 
 Основа погоджена: один Go-сервіс, SQLite, стійка черга, локальний запуск
 із можливістю перенесення на VPS. Нижче — технічна конкретизація для
-реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v7, FTS5,
-транзакційна черга та незмінні snapshots/оцінки. M3 реалізовано нижче; optional M2 fallback та M4
-залишаються запланованими. Сервер — `cmd/news-library`, адаптери та UI —
+реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v8, FTS5,
+транзакційна черга та незмінні snapshots/оцінки. M3–M4 реалізовано нижче; optional M2 fallback
+залишається запланованим. Сервер — `cmd/news-library`, адаптери та UI —
 `internal/library/{source,worker,web}.go`, шаблони — `pages.html`.
 
 ## Компоненти
@@ -427,3 +427,51 @@ Context бере saved digest або source excerpt, обмежує його4000
 повертає current explicit rating event, placement/tags, source completeness,
 truncation і text_kind: offsets digest не видаються за source offsets.
 Жоден read endpoint не змінює read/placement/ratings і не ставить jobs.
+
+
+## M4: резервна копія та доставка (schema v8)
+
+`backup.go` відкриває source DB mode=ro, робить
+[SQLite VACUUM INTO](https://www.sqlite.org/lang_vacuum.html#vacuuminto) consistent
+snapshot і читає refs уже з нього. Immutable primary files копіюються після
+snapshot: тексти, digests, digest checkpoints і wire payloads delivery_parts.
+Manifest SHA/size, integrity_check/foreign_key_check і exact ref set перевіряють
+повноту. Schema1/2 з inline text також підтримані без source migration; schema3+
+має canonical hashed primary paths. Cache bodies та .env не включаються.
+Exclusive destination/files, no symlink traversal, fsync files/directories,
+incomplete marker до успішного завершення; failures лишають marked partial
+output і не видаляють чужий directory. `Open` відмовляє incomplete root.
+Restore перевіряє source bundle й copied hashes, створює persistent pause marker,
+зберігає original IDs/events/source queue. Новий root можна відкрити без network
+execution; explicit resume знімає marker. Imported unfinished deliveries
+консервативно unknown, бо original міг доставити після backup snapshot.
+
+`delivery.go` / schema8 мають deliveries і delivery_parts із source/digest FKs,
+recipient+bot identity, ordinal, state, updated_at, random attempt token та
+nullable confirmed message ID. Wire texts immutable hashed files в digests/;
+вони входять у backup. Selection із saved unread digests, explicit rating0/reject
+виключаються, delivered/active/uncertain digest-to-chat не повторюється.
+Preview/schedule share builder; selection/message/provenance фіксуються до send.
+Manual queue rechecks overlap у transaction; scheduled builder rechecks reservation
+перед insert. Немає нової AI обробки й жодної mutation людських judgments/read.
+
+Telegram adapter використовує fixed HTTPS api.telegram.org/sendMessage, proxy/
+redirect disabled, bounded request, plain text без parse_mode, link previews off.
+API звірено з [Telegram sendMessage](https://core.telegram.org/bots/api#sendmessage).
+UTF16-budgeted components з truncation marker не перевищують API text limit.
+Bot token тільки private config; не в UI/help/DB/logs/errors. Invalid token
+не стає bot ID. Typed false API response — definite failed; transport/malformed
+або втрачений acknowledgement — unknown. Статус sending фіксується до HTTP;
+response/message ID і наступний aggregate state commit разом, наступна part
+тільки після commit. Crash або persistence error після send не спричиняє replay;
+recovery переводить interrupted sending в unknown. Manual failed retry залишає
+sent parts недоторканими. Unknown немає кнопки retry, visible manual verification.
+
+Scheduler: один local-date slot, due HH:MM Europe/Kyiv; 5-minute startup/tick
+window, no catchup. Missed today або empty eligible selection має persisted
+missed row; дні offline не генерують retrospective batches. За погодженням user
+private .env daily09:00/size5; default template disabled/no destination. При
+missing credentials нема network delivery; UI preview працює. NoWorker і
+restore pause блокують sender/scheduler разом із source/embedding workers.
+UI /deliveries preview/history/state protected shared Host/Origin/CSRF/auth
+mutation guards. Agent read API не має delivery mutation capabilities.

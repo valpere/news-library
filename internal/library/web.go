@@ -30,16 +30,24 @@ var progressJS string
 var digestJS string
 
 type Web struct {
-	Store        *Store
-	Cache        *HTTPCache
-	Semantic     *Semantic
-	ReadToken    string
-	Origin, CSRF string
-	MaxText      int64
-	tmpl         *template.Template
-	zone         *time.Location
+	Store            *Store
+	Cache            *HTTPCache
+	Semantic         *Semantic
+	Telegram         TelegramConfig
+	BackgroundPaused bool
+	ReadToken        string
+	Origin, CSRF     string
+	MaxText          int64
+	tmpl             *template.Template
+	zone             *time.Location
 }
 type pageData struct {
+	Deliveries                []Delivery
+	Delivery                  *Delivery
+	DeliveryEnabled           bool
+	DailyTime, DeliveryChat   string
+	DeliverySize              int
+	BackgroundPaused          bool
 	CSRF                      string
 	SearchMode, SearchWarning string
 	EmbeddingStatus           string
@@ -116,6 +124,9 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 			}
 			return s
 		},
+		"deliveryState": func(s string) string {
+			return map[string]string{"preview": "Попередній перегляд", "queued": "У черзі", "sending": "Відправляється", "sent": "Доставлено", "failed": "Не відправлено", "unknown": "Результат невідомий", "missed": "Випуск пропущено"}[s]
+		},
 		"placement": func(s string) string {
 			switch s {
 			case "inbox":
@@ -150,6 +161,10 @@ func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", w.list)
 	mux.HandleFunc("GET /cache", w.cache)
+	mux.HandleFunc("GET /deliveries", w.deliveryList)
+	mux.HandleFunc("GET /deliveries/{id}", w.deliveryDetail)
+	mux.HandleFunc("POST /deliveries/preview", w.deliveryPreview)
+	mux.HandleFunc("POST /deliveries/{id}/{action}", w.deliveryQueue)
 	mux.HandleFunc("/api/read/", w.readAPI)
 	mux.HandleFunc("POST /reindex", func(rw http.ResponseWriter, r *http.Request) {
 		if w.Semantic == nil {
@@ -220,6 +235,7 @@ func (w *Web) Handler() http.Handler {
 }
 func (w *Web) render(rw http.ResponseWriter, name string, data pageData) {
 	data.CSRF = w.CSRF
+	data.BackgroundPaused = w.BackgroundPaused
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Buffer before writing so a template failure does not send a partial success.
 	var b strings.Builder

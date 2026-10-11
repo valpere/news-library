@@ -8,7 +8,7 @@ YouTube-субтитри, ручний текст, незалежні оцінк
 FTS і фільтри. Додано дайджести Ollama cloud, окремі файли текстів та
 спільний HTTP-кеш, пояснювані правила відсіву, окремі відгуки про
 дайджести й прогноз інтересу за явно заданим профілем. Free-only fallback
-залишається опціональним кроком M2; embeddings/read API — M3; Telegram і backup tooling — M4.
+залишається опціональним кроком M2. M3 semantic search/read API та M4 Telegram/backup tooling реалізовані; Telegram потребує приватного налаштування.
 
 ## Запуск
 
@@ -114,13 +114,12 @@ body кількох URL рахується один раз. Первинні `te
 запит повертає помилку; прострочене тіло доступне лише з явним `stale=1`.
 TTL=0 вимикає кешування й умовні запити.
 
-Міграції v1–v4→v5 переносить SQL-тексти у файли, зберігаючи ID, чергу та
-історію оцінок. Перед оновленням зупиніть старий процес і зробіть копію
+Міграції v1–v8 зберігають ID, чергу та історію оцінок; v3 переносить
+SQL-тексти у файли. Перед оновленням зупиніть старий процес і зробіть копію
 каталогу даних. Для відновлення потрібні узгоджена SQLite-копія **та**
 `texts/` і `digests/`; кеш можна пропустити. Шляхи відносні до кореня даних.
 Файли перевіряються за SHA-256; відсутність первинного файла показується
-як помилка. Пошкоджений кеш отримується повторно. Backup/restore commands
-залишаються M4.
+як помилка. Пошкоджений кеш отримується повторно. Backup/restore commands наведені нижче.
 
 Текст одразу зберігається у власних незмінних файлах; «Зберегти» лише змінює розміщення.
 Власна оцінка — ціле 0..9223372036854775807; відсутня оцінка відрізняється
@@ -273,3 +272,49 @@ Offline M3 browser/API smoke: `python3 scripts/smoke_m3_ui.py`.
 Окрема real local bge-m3 перевірка на трьох synthetic sources:
 `go run minions/live_semantic_smoke.go -run-local-embeddings`.
 Вона не запускає generation і зберігає fixture evidence в `tmp/`.
+
+
+Резервне копіювання й відновлення (після `make build`):
+
+```sh
+./build/news-library backup -source data -output tmp/my-backup
+./build/news-library verify-backup -source tmp/my-backup
+./build/news-library restore -source tmp/my-backup -output tmp/my-restored-library
+./build/news-library -data tmp/my-restored-library  # workers/delivery paused
+# Після перевірки відновленої копії та зупинки старого instance:
+./build/news-library -data tmp/my-restored-library -resume-restored
+```
+
+Вказуйте фактичний каталог даних у `-source`; output має не існувати.
+Backup працює з live SQLite snapshot, не мігрує source, включає referenced
+texts/digests/checkpoints/frozen messages та metadata/history/queue.
+Cache/config/.env не копіюються. SHA/integrity/foreign-key checks відхиляють
+corruption, missing files або symlinks. Невдалий transfer лишає marker і не
+відкривається сервісом; повтор потребує нового output. Restore зберігає source
+queue і human history, ставить background pause. Усі unfinished imported
+Telegram deliveries стають unknown, бо після snapshot вони могли вже надійти;
+confirmed message IDs залишаються. Automatic replay немає.
+
+Telegram: сторінка **Telegram-добірки** готує immutable preview зі saved digests
+без AI викликів. Вибираються latest unread, без rejected/rating0 і вже
+confirmed/active/unknown digest-to-recipient; send не ставить read. Перед ручною
+відправкою видно саме збережені messages і recipient; частини мають незалежні
+states/message IDs. Failed retry не повторює sent parts, unknown лише manual
+перевірка без retry. Daily пропущені випуски не надолужуються автоматично.
+
+Налаштування лише у приватному `.env`:
+
+```dotenv
+NEWS_LIBRARY_TELEGRAM_ENABLED=false
+NEWS_LIBRARY_TELEGRAM_BOT_TOKEN=
+NEWS_LIBRARY_TELEGRAM_CHAT_ID=
+NEWS_LIBRARY_TELEGRAM_DAILY=09:00
+NEWS_LIBRARY_TELEGRAM_SIZE=5
+```
+
+User обрав09:00 Europe/Kyiv/до5. Заповніть bot token і numeric chat ID приватно,
+потім увімкніть ENABLED=true. Порожній DAILY означає лише на вимогу. Due window
+5min; поза ним або без готових матеріалів persisted missed, без late catchup.
+Bot token не копіюється в backup і не показується у UI/help/errors. Реальних
+Telegram повідомлень у розробці не надсилали; приймання з mock API.
+Offline browser/CLI smoke: `python3 scripts/smoke_m4_ui.py`.

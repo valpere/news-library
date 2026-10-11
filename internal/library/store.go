@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -35,6 +36,9 @@ var schemaV6 string
 
 //go:embed schema_v7.sql
 var schemaV7 string
+
+//go:embed schema_v8.sql
+var schemaV8 string
 
 type Store struct {
 	DB           *sql.DB
@@ -86,6 +90,9 @@ type Filters struct {
 }
 
 func Open(path string) (*Store, error) {
+	if _, e := os.Lstat(filepath.Join(filepath.Dir(path), transferMarker)); !errors.Is(e, os.ErrNotExist) {
+		return nil, errors.New("data transfer is incomplete")
+	}
 	u := url.URL{Scheme: "file", Path: path}
 	q := u.Query()
 	q.Add("_pragma", "foreign_keys(1)")
@@ -102,7 +109,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 7 {
+	if version > CurrentSchema {
 		db.Close()
 		return nil, errors.New("database schema is newer than this application")
 	}
@@ -128,6 +135,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 7 {
 			_, err = tx.Exec(schemaV7)
+		}
+		if err == nil && version < 8 {
+			_, err = tx.Exec(schemaV8)
 		}
 		if err == nil {
 			err = tx.Commit()
