@@ -68,6 +68,34 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		jsonResponse(map[string]any{"items": items, "mode": result.Mode, "warning": result.Warning, "indexed": result.Indexed, "eligible": result.Eligible, "truncated": truncated})
 		return
 	}
+	if path == "connections" {
+		notes, err := w.Store.Connections(r.URL.Query().Get("q"), 0, 0)
+		if err != nil {
+			http.Error(rw, "notes unavailable", 503)
+			return
+		}
+		jsonResponse(map[string]any{"notes": notes, "limit": 100})
+		return
+	}
+	if strings.HasPrefix(path, "connections/") {
+		id, err := strconv.ParseInt(strings.TrimPrefix(path, "connections/"), 10, 64)
+		if err != nil || id <= 0 {
+			http.NotFound(rw, r)
+			return
+		}
+		version, err := connectionVersion(r)
+		if err != nil {
+			http.Error(rw, "invalid version", 400)
+			return
+		}
+		note, err := w.Store.Connection(id, version)
+		if err != nil {
+			http.NotFound(rw, r)
+			return
+		}
+		jsonResponse(note)
+		return
+	}
 	pieces := strings.Split(path, "/")
 	if len(pieces) != 2 && len(pieces) != 3 {
 		http.NotFound(rw, r)
@@ -216,6 +244,12 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 	} else {
 		payload["text_available"] = false
 	}
+	backlinks, err := w.Store.Connections("", id, 0)
+	if err != nil {
+		http.Error(rw, "backlinks unavailable", 503)
+		return
+	}
+	payload["connections"] = backlinks
 	jsonResponse(payload)
 }
 func readItem(item Item) map[string]any {

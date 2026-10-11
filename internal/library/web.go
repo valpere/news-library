@@ -42,6 +42,15 @@ type Web struct {
 	zone             *time.Location
 }
 type pageData struct {
+	ConnectionHTML       template.HTML
+	ConnectionVocabulary map[string][]string
+
+	Connections                      []ConnectionSummary
+	Connection                       *ConnectionNote
+	ConnectionQuery, ConnectionError string
+	ConnectionChoices                []Item
+	ConnectionSlots                  []int
+
 	Deliveries                []Delivery
 	Delivery                  *Delivery
 	DeliveryEnabled           bool
@@ -159,6 +168,13 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 }
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /connections", w.connectionListPage)
+	mux.HandleFunc("GET /connections/new", w.connectionForm)
+	mux.HandleFunc("GET /connections/{id}", w.connectionPage)
+	mux.HandleFunc("GET /connections/{id}/edit", w.connectionForm)
+	mux.HandleFunc("GET /connections/{id}/{format}", w.connectionPage)
+	mux.HandleFunc("POST /connections", w.saveConnection)
+	mux.HandleFunc("POST /connections/{id}", w.saveConnection)
 	mux.HandleFunc("GET /{$}", w.list)
 	mux.HandleFunc("GET /cache", w.cache)
 	mux.HandleFunc("GET /deliveries", w.deliveryList)
@@ -234,6 +250,9 @@ func (w *Web) Handler() http.Handler {
 	})
 }
 func (w *Web) render(rw http.ResponseWriter, name string, data pageData) {
+	w.renderStatus(rw, name, data, http.StatusOK)
+}
+func (w *Web) renderStatus(rw http.ResponseWriter, name string, data pageData, status int) {
 	data.CSRF = w.CSRF
 	data.BackgroundPaused = w.BackgroundPaused
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -243,6 +262,7 @@ func (w *Web) render(rw http.ResponseWriter, name string, data pageData) {
 		http.Error(rw, "не вдалося показати сторінку", http.StatusInternalServerError)
 		return
 	}
+	rw.WriteHeader(status)
 	rw.Write([]byte(b.String()))
 }
 func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
@@ -384,8 +404,13 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	connections, err := w.Store.Connections("", id, 0)
+	if err != nil {
+		http.Error(rw, "зв’язки недоступні", 503)
+		return
+	}
 	current := snap != nil && snap.ID == i.Selected.Int64
-	w.render(rw, "detail", pageData{Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
+	w.render(rw, "detail", pageData{Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))

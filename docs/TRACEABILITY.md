@@ -89,3 +89,11 @@ M4: [Telegram statuses/secret-safe adapter/agent denial/restored delivery quaran
 [Telegram config errors/precedence](../cmd/news-library/config_test.go),
 [browser preview and real CLI restore smoke](../scripts/smoke_m4_ui.py).
 Real bot/destination activation is pending private setup; no live Telegram calls in acceptance.
+
+Нотатки-зв’язкові розширюють FR-04/11/12/14: immutable source provenance,
+версії та актуальні backlinks, Ukrainian metadata/body search, агентський
+GET-only доступ і backup всіх Markdown. Offline acceptance:
+`connections_test.go` — versions/backlinks/human state, ownership/corruption,
+concurrent edit conflict, backup/restore, escaped web/draft/API authorization.
+Browser fixture — `scripts/smoke_connections_ui.py`. Автоматичний AI-синтез
+і імпорт замороженої wiki не входять у це приймання.

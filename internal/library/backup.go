@@ -18,7 +18,7 @@ import (
 
 const transferMarker = ".transfer-in-progress"
 const restorePause = ".restore-paused"
-const CurrentSchema = 8
+const CurrentSchema = 9
 
 type BackupFile struct {
 	Path string `json:"path"`
@@ -81,6 +81,9 @@ func primaryRefs(db *sql.DB, schema int) (map[string]string, error) {
 	}
 	if schema >= 8 {
 		queries = append(queries, "SELECT text_path,hash FROM delivery_parts")
+	}
+	if schema >= 9 {
+		queries = append(queries, "SELECT markdown_path,hash FROM connection_versions")
 	}
 	for _, query := range queries {
 		rows, err := db.Query(query)

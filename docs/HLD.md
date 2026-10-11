@@ -2,7 +2,7 @@
 
 Основа погоджена: один Go-сервіс, SQLite, стійка черга, локальний запуск
 із можливістю перенесення на VPS. Нижче — технічна конкретизація для
-реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v8, FTS5,
+реалізації [вимог](REQUIREMENTS.md); M1 та основний цикл M2 реалізуються в `internal/library`: SQLite-сховище, міграції v1–v9, FTS5,
 транзакційна черга та незмінні snapshots/оцінки. M3–M4 реалізовано нижче; optional M2 fallback
 залишається запланованим. Сервер — `cmd/news-library`, адаптери та UI —
 `internal/library/{source,worker,web}.go`, шаблони — `pages.html`.
@@ -475,3 +475,35 @@ missing credentials нема network delivery; UI preview працює. NoWorker
 restore pause блокують sender/scheduler разом із source/embedding workers.
 UI /deliveries preview/history/state protected shared Host/Origin/CSRF/auth
 mutation guards. Agent read API не має delivery mutation capabilities.
+
+## Нотатки-зв’язкові (schema v9)
+
+`connections.go` зберігає тематичні нотатки окремо від статей. Таблиці
+`connection_notes` (stable_id), `connection_versions` (immutable revision,
+metadata/body/search_text/file reference) і `connection_members` (точні
+item/snapshot/optional digest IDs та role) не змінюють primary статей.
+Міграція v8→v9 додає порожні таблиці; жодної генерації/імпорту.
+
+Ручне збереження перевіряє 2–20 різних статей, source/digest ownership,
+обов’язкову роль, межі тексту й метаданих. Коротка транзакція перевіряє
+expected version, резервує stable_id для нової нотатки, записує/fsync
+content-addressed `digests/<sha256>.md` до публікації DB-посилання і додає
+immutable revision/members. Конфлікт залишає чернетку користувачу. SQL
+тригери забороняють UPDATE/DELETE версій і members, перевіряють ownership.
+Frontmatter використовує JSON scalars/lists (сумісний YAML), дублює metadata
+та provenance; не є механізмом автоматичного імпорту/відновлення DB.
+
+Backlinks — запит members тільки останньої revision кожної нотатки.
+Старі snapshot IDs не змінюються після нового тексту статті. Історичні
+ревізії доступні явно. Український case-insensitive substring пошук працює
+за normalized `search_text`, а не ASCII-only SQLite lower. До100результатів.
+Vocabulary підказки збираються з item_tags та актуальних revision metadata;
+статті не отримують автоматичних нових тегів. HTTP UI створює/редагує,
+читає, шукає, експортує; спільні Host/Origin/CSRF/agent-mutation guards діють.
+`GET /api/read/connections[/{id}?version=…]` використовує чинний bearer guard,
+`/api/read/items/{id}` також повертає current backlinks. Views escape HTML.
+
+Backup schema9 додає всі connection_versions Markdown до primaryRefs;
+restore зберігає stable IDs, revisions, members і вихідні статті. Первинні
+файли зв’язкових не підлягають cache cleanup. Наступна ітерація може додати
+cloud-пропозиції зв’язків із provenance, але ручний прототип не викликає AI.
