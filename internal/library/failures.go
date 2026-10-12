@@ -118,7 +118,7 @@ func FailureAdvice(kind string) (label, advice, button string) {
 	return "Причину не класифіковано", "Причина потребує перевірки. Повтор не гарантує виправлення.", button
 }
 func legacyFailureKind(message string) string {
-	if strings.Contains(message, "секція дайджесту") || strings.Contains(message, "Формат відповіді моделі:") {
+	if strings.Contains(message, "секція дайджесту") || strings.Contains(message, "Формат відповіді моделі:") || message == "неправильна структура дайджесту" || message == "дайджест має починатися із секції" || message == "неповна або некоректна відповідь Ollama" {
 		return "format"
 	}
 	return "unknown"

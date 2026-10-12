@@ -42,6 +42,14 @@ type Web struct {
 	zone             *time.Location
 }
 type pageData struct {
+	DigestRetryNext, DigestRetryAfter int64
+	DigestRetryIncludeUnknown         bool
+
+	DigestRetryCandidates                 []DigestRetryCandidate
+	DigestRetryResults                    []DigestRetryResult
+	DigestRetryTruncated                  bool
+	DigestRetryQueued, DigestRetrySkipped int
+
 	DigestFailureKind, DigestFailureLabel, DigestFailureAdvice, DigestRetryLabel, DigestRejectedResponse string
 
 	BatchResults                           []BatchURLResult
@@ -100,9 +108,10 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 		return nil, errors.New("invalid local UI origin")
 	}
 	funcs := template.FuncMap{
-		"failureLabel": func(kind string) string { label, _, _ := FailureAdvice(kind); return label },
-		"probability":  func(p float64) string { return strconv.FormatFloat(p, 'g', -1, 64) },
-		"percent":      func(p float64) string { return strconv.FormatFloat(p*100, 'f', 0, 64) + "%" },
+		"retrySelection": retrySelection,
+		"failureLabel":   func(kind string) string { label, _, _ := FailureAdvice(kind); return label },
+		"probability":    func(p float64) string { return strconv.FormatFloat(p, 'g', -1, 64) },
+		"percent":        func(p float64) string { return strconv.FormatFloat(p*100, 'f', 0, 64) + "%" },
 		"confidence": func(p sql.NullFloat64) string {
 			if !p.Valid {
 				return "відсутній"
@@ -175,6 +184,8 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 }
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /digest-retries", w.digestRetryBatchPage)
+	mux.HandleFunc("POST /digest-retries", w.digestRetryBatchSubmit)
 	mux.HandleFunc("GET /connections", w.connectionListPage)
 	mux.HandleFunc("GET /connections/new", w.connectionForm)
 	mux.HandleFunc("GET /connections/{id}", w.connectionPage)

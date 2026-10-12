@@ -574,3 +574,15 @@ JobFailures читає до 20 подій, bad diagnostic hash/file відобр
 Backup primaryRefs schema 10 додає непорожні diagnostic paths; cache cleanup
 не видаляє їх. Restore зберігає всю історію та normal pause semantics.
 Прийняті старі artifacts immutable, первинний Markdown не нормалізується.
+
+
+GET /digest-retries — read-only preview останньої failed digest job для
+selected_snapshot без artifact/active job, keyset pagination за item ID
+по 500. Legacy known validator messages мають derived format; неоднозначні
+limit/error без історії — unknown. POST /digest-retries захищений загальними
+Host/Origin/CSRF guards і забороною agent writes; вся форма валідована до
+першого запису. Кожен вибір item:snapshot:job:attempt-token повторно перевіряється у власній
+транзакції, source file читається з hash validation. Спільний retryDigestTx
+перевіряє також legacy rule decision до reset job, зберігаючи новий rejection
+без generation. Повтор використовує current config, не fetch; failure events
+не стираються. Submit не робить HTTP/model/embedding calls.
