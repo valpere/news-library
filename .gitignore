@@ -39,6 +39,7 @@ __pycache__/
 
 # Application runtime and local credentials
 /data/
+/data-sharded/
 /build/
 .env.*
 !.env.example

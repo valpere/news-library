@@ -20,7 +20,7 @@ import (
 )
 
 func run() error {
-	if len(os.Args) > 1 && (os.Args[1] == "backup" || os.Args[1] == "restore" || os.Args[1] == "verify-backup") {
+	if len(os.Args) > 1 && (os.Args[1] == "backup" || os.Args[1] == "restore" || os.Args[1] == "verify-backup" || os.Args[1] == "repack-files") {
 		return archiveCommand(os.Args[1], os.Args[2:])
 	}
 	c, err := readConfig(os.Args[1:])

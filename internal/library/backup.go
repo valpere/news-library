@@ -75,23 +75,11 @@ func primaryRefs(db *sql.DB, schema int) (map[string]string, error) {
 	if schema < 3 {
 		return refs, nil
 	} // Earlier schemas keep primary text inside SQLite.
-	queries := []string{"SELECT text_path,hash FROM source_versions", "SELECT markdown_path,hash FROM generated_artifacts"}
-	if schema >= 5 {
-		queries = append(queries, "SELECT markdown_path,hash FROM digest_checkpoints")
-	}
-	if schema >= 8 {
-		queries = append(queries, "SELECT text_path,hash FROM delivery_parts")
-	}
-	if schema >= 9 {
-		queries = append(queries, "SELECT markdown_path,hash FROM connection_versions")
-	}
-	if schema >= 11 {
-		queries = append(queries, "SELECT markdown_path,hash FROM article_knowledge", "SELECT response_path,hash FROM knowledge_failures WHERE response_path<>''")
-	}
-	if schema >= 10 {
-		queries = append(queries, "SELECT response_path,hash FROM job_failures WHERE response_path <> ''")
-	}
-	for _, query := range queries {
+	for _, ref := range primaryTables(schema) {
+		query := "SELECT " + ref.column + ",hash FROM " + ref.table
+		if ref.column == "response_path" {
+			query += " WHERE response_path<>''"
+		}
 		rows, err := db.Query(query)
 		if err != nil {
 			return nil, err
@@ -106,11 +94,13 @@ func primaryRefs(db *sql.DB, schema int) (map[string]string, error) {
 				err = errors.New("invalid primary hash")
 				break
 			}
-			expected := filepath.Join("digests", hash+".md")
-			if query == "SELECT text_path,hash FROM source_versions" {
-				expected = filepath.Join("texts", hash+".txt")
+			kind, extension := "digests", ".md"
+			if ref.table == "source_versions" {
+				kind, extension = "texts", ".txt"
 			}
-			if path != expected {
+			expected, _ := blobPath(kind, hash) // Hash and kind were validated above.
+			legacy := filepath.Join(kind, hash+extension)
+			if path != expected && path != legacy {
 				err = errors.New("invalid primary reference")
 				break
 			}
@@ -249,8 +239,14 @@ func transferFileAs(source, destination, relative, targetRelative, hash string) 
 	if actual != hash {
 		return BackupFile{}, errors.New("primary file hash mismatch")
 	}
-	if err = syncDirectory(filepath.Dir(target)); err != nil {
-		return BackupFile{}, err
+	// Every shard directory entry must be durable, not just the leaf file.
+	for dir := filepath.Dir(target); ; dir = filepath.Dir(dir) {
+		if err = syncDirectory(dir); err != nil {
+			return BackupFile{}, err
+		}
+		if dir == filepath.Clean(destination) || dir == filepath.Dir(dir) {
+			break
+		}
 	}
 	return BackupFile{Path: targetRelative, Hash: hash, Size: size}, nil
 }
@@ -423,6 +419,41 @@ func VerifyBackup(source string) (BackupManifest, error) {
 	return manifest, nil
 }
 func Restore(ctx context.Context, source, destination string) error {
+	return restore(ctx, source, destination, false)
+}
+
+// RepackFiles restores a verified backup into a new root with sharded paths.
+// Source data stays untouched and incomplete output cannot be opened.
+func RepackFiles(ctx context.Context, source, destination string) error {
+	// Resolve parent aliases before reserving output: never create it inside
+	// the input backup, even when the caller uses a symlink to its parent.
+	sourcePath, err := filepath.EvalSymlinks(source)
+	if err != nil {
+		return err
+	}
+	sourcePath, err = filepath.Abs(sourcePath)
+	if err != nil {
+		return err
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(destination))
+	if err != nil {
+		return err
+	}
+	target, err := filepath.Abs(filepath.Join(parent, filepath.Base(destination)))
+	if err != nil {
+		return err
+	}
+	relative, err := filepath.Rel(sourcePath, target)
+	if err != nil {
+		return err
+	}
+	if relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))) {
+		return errors.New("repack output must be outside the source backup")
+	}
+	return restore(ctx, sourcePath, target, true)
+}
+
+func restore(ctx context.Context, source, destination string, repack bool) error {
 	manifest, err := VerifyBackup(source)
 	if err != nil {
 		return err
@@ -440,6 +471,11 @@ func Restore(ctx context.Context, source, destination string) error {
 			return ctx.Err()
 		}
 		if _, err = transferFile(source, output, file.Path, file.Hash); err != nil {
+			return err
+		}
+	}
+	if repack {
+		if err = repackCopiedFiles(ctx, output, manifest.Schema); err != nil {
 			return err
 		}
 	}

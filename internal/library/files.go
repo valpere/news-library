@@ -12,7 +12,10 @@ import (
 
 type Files struct{ Root string }
 
-func (f Files) Put(kind string, data []byte) (string, error) {
+// blobPath takes a validated SHA-256 hex hash and distributes primary files
+// over its first four character pairs.
+// Cache bodies keep their existing layout and cleanup policy.
+func blobPath(kind, hash string) (string, error) {
 	var extension string
 	switch kind {
 	case "texts":
@@ -20,12 +23,19 @@ func (f Files) Put(kind string, data []byte) (string, error) {
 	case "digests":
 		extension = ".md"
 	case "cache/http":
-		extension = ".body"
+		return filepath.Join(kind, hash+".body"), nil
 	default:
 		return "", errors.New("invalid blob kind")
 	}
+	return filepath.Join(kind, hash[:2], hash[2:4], hash[4:6], hash[6:8], hash+extension), nil
+}
+
+func (f Files) Put(kind string, data []byte) (string, error) {
 	hash := fmt.Sprintf("%x", sha256.Sum256(data))
-	relative := filepath.Join(kind, hash+extension)
+	relative, err := blobPath(kind, hash)
+	if err != nil {
+		return "", err
+	}
 	path := filepath.Join(f.Root, relative)
 	if _, err := os.Stat(path); err == nil {
 		_, err = f.Read(relative, hash)
