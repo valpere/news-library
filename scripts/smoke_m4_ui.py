@@ -1,4 +1,5 @@
 """Offline M4 preview and real CLI backup/restore acceptance; no Telegram calls."""
+import sqlite3
 import json
 import os
 from pathlib import Path
@@ -52,8 +53,9 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='m4-smoke-') as directory
             page.locator('textarea[name=text]').fill('Saved source for backup and Telegram preview <script>unsafe()</script>.')
             page.get_by_role('button',name='Зберегти текст',exact=True).click()
             page.locator('#digest').wait_for(timeout=15000)
-            page.get_by_role('button',name='Оцінити 2',exact=True).click()
-            page.get_by_role('button',name='Відкласти',exact=True).click()
+            page.locator('select[name=score]').select_option('2')
+            page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
+            assert page.request.post(origin+'/items/1/placement',form={'placement':'deferred'},max_redirects=0).status==303
             page.get_by_role('link',name='Telegram-добірки',exact=True).click()
             assert 'Доставка вимкнена' in page.locator('body').inner_text()
             page.get_by_role('button',name='Підготувати добірку',exact=True).click()
@@ -69,8 +71,9 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='m4-smoke-') as directory
             restored,restored_origin=start(work/'restored')
             try:
                 page.goto(restored_origin+'/items/1')
-                assert 'оцінка: 2' in page.locator('body').inner_text()
-                assert 'Відкладені' in page.locator('body').inner_text()
+                assert 'корисність: Низька' in page.locator('body').inner_text()
+                with sqlite3.connect(work/'restored'/'library.sqlite') as db:
+                    assert db.execute('SELECT placement FROM items WHERE id=1').fetchone()[0]=='deferred'
                 assert 'Фонове виконання призупинено' in page.locator('body').inner_text()
                 page.goto(restored_origin+'/deliveries/1')
                 assert 'Результат невідомий' in page.locator('h2').inner_text()

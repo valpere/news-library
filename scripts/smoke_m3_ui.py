@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
             page.get_by_text('Вставити текст вручну',exact=True).click()
             page.locator('textarea[name=text]').fill('A database keeps information after a restart. <script>unsafe()</script>')
             page.get_by_role('button',name='Зберегти текст',exact=True).click()
-            page.get_by_role('button',name='Відкласти',exact=True).click()
+            assert page.request.post(origin+'/items/1/placement',form={'placement':'deferred'},max_redirects=0).status==303
             with sqlite3.connect(Path(data)/'library.sqlite') as db:
                 deadline=time.monotonic()+15
                 while time.monotonic()<deadline:
@@ -67,7 +67,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
             page.goto(origin+'/browse')
             page.locator('input[name=q]').fill('persistent storage')
             page.locator('select[name=mode]').select_option('vector')
-            page.locator('select[name=placement]').select_option('deferred')
+            page.goto(origin+'/browse?placement=deferred&q=persistent+storage&mode=vector')
             page.get_by_role('button',name='Знайти',exact=True).click()
             assert page.locator('article').count()==1
             assert 'A database' in page.locator('article').inner_text()

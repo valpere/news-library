@@ -67,7 +67,8 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='news-library-knowledge-s
                 assert 'Теги моделі: sqlite' in page.locator('#knowledge').inner_text()
                 assert 'Як відновити чергу без втрат?' in page.locator('#knowledge').inner_text()
                 if index == 0:
-                    page.get_by_role('button',name='Оцінити 2',exact=True).click()
+                    page.locator('select[name=score]').select_option('2')
+                    page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
             assert Gateway.calls == {'digest':2,'metadata':2,'links':1},Gateway.calls
             for item_id in ids:
                 page.goto(f'{origin}/items/{item_id}')
