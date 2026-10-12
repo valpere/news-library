@@ -26,6 +26,10 @@ def archive(entries):
 
 
 class CouncilTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        (ROOT/'tmp').mkdir(exist_ok=True)
+
     def test_snapshot_rejects_runtime_paths_and_traversal(self):
         for name in ['../outside','.env','.env.private','data/private.md']:
             with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as d:
