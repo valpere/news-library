@@ -529,3 +529,16 @@ func TestChatRejectedBareURLDoesNotCallPlannerOrQueueFetch(t *testing.T) {
 		t.Fatal(calls, jobs, reply)
 	}
 }
+
+func TestChatPausedBackgroundIsVisible(t *testing.T) {
+	_, w := testWeb(t)
+	w.BackgroundPaused = true
+	rw := webRequest(w, "GET", "/", nil, nil)
+	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "Фонове виконання призупинено") {
+		t.Fatal(rw.Code, rw.Body.String())
+	}
+	_, reply := chatTurn(t, w, ChatSession{}, "", "queue", "")
+	if !strings.Contains(reply.Message, "Фонове виконання призупинено") {
+		t.Fatal(reply)
+	}
+}

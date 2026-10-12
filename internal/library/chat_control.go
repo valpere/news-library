@@ -485,7 +485,11 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 				return ChatReply{}, err
 			}
 		}
-		return ChatReply{Message: fmt.Sprintf("Отримання тексту: %d · Дайджест у роботі: %d · Невдалих дайджестів: %d · Без тексту: %d.\nДообробка: ще не почато %d, незавершено %d, у роботі %d, завершено %d, потребують виправлення причини %d.\nПошук за змістом: %s.", sourcePending, digestPending, digestFailed, withoutText, summary.New, summary.Continue, summary.Active, summary.Done, summary.Blocked, w.Store.EmbeddingStatus()), Actions: []ChatSuggestion{{"Дообробити наступні 5", "complete", "5"}, {"Дообробити решту", "complete", "500"}, {"Повторити невдалі дайджести", "retry_digests", ""}}}, nil
+		reply := ChatReply{Message: fmt.Sprintf("Отримання тексту: %d · Дайджест у роботі: %d · Невдалих дайджестів: %d · Без тексту: %d.\nДообробка: ще не почато %d, незавершено %d, у роботі %d, завершено %d, потребують виправлення причини %d.\nПошук за змістом: %s.", sourcePending, digestPending, digestFailed, withoutText, summary.New, summary.Continue, summary.Active, summary.Done, summary.Blocked, w.Store.EmbeddingStatus()), Actions: []ChatSuggestion{{"Дообробити наступні 5", "complete", "5"}, {"Дообробити решту", "complete", "500"}, {"Повторити невдалі дайджести", "retry_digests", ""}}}
+		if w.BackgroundPaused {
+			reply.Message += "\nФонове виконання призупинено; задачі залишаються в черзі до запуску робітників."
+		}
+		return reply, nil
 	case "complete":
 		limit := command.Limit
 		if limit == 0 {
@@ -680,6 +684,8 @@ func (w *Web) handleChatTurn(r *http.Request, id string, input ChatInput) (ChatS
 						planState.Cards[i].Item.Error = ""
 						planState.Cards[i].Item.Title = boundedKnowledgeText(planState.Cards[i].Item.Title, 200)
 						planState.Cards[i].Item.Tags = boundedKnowledgeText(planState.Cards[i].Item.Tags, 200)
+						planState.Cards[i].Item.URL = boundedKnowledgeText(planState.Cards[i].Item.URL, 512)
+						planState.Cards[i].Item.OriginalURL = boundedKnowledgeText(planState.Cards[i].Item.OriginalURL, 512)
 					}
 					ctx, cancel := context.WithTimeout(r.Context(), timeout)
 					command, err = w.ChatPlanner.PlanChat(ctx, w.ChatModel, ChatPlanInput{Message: input.Text, State: planState, History: history, Vocabulary: vocabulary, CurrentTime: time.Now().In(w.zone).Format(time.RFC3339)})
