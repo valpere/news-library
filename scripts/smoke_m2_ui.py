@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
             page.get_by_role('button',name='Додати URL',exact=True).click()
             page.get_by_role('heading',name='Відсіяно правилами',exact=True).wait_for()
             assert Gateway.calls == 0
-            assert page.locator('input[name=score]').count() == 0
+            assert page.locator('select[name=score]').count() == 0
             page.get_by_text('Рішення правил',exact=True).click()
             assert 'commercial: 95%' in page.locator('body').inner_text()
             # Manual input is saved and indexed even while rejected.
@@ -68,13 +68,14 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
             page.locator('#digest').wait_for(timeout=15000)
             assert Gateway.calls == 1
             assert 'Confidence 73%' in page.locator('#interest-prediction').inner_text()
-            page.get_by_role('button',name='Оцінити 2',exact=True).click()
+            page.locator('select[name=score]').select_option('2')
+            page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
             page.get_by_text('Якість дайджесту',exact=True).click()
             page.locator('select[name=quality]').select_option('inaccurate')
             page.locator('textarea[name=note]').fill('Fixture feedback: useful source, flawed digest')
             first_digest = page.locator('input[name=digest]').first.input_value()
             page.get_by_role('button',name='Зберегти відгук',exact=True).click()
-            assert 'оцінка: 2' in page.locator('body').inner_text()
+            assert 'корисність: Низька' in page.locator('body').inner_text()
             assert Gateway.calls == 1
             page.get_by_role('button',name='Створити нову версію дайджесту',exact=True).click()
             page.get_by_text('Оновлюється дайджест.',exact=False).wait_for()

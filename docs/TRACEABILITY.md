@@ -179,3 +179,11 @@ slot loss; chat_test.go перевіряє generic cloud question → typed rati
 помилкового індексу з назви статті/числа оцінки. test_live_chat_smoke.py —
 opt-in guard, local endpoint boundary, auth-free recorded evidence й fake
 upstream failure. Live output зберігається локально в tmp, не є routine CI.
+
+
+Додаткове приймання estimative usefulness: TestUsefulnessScaleAndLegacyMigration,
+TestUsefulnessFiltersDoNotReinterpretLegacyNumbers,
+TestChatUsefulnessExplicitLabelsAndAllUnread та TestWebUsefulnessAndReadAPIScale
+перевіряють версії шкали, збереження legacy/unknown dates, explicit provenance,
+словесні фільтри й незалежність прочитання. Повне приймання інших partial
+вимог цими тестами не підміняється.

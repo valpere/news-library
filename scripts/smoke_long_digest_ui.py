@@ -44,14 +44,15 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-long-smoke
             assert 'Оброблено частинами:' in page.locator('#digest').inner_text()
             expect(page.locator('details pre').first).to_have_text(source.strip())
             assert Gateway.calls>2
-            page.get_by_role('button',name='Оцінити 2',exact=True).click()
+            page.locator('select[name=score]').select_option('2')
+            page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
             with page.expect_download() as info:page.get_by_role('link',name='Markdown',exact=True).click()
             assert 'частин:' in Path(info.value.path()).read_text()
             page.screenshot(path=str(root/'tmp/smoke-long-digest.png'),full_page=True)
             # Several periodic cleanups must leave every primary result intact.
             page.wait_for_timeout(2200);page.reload()
             assert 'Оброблено частинами:' in page.locator('#digest').inner_text()
-            assert 'оцінка: 2' in page.locator('body').inner_text()
+            assert 'корисність: Низька' in page.locator('body').inner_text()
             browser.close()
     finally:
         if process.poll() is None:process.send_signal(signal.SIGTERM);process.wait(timeout=15)

@@ -191,7 +191,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 			return s
 		}, "states": func() []string {
 			return []string{"queued", "fetching", "ready", "needs_input", "retry_wait", "failed", "enriching", "digest_retry_wait", "digest_failed", "filtered"}
-		}, "quickScores": func() []int { return []int{0, 1, 2} }, "date": func(raw string) string {
+		}, "ratingScore": func(n int64) sql.NullInt64 { return sql.NullInt64{Int64: n, Valid: true} }, "numberString": func(n int64) string { return strconv.FormatInt(n, 10) }, "usefulnessLevels": usefulnessLevels, "ratingLabel": ratingLabel, "usefulnessFilterLabel": usefulnessFilterLabel, "date": func(raw string) string {
 			t, err := time.Parse(time.RFC3339Nano, raw)
 			if err != nil {
 				return raw
@@ -330,7 +330,7 @@ func (w *Web) renderStatus(rw http.ResponseWriter, name string, data pageData, s
 }
 func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := Filters{Category: q.Get("category"), Query: q.Get("q"), Placement: q.Get("placement"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
+	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), Placement: q.Get("placement"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
 	for _, tag := range strings.Split(q.Get("tags"), ",") {
 		if tag = strings.TrimSpace(tag); tag != "" {
 			f.Tags = append(f.Tags, tag)
@@ -612,7 +612,14 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 			}
 			assessed = &t
 		}
-		err = w.Store.RateShown(id, score, source, digest, assessed, form.Get("reason"))
+		switch form.Get("scale") {
+		case UsefulnessScale:
+			err = w.Store.RateUsefulnessShown(id, score, source, digest, assessed, form.Get("reason"))
+		case "", LegacyRatingScale:
+			err = w.Store.RateShown(id, score, source, digest, assessed, form.Get("reason"))
+		default:
+			err = errors.New("невідома шкала корисності")
+		}
 	default:
 		http.NotFound(rw, r)
 		return

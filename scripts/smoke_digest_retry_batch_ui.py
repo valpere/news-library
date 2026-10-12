@@ -72,7 +72,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-batch-retr
                 page.goto(f'{origin}/items/{item_id}')
                 page.locator('#digest').wait_for(timeout=15000)
                 assert 'Preserved source' in page.locator('pre').all_text_contents()[0]
-                assert page.locator('input[name=score]').count() > 0
+                assert page.locator('select[name=score]').count() > 0
             assert Gateway.calls == 4
             page.goto(f'{origin}/digest-retries')
             assert page.locator('input[name=selection]').count() == 0

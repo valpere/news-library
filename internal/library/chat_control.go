@@ -91,7 +91,7 @@ func chatLocalCommand(input ChatInput, state ChatState) (ChatCommand, bool, erro
 		switch input.Event {
 		case "inbox", "next", "queue", "retry_digests", "help", "index":
 		case "find":
-			c = ChatCommand{Action: "clarify", Question: "Про що знайти матеріали? Можна вказати тему, категорію, теги, прочитане чи власну оцінку.", Pending: "search"}
+			c = ChatCommand{Action: "clarify", Question: "Про що знайти матеріали? Можна вказати тему, категорію, теги, прочитане чи рівень особистої корисності.", Pending: "search"}
 		case "clear":
 			c.Action = "reset_search"
 		case "complete":
@@ -134,11 +134,15 @@ func chatLocalCommand(input ChatInput, state ChatState) (ChatCommand, bool, erro
 				return c, true, err
 			}
 			if len(parts) == 3 {
-				score, e := strconv.ParseInt(parts[2], 10, 64)
-				if e != nil {
-					return c, true, e
+				if _, ok := parseUsefulness(parts[2]); ok {
+					c.Usefulness = parts[2]
+				} else {
+					score, e := strconv.ParseInt(parts[2], 10, 64)
+					if e != nil {
+						return c, true, e
+					}
+					c.Score = &score
 				}
-				c.Score = &score
 			}
 		default:
 			return c, true, errors.New("невідома кнопка чату")
@@ -159,6 +163,12 @@ func chatLocalCommand(input ChatInput, state ChatState) (ChatCommand, bool, erro
 			return pending, true, nil
 		}
 		if pending.Action == "item" {
+			if pending.ItemAction == "rate" && pending.Usefulness == "" && pending.Score == nil {
+				if _, ok := parseUsefulness(text); ok {
+					pending.Usefulness = text
+					return pending, true, nil
+				}
+			}
 			if n, e := strconv.ParseInt(text, 10, 64); e == nil && n >= 0 {
 				if pending.Index == 0 && n >= 1 && n <= int64(len(state.Cards)) {
 					pending.Index = int(n)
@@ -176,6 +186,14 @@ func chatLocalCommand(input ChatInput, state ChatState) (ChatCommand, bool, erro
 		}
 	}
 
+	if known, ok := chatKnownRating(text, ChatCommand{}); ok {
+		for _, level := range usefulnessLevels() {
+			if chatExplicitUsefulness(text, level.Label) {
+				known.Usefulness = level.Label
+				return known, true, nil
+			}
+		}
+	}
 	if action := chatProcessingQuestion(text); action != "" {
 		return ChatCommand{Action: action}, true, nil
 	}
@@ -184,7 +202,9 @@ func chatLocalCommand(input ChatInput, state ChatState) (ChatCommand, bool, erro
 		return ChatCommand{Action: "add"}, true, nil
 	}
 	switch lower {
-	case "непрочитані", "непрочитані вхідні", "покажи непрочитані", "покажи непрочитані вхідні":
+	case "шкала корисності", "поясни шкалу корисності", "що означають рівні корисності":
+		return ChatCommand{Action: "answer", Answer: usefulnessGuide()}, true, nil
+	case "непрочитані", "непрочитані вхідні", "покажи непрочитані", "покажи непрочитані вхідні", "непрочитані матеріали", "покажи непрочитані матеріали":
 		return ChatCommand{Action: "inbox"}, true, nil
 	case "далі", "наступні", "наступні 5", "покажи наступні", "покажи наступні 5":
 		return ChatCommand{Action: "next"}, true, nil
@@ -236,7 +256,7 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 		from *string
 		to   *string
 		max  int
-	}{{p.Query, &f.Query, 4096}, {p.Category, &f.Category, 600}, {p.Placement, &f.Placement, 32}, {p.Read, &f.Read, 8}, {p.Rating, &f.Rating, 24}, {p.State, &f.State, 32}, {p.Filter, &f.Filter, 32}, {p.ConfidenceMin, &f.ConfidenceMin, 16}, {p.ConfidenceMax, &f.ConfidenceMax, 16}, {p.Sort, &f.Sort, 32}, {p.Direction, &f.Direction, 8}, {p.Mode, &state.Mode, 16}} {
+	}{{p.Query, &f.Query, 4096}, {p.Category, &f.Category, 600}, {p.Placement, &f.Placement, 32}, {p.Read, &f.Read, 8}, {p.Rating, &f.Rating, 24}, {p.Usefulness, &f.Usefulness, 64}, {p.State, &f.State, 32}, {p.Filter, &f.Filter, 32}, {p.ConfidenceMin, &f.ConfidenceMin, 16}, {p.ConfidenceMax, &f.ConfidenceMax, 16}, {p.Sort, &f.Sort, 32}, {p.Direction, &f.Direction, 8}, {p.Mode, &state.Mode, 16}} {
 		if pair.from != nil {
 			if len(*pair.from) > pair.max || !utf8.ValidString(*pair.from) {
 				return errors.New("критерій пошуку завеликий")
@@ -263,7 +283,7 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 	for _, pair := range []struct {
 		value   string
 		allowed []string
-	}{{f.Placement, []string{"", "inbox", "library", "deferred"}}, {f.Read, []string{"", "0", "1"}}, {f.Filter, []string{"", "passed", "rejected", "overridden", "not_checked"}}, {f.State, []string{"", "queued", "fetching", "ready", "enriching", "needs_input", "retry_wait", "digest_failed", "digest_retry_wait", "filtered", "failed"}}, {f.Sort, []string{"", "added", "rating", "confidence", "relevance"}}, {f.Direction, []string{"", "asc", "desc"}}} {
+	}{{f.Placement, []string{"", "inbox", "library", "deferred"}}, {f.Read, []string{"", "0", "1"}}, {f.Filter, []string{"", "passed", "rejected", "overridden", "not_checked"}}, {f.State, []string{"", "queued", "fetching", "ready", "enriching", "needs_input", "retry_wait", "digest_failed", "digest_retry_wait", "filtered", "failed"}}, {f.Sort, []string{"", "added", "rating", "usefulness", "confidence", "relevance"}}, {f.Direction, []string{"", "asc", "desc"}}} {
 		valid := false
 		for _, v := range pair.allowed {
 			if v == pair.value {
@@ -272,6 +292,15 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 		}
 		if !valid {
 			return errors.New("невідомий критерій пошуку")
+		}
+	}
+	if f.Usefulness != "" && f.Usefulness != "unrated" && f.Usefulness != "legacy" {
+		if n, ok := parseUsefulness(f.Usefulness); ok {
+			f.Usefulness = strconv.FormatInt(n, 10)
+		}
+		n, e := strconv.ParseInt(f.Usefulness, 10, 64)
+		if e != nil || n < 0 || n > 6 {
+			return errors.New("невідомий рівень корисності")
 		}
 	}
 	if f.Rating != "" && f.Rating != "unrated" {
@@ -395,6 +424,7 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 		state.Pending = "item"
 		if command.Action == "item" && command.ItemAction == "rate" {
 			command.Score = nil
+			command.Usefulness = ""
 		}
 		state.PendingCommand = command
 		state.PendingMutation = true
@@ -467,7 +497,7 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 			return ""
 		}(), Cards: cards, Actions: []ChatSuggestion{{"Переглянути непрочитане", "inbox", ""}, {"Стан обробки", "queue", ""}}}, nil
 	case "inbox":
-		state.Filters = Filters{Placement: "inbox", Read: "0", Sort: "added", Direction: "asc"}
+		state.Filters = Filters{Read: "0", Sort: "added", Direction: "asc"}
 		state.Mode = "fts"
 		state.HasSearch = true
 		return w.chatSearch(r, state)
@@ -559,14 +589,21 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 		card := state.Cards[command.Index-1]
 		id := card.Item.ID
 		if command.ItemAction == "rate" {
+			usefulnessScore, validUsefulness := parseUsefulness(command.Usefulness)
+			explicitUsefulness := validUsefulness && (input.Event == "item" || chatExplicitUsefulness(input.Text, command.Usefulness) || chatExplicitUsefulness(pendingText, command.Usefulness))
 			explicitScore := command.Score != nil && (input.Event == "item" || (chatExplicitNumber(input.Text, *command.Score) || chatExplicitNumber(pendingText, *command.Score)))
-			if !explicitScore {
+			if !explicitScore && !explicitUsefulness {
 				command.Score = nil
+				command.Usefulness = ""
 				state.Pending = "item"
 				state.PendingCommand = command
 				state.PendingMutation = true
 				state.PendingText = input.Text
-				return ChatReply{Kind: "question", Message: fmt.Sprintf("Яку власну оцінку дати матеріалу №%d? Напишіть невід’ємне ціле число.", command.Index)}, nil
+				actions := []ChatSuggestion{}
+				for _, level := range usefulnessLevels() {
+					actions = append(actions, ChatSuggestion{level.Label, "item", fmt.Sprintf("rate:%d:%s", command.Index, level.Label)})
+				}
+				return ChatReply{Kind: "question", Message: fmt.Sprintf("Яка особиста корисність матеріалу №%d для вас зараз? Оберіть рівень або напишіть його назву. Ще не оцінено — окремий стан, не нульова корисність.", command.Index), Actions: actions}, nil
 			}
 			if card.SourceID == 0 || !card.CanRate {
 				return ChatReply{Message: "Текст або дайджест цього матеріалу не було показано. Спершу відкрийте картку й доповніть текст або відновіть файли, щоб оцінити побачене."}, nil
@@ -575,7 +612,14 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 			if card.DigestID > 0 {
 				digest = &card.DigestID
 			}
-			if err := w.Store.RateShown(id, *command.Score, &card.SourceID, digest, nil, "Оцінка через діалог"); err != nil {
+			var ratingError error
+			if explicitUsefulness {
+				now := time.Now()
+				ratingError = w.Store.RateUsefulnessShown(id, usefulnessScore, &card.SourceID, digest, &now, "Особиста корисність через діалог")
+			} else {
+				ratingError = w.Store.RateShown(id, *command.Score, &card.SourceID, digest, nil, "Історична числова оцінка через діалог")
+			}
+			if err := ratingError; err != nil {
 				return ChatReply{}, err
 			}
 		} else {
@@ -804,7 +848,7 @@ func chatKnownRating(text string, question ChatCommand) (ChatCommand, bool) {
 		}
 	}
 
-	return ChatCommand{Action: "item", ItemAction: "rate", Index: index, Score: question.Score}, true
+	return ChatCommand{Action: "item", ItemAction: "rate", Index: index, Score: question.Score, Usefulness: question.Usefulness}, true
 }
 
 var chatItemReference = regexp.MustCompile(`^(?:№|номер|матеріал[а-яіїєґ]*|картк[а-яіїєґ]*)\s*(?:№\s*)?([1-5])(?:\D|$)`)

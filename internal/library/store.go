@@ -55,6 +55,9 @@ var schemaV12 string
 //go:embed schema_v13.sql
 var schemaV13 string
 
+//go:embed schema_v14.sql
+var schemaV14 string
+
 type Store struct {
 	KnowledgeEnabled bool
 	DB               *sql.DB
@@ -71,6 +74,7 @@ type Item struct {
 	Read                                                      bool
 	Selected                                                  sql.NullInt64
 	Score                                                     sql.NullInt64
+	ScoreScale                                                string
 	Tags                                                      string
 	FilterState                                               string
 	Confidence                                                sql.NullFloat64
@@ -85,6 +89,7 @@ type RatingEvent struct {
 	AssessedAt                sql.NullString
 	SourceVersionID, DigestID sql.NullInt64
 	Reason                    string
+	Scale                     string
 }
 type Job struct {
 	ID, ItemID                                 int64
@@ -100,6 +105,7 @@ type Job struct {
 	ChunkLimit, ChunkMaxParts                  int
 }
 type Filters struct {
+	Usefulness                                             string
 	Category                                               string
 	Query, Placement, Rating, Read, State, Sort, Direction string
 	Filter, ConfidenceMin, ConfidenceMax                   string
@@ -170,6 +176,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 13 {
 			_, err = tx.Exec(schemaV13)
+		}
+		if err == nil && version < 14 {
+			_, err = tx.Exec(schemaV14)
 		}
 		if err == nil {
 			err = tx.Commit()
@@ -490,6 +499,12 @@ func (s *Store) Rate(id, score int64, source *int64, assessed *time.Time, reason
 	return s.RateShown(id, score, source, nil, assessed, reason)
 }
 func (s *Store) RateShown(id, score int64, source, digest *int64, assessed *time.Time, reason string) error {
+	return s.rateShown(id, score, source, digest, assessed, reason, LegacyRatingScale)
+}
+func (s *Store) rateShown(id, score int64, source, digest *int64, assessed *time.Time, reason, scale string) error {
+	if scale == UsefulnessScale && (score < 0 || score > 6) {
+		return errors.New("оберіть один із семи рівнів особистої корисності")
+	}
 	if score < 0 {
 		return errors.New("оцінка має бути невід’ємним цілим")
 	}
@@ -505,7 +520,7 @@ func (s *Store) RateShown(id, score int64, source, digest *int64, assessed *time
 	if digest != nil {
 		did = *digest
 	}
-	_, err := s.DB.Exec("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason) VALUES(?,?,?,?,?,?,?)", id, score, nowUTC(), at, sid, did, reason)
+	_, err := s.DB.Exec("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason,scale) VALUES(?,?,?,?,?,?,?,?)", id, score, nowUTC(), at, sid, did, reason, scale)
 	return err
 }
 func (s *Store) SetPlacement(id int64, value string) error {
@@ -560,12 +575,12 @@ func (s *Store) SetTags(id int64, tags []string) error {
 }
 
 const confidenceExpr = `(SELECT p.probability FROM generated_artifacts a LEFT JOIN interest_predictions p ON p.digest_id=a.id WHERE a.snapshot_id=i.selected_snapshot ORDER BY a.id DESC LIMIT 1)`
-const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.placement,i.state,i.error,i.is_read,i.selected_snapshot,(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM items i`
+const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.placement,i.state,i.error,i.is_read,i.selected_snapshot,(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),coalesce((SELECT scale FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),''),(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM items i`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var i Item
 	var tags sql.NullString
-	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.Placement, &i.State, &i.Error, &i.Read, &i.Selected, &i.Score, &tags, &i.FilterState, &i.Confidence)
+	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.Placement, &i.State, &i.Error, &i.Read, &i.Selected, &i.Score, &i.ScoreScale, &tags, &i.FilterState, &i.Confidence)
 	i.Tags = tags.String
 	return i, err
 }
@@ -595,7 +610,7 @@ func (s *Store) Snapshots(id int64) ([]Snapshot, error) {
 	return result, rows.Err()
 }
 func (s *Store) Ratings(id int64) ([]RatingEvent, error) {
-	rows, err := s.DB.Query("SELECT id,item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason FROM rating_events WHERE item_id=? ORDER BY id DESC", id)
+	rows, err := s.DB.Query("SELECT id,item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason,scale FROM rating_events WHERE item_id=? ORDER BY id DESC", id)
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +618,7 @@ func (s *Store) Ratings(id int64) ([]RatingEvent, error) {
 	var result []RatingEvent
 	for rows.Next() {
 		var v RatingEvent
-		if err = rows.Scan(&v.ID, &v.ItemID, &v.Score, &v.RecordedAt, &v.AssessedAt, &v.SourceVersionID, &v.DigestID, &v.Reason); err != nil {
+		if err = rows.Scan(&v.ID, &v.ItemID, &v.Score, &v.RecordedAt, &v.AssessedAt, &v.SourceVersionID, &v.DigestID, &v.Reason, &v.Scale); err != nil {
 			return nil, err
 		}
 		result = append(result, v)
@@ -671,6 +686,20 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		query += " AND " + scoreExpr + "=?"
 		args = append(args, f.Rating)
 	}
+	scaleExpr := "(SELECT scale FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1)"
+	usefulnessExpr := "CASE WHEN " + scaleExpr + "='" + UsefulnessScale + "' THEN " + scoreExpr + " END"
+	if f.Usefulness == "unrated" {
+		query += " AND " + scoreExpr + " IS NULL"
+	} else if f.Usefulness == "legacy" {
+		query += " AND " + scaleExpr + "='" + LegacyRatingScale + "'"
+	} else if f.Usefulness != "" {
+		n, err := strconv.ParseInt(f.Usefulness, 10, 64)
+		if err != nil || n < 0 || n > 6 {
+			return nil, errors.New("невідомий рівень корисності")
+		}
+		query += " AND " + usefulnessExpr + "=?"
+		args = append(args, n)
+	}
 	if len(f.Tags) > 0 {
 		query += " AND (EXISTS(SELECT 1 FROM item_tags WHERE item_id=i.id AND tag IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.Tags)), ",") + ")) OR EXISTS(SELECT 1 FROM article_knowledge k,json_each(k.tags_json) t WHERE k.item_id=i.id AND k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND t.value IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.Tags)), ",") + ")))"
 		for range 2 {
@@ -686,6 +715,8 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 	switch f.Sort {
 	case "confidence":
 		query += " ORDER BY " + confidenceExpr + " IS NULL," + confidenceExpr + " " + direction + ",i.id ASC"
+	case "usefulness":
+		query += " ORDER BY " + usefulnessExpr + " IS NULL," + usefulnessExpr + " " + direction + ",i.id ASC"
 	case "rating":
 		query += " ORDER BY " + scoreExpr + " IS NULL," + scoreExpr + " " + direction + ",i.id ASC"
 	case "relevance":

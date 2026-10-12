@@ -320,6 +320,7 @@ func TestCacheV5MigrationPreservesBodyWithoutInventingValidators(t *testing.T) {
 		"DROP TABLE embedding_runs",
 		"ALTER TABLE cache_entries DROP COLUMN response_headers",
 		"ALTER TABLE cache_entries DROP COLUMN checked_at",
+		"ALTER TABLE rating_events DROP COLUMN scale",
 		"PRAGMA user_version=5",
 	} {
 		if _, err = s.DB.Exec(statement); err != nil {
