@@ -170,6 +170,11 @@ def run_agent(name, archive, prompt, documents, directory, timeout):
     snapshot = directory / 'src'
     extract_snapshot(archive, snapshot)
     subprocess.run(['git', 'init', '--quiet', '--template=', str(snapshot)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if name == 'kilo':
+        bootstrap = snapshot / '.kilo' / '.gitignore'
+        if not bootstrap.exists():
+            bootstrap.parent.mkdir(exist_ok=True)
+            bootstrap.write_text('node_modules\npackage.json\npackage-lock.json\npnpm-lock.yaml\nbun.lock\nyarn.lock\n.gitignore\nagent-manager.json')
     if (snapshot / 'review-task.md').exists():
         raise ValueError('reserved review-task.md path already committed')
     (snapshot / 'review-task.md').write_text(prompt)
@@ -198,7 +203,9 @@ def run_agent(name, archive, prompt, documents, directory, timeout):
                 raise ValueError('reviewer timeout')
         if result['exit_code'] != 0:
             raise ValueError('reviewer exited unsuccessfully')
-        if before != fingerprints(snapshot):
+        after = fingerprints(snapshot)
+        if before != after:
+            result['snapshot_changed_files'] = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
             raise ValueError('reviewer changed snapshot; review not accepted')
         raw = (directory / 'stdout.log').read_text()
         report = validate_report(report_text(name, raw), documents, snapshot)
