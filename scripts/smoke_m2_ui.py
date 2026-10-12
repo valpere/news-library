@@ -45,7 +45,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
         with sync_playwright() as pw:
             browser = pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),headless=True,args=['--no-sandbox'])
             page = browser.new_page(viewport={'width':1280,'height':960})
-            page.goto(origin)
+            page.goto(origin+'/browse')
             page.get_by_label('Додати статтю або YouTube').fill('https://example.com/blocked-fixture')
             page.get_by_role('button',name='Додати URL',exact=True).click()
             page.get_by_role('heading',name='Відсіяно правилами',exact=True).wait_for()
@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
             page.locator('textarea[name=text]').fill('Searchable advertisement source')
             page.get_by_role('button',name='Зберегти текст',exact=True).click()
             assert Gateway.calls == 0
-            page.get_by_role('link',name='Особиста бібліотека',exact=True).click()
+            page.goto(origin+'/browse')
             page.locator('input[name=q]').fill('Searchable')
             page.locator('select[name=filter]').select_option('rejected')
             page.get_by_role('button',name='Знайти',exact=True).click()
@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
             assert 'Fixture feedback' in page.locator('body').inner_text()
             assert page.locator('input[name=digest]').first.input_value() == first_digest
             page.screenshot(path=str(root/'tmp/smoke-m2.png'),full_page=True)
-            page.get_by_role('link',name='Особиста бібліотека',exact=True).click()
+            page.goto(origin+'/browse')
             page.locator('input[name=confidence_min]').fill('70')
             page.locator('input[name=confidence_max]').fill('80')
             page.locator('select[name=sort]').select_option('confidence')

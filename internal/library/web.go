@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 )
@@ -29,7 +30,17 @@ var progressJS string
 //go:embed digest.js
 var digestJS string
 
+//go:embed chat.html
+var chatHTML string
+
+//go:embed chat.js
+var chatJS string
+
 type Web struct {
+	chatLock         sync.Mutex
+	ChatPlanner      ChatPlanner
+	ChatModel        string
+	ChatTimeout      time.Duration
 	Store            *Store
 	Cache            *HTTPCache
 	Semantic         *Semantic
@@ -42,6 +53,9 @@ type Web struct {
 	zone             *time.Location
 }
 type pageData struct {
+	Chat                               ChatSession
+	ChatToken                          string
+	Categories, ChatTags               []ChatFacet
 	KnowledgeBatchSummary              KnowledgeBatchSummary
 	KnowledgeBatchToken                string
 	KnowledgeBatchResult               *KnowledgeBatchResult
@@ -115,6 +129,12 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 		return nil, errors.New("invalid local UI origin")
 	}
 	funcs := template.FuncMap{
+		"chatState": func(state string) string {
+			if label := map[string]string{"queued": "У черзі", "fetching": "Отримання тексту", "ready": "Готово", "enriching": "Аналізується", "needs_input": "Потрібен текст", "retry_wait": "Очікує повтору", "digest_failed": "Дайджест не завершено", "digest_retry_wait": "Очікує повтору дайджесту", "filtered": "Відсіяно правилами", "failed": "Помилка"}[state]; label != "" {
+				return label
+			}
+			return "Потребує перевірки"
+		},
 		"retrySelection": retrySelection,
 		"failureLabel":   func(kind string) string { label, _, _ := FailureAdvice(kind); return label },
 		"probability":    func(p float64) string { return strconv.FormatFloat(p, 'g', -1, 64) },
@@ -183,7 +203,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 			}
 			return strconv.FormatInt(n.Int64, 10)
 		}}
-	tmpl, err := template.New("pages").Funcs(funcs).Parse(pages)
+	tmpl, err := template.New("pages").Funcs(funcs).Parse(pages + chatHTML)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +224,14 @@ func (w *Web) Handler() http.Handler {
 	mux.HandleFunc("POST /items/batch", w.addBatch)
 	mux.HandleFunc("POST /connections", w.saveConnection)
 	mux.HandleFunc("POST /connections/{id}", w.saveConnection)
-	mux.HandleFunc("GET /{$}", w.list)
+	mux.HandleFunc("GET /{$}", w.chatHome)
+	mux.HandleFunc("GET /browse", w.list)
+	mux.HandleFunc("POST /chat", w.chatSubmit)
+	mux.HandleFunc("POST /chat/new", w.chatNew)
+	mux.HandleFunc("GET /static/chat.js", func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		rw.Write([]byte(chatJS))
+	})
 	mux.HandleFunc("GET /cache", w.cache)
 	mux.HandleFunc("GET /deliveries", w.deliveryList)
 	mux.HandleFunc("GET /deliveries/{id}", w.deliveryDetail)
@@ -296,7 +323,7 @@ func (w *Web) renderStatus(rw http.ResponseWriter, name string, data pageData, s
 }
 func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := Filters{Query: q.Get("q"), Placement: q.Get("placement"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
+	f := Filters{Category: q.Get("category"), Query: q.Get("q"), Placement: q.Get("placement"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
 	for _, tag := range strings.Split(q.Get("tags"), ",") {
 		if tag = strings.TrimSpace(tag); tag != "" {
 			f.Tags = append(f.Tags, tag)

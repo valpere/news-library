@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-batch-retr
             page = browser.new_page()
             ids = []
             for index in range(2):
-                page.goto(origin)
+                page.goto(origin+'/browse')
                 page.locator('input[name=url]').fill(f'http://127.0.0.1/batch-retry-{index}')
                 page.get_by_role('button',name='Додати URL',exact=True).click()
                 ids.append(page.url.rsplit('/', 1)[1])
@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-batch-retr
                 page.get_by_role('button',name='Зберегти текст',exact=True).click()
                 page.get_by_role('heading',name='Дайджест недоступний',exact=True).wait_for(timeout=15000)
             assert Gateway.calls == 2
-            page.goto(origin)
+            page.goto(origin+'/browse')
             page.get_by_role('link',name='Перезапустити невдалі дайджести пачкою',exact=True).click()
             selected = page.locator('input[name=selection]')
             assert selected.count() == 2

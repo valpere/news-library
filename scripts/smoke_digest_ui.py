@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-digest-smo
             context = browser.new_context(permissions=['clipboard-read','clipboard-write'],viewport={'width':1280,'height':960})
             page = context.new_page()
             def submit_source(url, text):
-                page.goto(origin+'/')
+                page.goto(origin+'/browse')
                 page.get_by_label('Додати статтю або YouTube').fill(url)
                 page.get_by_role('button',name='Додати URL',exact=True).click()
                 page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)

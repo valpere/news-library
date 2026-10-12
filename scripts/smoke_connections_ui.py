@@ -24,7 +24,7 @@ with tempfile.TemporaryDirectory(dir=root / 'tmp', prefix='connections-smoke-') 
                 headless=True, args=['--no-sandbox'])
             page = browser.new_page(viewport={'width':1280, 'height':960})
             for name in ['wal', 'snapshot', 'limits']:
-                page.goto(origin)
+                page.goto(origin+'/browse')
                 page.get_by_label('Додати статтю або YouTube').fill('https://example.com/' + name)
                 page.get_by_role('button', name='Додати URL', exact=True).click()
                 page.get_by_text('Вставити текст вручну', exact=True).click()

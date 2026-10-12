@@ -28,7 +28,7 @@ try:
     with sync_playwright() as pw:
         browser=pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),headless=True,args=['--no-sandbox'])
         page=browser.new_page(viewport={'width':1280,'height':960})
-        page.goto(origin+'/')
+        page.goto(origin+'/browse')
         page.get_by_label('Додати статтю або YouTube').fill('http://127.0.0.1/private-smoke')
         page.get_by_role('button',name='Додати URL',exact=True).click()
         assert page.locator('input[name=score]').count() == 0
@@ -47,7 +47,7 @@ try:
         page.get_by_role('button',name='Зберегти теги',exact=True).click()
         assert '<script>alert(1)</script>' in page.locator('pre').text_content()
         assert page.locator('script').count() == 0
-        page.get_by_role('link',name='Особиста бібліотека',exact=True).click()
+        page.goto(origin+'/browse')
         page.locator('input[name=q]').fill('knowledge')
         page.locator('select[name=placement]').select_option('library')
         page.locator('input[name=rating]').fill('3')
@@ -71,7 +71,7 @@ try:
         assert 'оцінка: 0' in page.locator('body').inner_text()
         assert page.get_by_role('button',name='Позначити непрочитаним',exact=True).count()==1
         assert 'durable queue' in page.locator('pre').text_content()
-        page.goto(origin+'/')
+        page.goto(origin+'/browse')
         page.get_by_label('Додати статтю або YouTube').fill('http://127.0.0.1/private-smoke')
         page.get_by_role('button',name='Додати URL',exact=True).click()
         assert page.url.endswith('/items/1')
@@ -79,7 +79,7 @@ try:
         stop(p)
         p,origin=start(no_worker=True)
         def add_pending(url):
-            page.goto(origin+'/')
+            page.goto(origin+'/browse')
             page.get_by_label('Додати статтю або YouTube').fill(url)
             page.get_by_role('button',name='Додати URL',exact=True).click()
             assert page.get_by_role('heading',name='Посилання збережено',exact=True).count()==1

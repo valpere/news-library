@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-long-smoke
         with sync_playwright() as pw:
             browser=pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),headless=True,args=['--no-sandbox'])
             page=browser.new_page()
-            page.goto(origin)
+            page.goto(origin+'/browse')
             page.get_by_label('Додати статтю або YouTube').fill('http://127.0.0.1/long-fixture')
             page.get_by_role('button',name='Додати URL',exact=True).click()
             page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)

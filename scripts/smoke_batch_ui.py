@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='batch-smoke-') as direct
         with sync_playwright() as pw:
             browser=pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),headless=True,args=['--no-sandbox'])
             page=browser.new_page(viewport={'width':1280,'height':960})
-            page.goto(origin)
+            page.goto(origin+'/browse')
             page.get_by_text('Додати посилання пачкою',exact=True).click()
             page.get_by_label('Посилання — по одному на рядок').fill('https://example.com/one\nnot-a-url\nhttps://example.com/two\nhttps://example.com/one?utm_source=mail')
             page.get_by_role('button',name='Додати пачку',exact=True).click()
@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='batch-smoke-') as direct
             page.get_by_label('Посилання — по одному на рядок').fill('https://example.com/three')
             page.get_by_role('button',name='Додати пачку',exact=True).click()
             assert 'Нових: 1' in page.locator('body').inner_text()
-            page.goto(origin)
+            page.goto(origin+'/browse')
             page.get_by_text('Додати посилання пачкою',exact=True).click()
             urls='\n'.join(f'https://example.com/batch/{i}' for i in range(180))
             page.get_by_label('Посилання — по одному на рядок').fill(urls+'\nhttps://example.com/batch/0')
@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='batch-smoke-') as direct
             process,origin=start(data)
             page.goto(origin+'/items/1')
             assert 'непрочитано' in page.locator('body').inner_text()
-            page.goto(origin)
+            page.goto(origin+'/browse')
             assert page.locator('article').count()>0
             browser.close()
     finally:stop(process)

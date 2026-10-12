@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConfigPrecedenceAndPrivateErrors(t *testing.T) {
@@ -156,5 +157,29 @@ func TestKnowledgeConfigDefaultAndOverrides(t *testing.T) {
 	}
 	if _, err = readConfig([]string{"-env-file", ""}); err == nil || strings.Contains(err.Error(), "bad-private-value") {
 		t.Fatal(err)
+	}
+}
+
+func TestChatConfigPrecedenceAndModelFallback(t *testing.T) {
+	c, e := readConfig([]string{"-env-file", "", "-model", "fixture:cloud"})
+	if e != nil || !c.Chat || c.ChatModel != "fixture:cloud" || c.ChatTimeout != 90*time.Second {
+		t.Fatal(c.Chat, c.ChatModel, c.ChatTimeout, e)
+	}
+	t.Setenv("NEWS_LIBRARY_CHAT_MODEL", "")
+	c, e = readConfig([]string{"-env-file", "", "-model", "fixture:cloud"})
+	if e != nil || c.ChatModel != "fixture:cloud" {
+		t.Fatal(c.ChatModel, e)
+	}
+	t.Setenv("NEWS_LIBRARY_CHAT", "bad-private-value")
+	t.Setenv("NEWS_LIBRARY_CHAT_TIMEOUT", "bad-private-value")
+	c, e = readConfig([]string{"-env-file", "", "-chat=false", "-chat-model", "other:cloud", "-chat-timeout", "12s"})
+	if e != nil || c.Chat || c.ChatModel != "other:cloud" || c.ChatTimeout != 12*time.Second {
+		t.Fatal(c.Chat, c.ChatModel, c.ChatTimeout, e)
+	}
+	if _, e = readConfig([]string{"-env-file", ""}); e == nil || strings.Contains(e.Error(), "bad-private-value") {
+		t.Fatal(e)
+	}
+	if _, e = readConfig([]string{"-env-file", "", "-chat=false", "-chat-timeout", "0s"}); e == nil {
+		t.Fatal("invalid timeout")
 	}
 }
