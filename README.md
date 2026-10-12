@@ -117,8 +117,9 @@ body кількох URL рахується один раз. Первинні `te
 запит повертає помилку; прострочене тіло доступне лише з явним `stale=1`.
 TTL=0 вимикає кешування й умовні запити.
 
-Міграції v1–v10 зберігають ID, чергу та історію оцінок; v3 переносить
-SQL-тексти у файли. Перед оновленням зупиніть старий процес і зробіть копію
+Поточна схема бази — v13. Ранні міграції v1–v10 зберігають ID, чергу
+та історію оцінок; v3 переносить SQL-тексти у файли. v11–v13 додають
+аналіз змісту, квитанції пакетної дообробки та стан діалогу. Перед оновленням зупиніть старий процес і зробіть копію
 каталогу даних. Для відновлення потрібні узгоджена SQLite-копія **та**
 `texts/` і `digests/`; кеш можна пропустити. Шляхи відносні до кореня даних.
 Файли перевіряються за SHA-256; відсутність первинного файла показується
@@ -203,7 +204,7 @@ Fetcher блокує private/loopback/link-local та спеціальні ад�
 redirect. Він не використовує proxy з оточення. UI перевіряє Host.
 На localhost/loopback CSRF-захист вимкнено: POST не потребує токена,
 Origin і browser fetch metadata не перевіряються. Агентські облікові дані не приймаються
-для мутацій; окремий read API з’явиться на M3. Для LAN/VPS потрібні
+для мутацій; реалізований read API надає агентам лише читання. Для LAN/VPS потрібні
 окрема авторизація та TLS, яких M1 ще не надає.
 
 ## Перевірки
@@ -269,10 +270,10 @@ semantic сортування — relevance, можна явно обрати д
 - `GET /api/read/search?q=…&mode=hybrid&placement=deferred&limit=20` — спільні
   UI metadata filters; mode fts/vector/hybrid, default fts, limit1..100.
 - `GET /api/read/items/1` — збережений текст, digest/model provenance і rating history.
-- `GET /api/read/items/1/context` — до4000 UTF-8 bytes saved digest/excerpt,
+- `GET /api/read/items/1/context` — до 4000 UTF-8 bytes saved digest/excerpt,
   власна оцінка з датою/null, source completeness, placement і tags.
 - `GET /api/read/items/1/fragment?start=0&end=100` — source byte boundaries,
-  до16384 bytes; optional `source=ID` дозволяє historical snapshot цього item.
+  до 16384 bytes; optional `source=ID` дозволяє historical snapshot цього item.
 
 GET не ставить read, не генерує текст і не індексує бібліотеку; semantic
 query використовує лише local embedding. Агентські credentials відхиляються
@@ -324,7 +325,7 @@ NEWS_LIBRARY_TELEGRAM_DAILY=09:00
 NEWS_LIBRARY_TELEGRAM_SIZE=5
 ```
 
-User обрав09:00 Europe/Kyiv/до5. Заповніть bot token і numeric chat ID приватно,
+Погоджений розклад — 09:00 Europe/Kyiv, до 5 матеріалів. Заповніть bot token і numeric chat ID приватно,
 потім увімкніть ENABLED=true. Порожній DAILY означає лише на вимогу. Due window
 5min; поза ним або без готових матеріалів persisted missed, без late catchup.
 Bot token не копіюється в backup і не показується у UI/help/errors. Реальних
@@ -465,8 +466,8 @@ Offline browser: `python3 scripts/smoke_knowledge_batch_ui.py` після build.
 
 `NEWS_LIBRARY_CHAT=true` / `-chat` вмикає розуміння природної мови.
 `NEWS_LIBRARY_CHAT_MODEL` / `-chat-model` типово використовує `OLLAMA_MODEL`
-(порожнє значення також означає успадкування); початково `gemma4:cloud`,
-сумісний cloud alias `gemma4:31b-cloud`. `NEWS_LIBRARY_CHAT_TIMEOUT=90s` /
+(порожнє значення також означає успадкування). Типова конфігурація сервісу —
+`gemma4:cloud`; сумісний cloud alias — `gemma4:31b-cloud`. `NEWS_LIBRARY_CHAT_TIMEOUT=90s` /
 `-chat-timeout` обмежує планування (максимум 5m). URL, кнопки й прості команди
 працюють без моделі; `Знайти: тема` дає прямий пошук словами.
 Ці настройки незалежні від `-no-digests`; `-chat=false` вимикає тільки
@@ -486,8 +487,8 @@ Browser smoke використовує ізольовану DB, paused workers �
 
 
 Явна жива перевірка намірів діалогу: після `make build` виконайте
-`python3 minions/live_chat_smoke.py --run-cloud`. Початкова модель
-`gemma4:31b-cloud` (alias `gemma4:cloud`); `--model` дозволяє вибрати іншу
+`python3 minions/live_chat_smoke.py --run-cloud`. Сам helper типово запитує
+`gemma4:31b-cloud`, сумісний із `gemma4:cloud` у конфігурації сервісу; `--model` дозволяє вибрати іншу
 зареєстровану cloud-модель. Тільки loopback Ollama endpoint, без fallback.
 Helper запускає окремий сервіс/синтетичну DB у `./tmp/`, workers paused,
 embeddings/Telegram disabled, перевіряє 13 ходів і зберігає `report.json`

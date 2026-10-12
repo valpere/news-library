@@ -17,7 +17,7 @@
 | FR-07 | UC-02, UC-03 | M1, M2 | AT-07 | passed M1/M2: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go), [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go) |
 | FR-08 | UC-07 | M2 | AT-08 | passed: [TestFeedbackAndRegenerationPreserveExactContext](../internal/library/feedback_test.go) |
 | FR-09 | UC-04 | M1 | AT-09 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
-| FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | partial M1: [TestLeaseRestartRetryAndIdempotency / TestCrashOnLastAttemptTerminates](../internal/library/store_test.go); digest recovery: [TestDigestQueueRecoveryAndRatingContext](../internal/library/digest_test.go); future filter stages planned |
+| FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | partial M1: [TestLeaseRestartRetryAndIdempotency / TestCrashOnLastAttemptTerminates](../internal/library/store_test.go); digest recovery: [TestDigestQueueRecoveryAndRatingContext](../internal/library/digest_test.go); повне приймання M2 потребує окремої звірки |
 | FR-11 | UC-05 | M1, M3 | AT-11 | passed M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
 | FR-12 | UC-09 | M3 | AT-12 | passed: [read authentication/denied mutations](../internal/library/semantic_test.go) |
 | FR-13 | UC-08 | M4 | AT-13 | passed offline: [preview/partial retry, unknown/no replay, Kyiv slots](../internal/library/delivery_test.go) |
@@ -27,7 +27,7 @@
 | FR-17 | UC-11 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
 | FR-18 | UC-05 | M1, M2, M3 | AT-18 | passed M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); passed M2 Confidence: [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
 | FR-19 | UC-09 | M3 | AT-19 | passed: [saved digest/excerpt, dated context, ownership/UTF-8 bounds](../internal/library/semantic_test.go) |
-| FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries / TestWebLocalhostAccessAndOrigin](../internal/library/web_test.go) |
+| FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries / TestWebLocalhostWithoutCSRF / TestWebCSRFPolicyByOrigin](../internal/library/web_test.go) |
 
 ## Перевірка специфікації
 

@@ -276,7 +276,8 @@ def main():
     for result in results:
         name = result['agent']
         scores = '/'.join(str(result.get('scores', {}).get(k, '—')) for k in CRITERIA)
-        lines.append(f"| {name} | {result['status']} | {scores} | {result.get('finding_count', '—')} | [{name}]({name}/result.json) |")
+        report_file = 'review.json' if (output / name / 'review.json').exists() else 'result.json'
+        lines.append(f"| {name} | {result['status']} | {scores} | {result.get('finding_count', '—')} | [{name}]({name}/{report_file}) |")
         if (output / name / 'review.json').exists():
             report = json.loads((output / name / 'review.json').read_text())
             lines.extend(['', '## ' + name, '', report['summary'], '', f'Повний звіт: [{name}/review.json]({name}/review.json).'])
