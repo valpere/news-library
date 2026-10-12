@@ -148,3 +148,10 @@ Offline перевірка captured response можлива без нової г
 причини й обережний вибір, по 500 записів із пагінацією, стійка черга та
 per-item skip/results. Ready/active/filtered/stale записи захищені; history
 і human judgments збережені. Agent не запускав реальну чергу користувача.
+
+
+Пакетна дообробка існуючих готових статей реалізована: компактні counters
+прогресу, наступні5/до500, skip done/active, exact checkpoint/model resume,
+explicit failure retry, new-work priority, file skip, immutable request
+receipts для repeated POST/restart/restore. UserDB не ставилася в чергу
+агентом; користувач натискає кнопку після оновлення сервісу.

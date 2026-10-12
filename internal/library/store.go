@@ -49,6 +49,9 @@ var schemaV10 string
 //go:embed schema_v11.sql
 var schemaV11 string
 
+//go:embed schema_v12.sql
+var schemaV12 string
+
 type Store struct {
 	KnowledgeEnabled bool
 	DB               *sql.DB
@@ -157,6 +160,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 11 {
 			_, err = tx.Exec(schemaV11)
+		}
+		if err == nil && version < 12 {
+			_, err = tx.Exec(schemaV12)
 		}
 		if err == nil {
 			err = tx.Commit()
