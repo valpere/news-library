@@ -14,6 +14,7 @@ root = Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
 class Gateway(BaseHTTPRequestHandler):
     calls = 0
+    release = threading.Event()
     def log_message(self, *args):
         pass
     def respond(self, value):
@@ -32,6 +33,8 @@ class Gateway(BaseHTTPRequestHandler):
         data=json.loads(payload['messages'][1]['content'])
         assert not data['state']['Results']
         message=data['message']
+        if message == 'очікування':
+            assert Gateway.release.wait(timeout=15), 'browser did not release pending request'
         if message=='тільки непрочитане':
             command={'action':'refine','criteria':{'read':'0'}}
         elif message=='дивний запит':
@@ -65,12 +68,30 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             assert page.get_by_role('heading',name='Що сьогодні почитаємо?').count()==1
             cookie=next(c for c in page.context.cookies() if c['name']=='news_library_chat')
             assert cookie['httpOnly'] and cookie['sameSite']=='Strict'
-            def send(text):
+            page.get_by_role('textbox',name='Повідомлення бібліотеці').fill('SQLite')
+            page.get_by_role('textbox',name='Повідомлення бібліотеці').press('Shift+Enter')
+            assert page.locator('#composer textarea').input_value()=='SQLite\n'
+            assert page.locator('.turn').count()==0
+            def assert_chat_visible():
+                page.wait_for_function("""() => {
+                    const input = document.querySelector('#composer textarea').getBoundingClientRect();
+                    const replies = document.querySelectorAll('.assistant-message');
+                    const reply = replies[replies.length - 1].getBoundingClientRect();
+                    const conversation = document.querySelector('#conversation').getBoundingClientRect();
+                    return input.top >= 0 && input.bottom <= innerHeight &&
+                        reply.top >= conversation.top - 1 && reply.top < conversation.bottom &&
+                        reply.top < input.top;
+                }""")
+            def send(text, keyboard=True):
                 previous=page.locator('.turn').count()
                 page.get_by_role('textbox',name='Повідомлення бібліотеці').fill(text)
-                page.get_by_role('button',name='Надіслати ↑').click()
+                if keyboard:
+                    page.get_by_role('textbox',name='Повідомлення бібліотеці').press('Enter')
+                else:
+                    page.get_by_role('button',name='Надіслати ↑').click()
                 page.wait_for_function('(n)=>document.querySelectorAll(".turn").length>n',arg=previous)
                 assert page.locator('#chat-status').inner_text()==''
+                assert_chat_visible()
             page.screenshot(path=str(root/'tmp/smoke-chat-welcome.png'),full_page=True)
             send(' '.join(f'https://example.com/chat/{i}' for i in range(8)))
             assert 'Додано: 8' in page.locator('.turn').last.inner_text()
@@ -91,7 +112,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             assert 'Знайдено 8' in latest.inner_text()
             assert 'Пошук за змістом недоступний' in latest.inner_text()
             assert page.locator('.card script').count()==0
-            send('тільки непрочитане')
+            send('тільки непрочитане', keyboard=False)
             assert 'Тема: SQLite' in page.locator('.turn').last.inner_text()
             assert Gateway.calls==2
             page.locator('.current-actions summary').click()
@@ -115,10 +136,39 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             assert 'невідома дія чату' in page.locator('.turn').last.inner_text()
             send('стан')
             assert 'Отримання тексту:' in page.locator('.turn').last.inner_text()
+            previous=page.locator('.turn').count()
+            page.get_by_role('textbox',name='Повідомлення бібліотеці').fill('очікування')
+            page.get_by_role('textbox',name='Повідомлення бібліотеці').press('Enter')
+            page.get_by_text('Виконую запит…',exact=True).wait_for()
+            assert page.locator('#composer button').is_disabled()
+            assert page.evaluate("""() => {
+                const input = document.querySelector('#composer textarea').getBoundingClientRect();
+                const status = document.querySelector('#chat-status').getBoundingClientRect();
+                return input.top >= 0 && input.bottom <= innerHeight &&
+                    status.top >= input.bottom && status.bottom <= innerHeight;
+            }""")
+            Gateway.release.set()
+            page.wait_for_function('(n)=>document.querySelectorAll(".turn").length>n',arg=previous)
+            assert_chat_visible()
             page.screenshot(path=str(root/'tmp/smoke-chat-desktop.png'),full_page=False)
             page.set_viewport_size({'width':390,'height':844})
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            send('непрочитані вхідні')
+            assert page.locator('.turn').last.locator('.card').count()==5
             page.screenshot(path=str(root/'tmp/smoke-chat-mobile.png'),full_page=False)
+            assert page.locator('#conversation').evaluate('(el)=>el.scrollHeight > el.clientHeight')
+            page.locator('#conversation').evaluate('(el)=>{el.scrollTop=0}')
+            assert page.evaluate("""() => {
+                const input = document.querySelector('#composer textarea').getBoundingClientRect();
+                return input.top >= 0 && input.bottom <= innerHeight &&
+                    document.querySelector('#conversation').scrollTop === 0;
+            }""")
+            send('\n'.join(f'https://example.com/chat/{i}' for i in range(8)))
+            assert 'Уже існує: 8' in page.locator('.turn').last.inner_text()
+            page.set_viewport_size({'width':390,'height':500})
+            send('стан')
+            page.screenshot(path=str(root/'tmp/smoke-chat-short-mobile.png'),full_page=False)
+            page.set_viewport_size({'width':390,'height':844})
             turns=page.locator('.turn').count()
             stop(p)
             p,origin=start(data)
@@ -131,6 +181,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             assert not errors,errors
             browser.close()
     finally:
+        Gateway.release.set()
         stop(p)
 gateway.shutdown()
-print('PASS chat browser: unified URL batch, no premature rating, natural search and refinement, stable paging, explicit rating, contextual clarification, actual queue status, restart history, desktop/mobile and safe rendering; fake cloud only.')
+print('PASS chat browser: unified URL batch, no premature rating, natural search and refinement, stable paging, explicit rating, contextual clarification, actual queue status, restart history, desktop/mobile Enter/click scrolling with visible composer and latest reply, and safe rendering; fake cloud only.')

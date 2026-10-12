@@ -1,5 +1,13 @@
 'use strict';
 let chatBusy = false;
+function showLatestReply() {
+ const conversation = document.getElementById('conversation');
+ const latest = conversation.querySelector('.turn:last-child .assistant-message');
+ if (latest) {
+  conversation.scrollTop += latest.getBoundingClientRect().top - conversation.getBoundingClientRect().top;
+ }
+}
+showLatestReply();
 document.addEventListener('submit', async event => {
  const form = event.target;
  if (!form.matches('.chat-form')) return;
@@ -16,8 +24,8 @@ document.addEventListener('submit', async event => {
   if (!response.ok) throw new Error(await response.text());
   const result = await response.json();
   document.getElementById('workspace').innerHTML = result.html;
-  document.querySelector('#composer textarea').focus();
-  document.getElementById('composer').scrollIntoView({block:'end',behavior:'smooth'});
+  document.querySelector('#composer textarea').focus({preventScroll:true});
+  showLatestReply();
  } catch(error) {
   status.textContent = error.message + '\nЯкщо зв’язок перервався, повторіть те саме повідомлення: завершена дія вдруге не виконається. При конфлікті вкладок оновіть сторінку.';
  } finally {
