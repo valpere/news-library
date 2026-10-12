@@ -203,44 +203,60 @@ func (s *Store) RetryDigest(itemID int64) error {
 		return err
 	}
 	defer tx.Rollback()
-	var sid sql.NullInt64
-	if err = tx.QueryRow("SELECT selected_snapshot FROM items WHERE id=?", itemID).Scan(&sid); err != nil {
+	_, err = s.retryDigestTx(tx, itemID)
+	if err != nil {
 		return err
 	}
+	return tx.Commit()
+}
+func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
+	var err error
+
+	var sid sql.NullInt64
+	if err = tx.QueryRow("SELECT selected_snapshot FROM items WHERE id=?", itemID).Scan(&sid); err != nil {
+		return false, err
+	}
 	if !sid.Valid {
-		return errors.New("спершу потрібен текст")
+		return false, errors.New("спершу потрібен текст")
 	}
 	var filtered string
 	if err = tx.QueryRow("SELECT filter_state FROM items WHERE id=?", itemID).Scan(&filtered); err != nil {
-		return err
+		return false, err
 	}
 	if filtered == "rejected" {
-		return errors.New("спершу явно поверніть матеріал до обробки")
+		return false, errors.New("спершу явно поверніть матеріал до обробки")
+	}
+	rejected, e := s.ensureFilterForSnapshot(tx, itemID, sid.Int64)
+	if e != nil {
+		return false, e
+	}
+	if rejected {
+		return false, nil
 	}
 	var active int
 	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE stage='digest' AND snapshot_id=? AND state IN ('queued','running','retry_wait')", sid).Scan(&active); err != nil {
-		return err
+		return false, err
 	}
 	if active > 0 {
-		return errors.New("генерація вже активна")
+		return false, errors.New("генерація вже активна")
 	}
 	c := s.DigestConfig
 	var state string
 	err = tx.QueryRow("SELECT state FROM jobs WHERE stage='digest' AND snapshot_id=? AND config_version=?", sid, c.Version()).Scan(&state)
 	if err == nil {
 		if state != "failed" && state != "cancelled" {
-			return errors.New("дайджест уже готовий або генерація активна")
+			return false, errors.New("дайджест уже готовий або генерація активна")
 		}
 		if _, err = tx.Exec("UPDATE jobs SET state='queued',attempts=0,next_attempt=0,lease_until=0,error='' WHERE stage='digest' AND snapshot_id=? AND config_version=?", sid, c.Version()); err != nil {
-			return err
+			return false, err
 		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		return err
+		return false, err
 	}
 	if err = s.queueDigest(tx, itemID, sid.Int64); err != nil {
-		return err
+		return false, err
 	}
-	return tx.Commit()
+	return true, nil
 }
 
 // A migrated source may not have a rule decision yet. Evaluate it before its

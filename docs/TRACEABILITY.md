@@ -121,3 +121,12 @@ permanent-vs-temporary automatic policy, escaped advice/response UI і
 перевіряє явний format label, no automatic repeat і запит іншого варіанту.
 `minions/validate-digest` перевіряє локальний Markdown або captured Ollama
 response offline без моделей/запису; private actual replies не публікуються.
+
+
+Пакетний retry FR-04/08/10/14: `digest_retry_batch_test.go` перевіряє
+classification/legacy ambiguity, explicit unknown selection, CSRF/agent denial,
+zero writes при malformed/duplicate input, повтор POST, immutable failures,
+human history, stale attempts/sources, missing files і migrated filter rejection
+з partial progress. `scripts/smoke_digest_retry_batch_ui.py`: дві format failures
+→ checked preview → enqueue обох → два готові дайджести зі збереженими текстами,
+лише loopback fake cloud без userDB/live calls.
