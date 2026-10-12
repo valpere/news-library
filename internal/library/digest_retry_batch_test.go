@@ -137,7 +137,7 @@ func TestBatchDigestRetrySkipsChangedAndMissingSources(t *testing.T) {
 	}
 }
 func TestBatchDigestRetryWebGuardsAndUnknownOptIn(t *testing.T) {
-	s, w := testWeb(t)
+	s, w := protectedTestWeb(t)
 	enableDigests(t, s)
 	a := failedDigestFixture(t, s, "format")
 	failedDigestFixture(t, s, "unknown")

@@ -33,8 +33,8 @@ def cloud_endpoint(value):
 
 
 def field(html, name):
-    match = re.search(r'name="'+name+r'" value="([^"]+)"', html)
-    if not match:
+    match = re.search(r'name="'+name+r'" value="([^"]*)"', html)
+    if not match or (name != "csrf" and not match.group(1)):
         raise ValueError('fixture chat field missing: '+name)
     return match.group(1)
 
