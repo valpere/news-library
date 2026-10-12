@@ -18,7 +18,7 @@ import (
 
 const transferMarker = ".transfer-in-progress"
 const restorePause = ".restore-paused"
-const CurrentSchema = 11
+const CurrentSchema = 12
 
 type BackupFile struct {
 	Path string `json:"path"`

@@ -42,6 +42,9 @@ type Web struct {
 	zone             *time.Location
 }
 type pageData struct {
+	KnowledgeBatchSummary              KnowledgeBatchSummary
+	KnowledgeBatchToken                string
+	KnowledgeBatchResult               *KnowledgeBatchResult
 	KnowledgeFailures                  []JobFailure
 	Knowledge                          *ArticleKnowledge
 	KnowledgeStatus                    *KnowledgeRun
@@ -188,6 +191,8 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 }
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /knowledge-batch", w.knowledgeBatchPage)
+	mux.HandleFunc("POST /knowledge-batch", w.knowledgeBatchSubmit)
 	mux.HandleFunc("GET /items/{id}/knowledge/markdown", w.exportKnowledge)
 	mux.HandleFunc("GET /digest-retries", w.digestRetryBatchPage)
 	mux.HandleFunc("POST /digest-retries", w.digestRetryBatchSubmit)

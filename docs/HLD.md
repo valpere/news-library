@@ -628,3 +628,25 @@ read API item/context повертає компактні knowledge metadata б�
 analysis pending без перезапису введення. POST knowledge-retry захищено
 спільними Host/Origin/CSRF/agent guards. Пошук додає current metadata
 Unicode-normalized search_text і model tags, не підміняє людські теги.
+
+
+## Пакетна дообробка з прогресом (schema v12)
+
+knowledge_batch.go: GET /knowledge-batch тільки читає current ready allowed
+items/latest digest/latest run і aggregates прогрес. POST має звичайні
+Host/Origin/CSRF/agent guards, limit 1..500 і bounded request token. Schema12
+додає immutable knowledge_batches receipt (token PK, limit/retry/date/JSON
+результату); backup DB містить receipts, нових primary refs немає.
+
+У транзакції перевіряється replay receipt до eligibility: той самий token/
+options повертає той самий результат і не mutates jobs; інші options — error.
+Після цього повторно читається стан: any done for selected latest digest,
+active для item, filtered/no ready digest не потрапляють до роботи. New
+items першими; explicit allowed retries reset exact existing run, не creates
+новий model/config run, тому metadata checkpoint лишається. Source/digest
+і checkpoint file/hash перевіряються перед enqueue; file failures дають
+per-item skip без блокування наступних (макс500 перевірок, queued<=limit).
+Unexpected DB failure rolls back batch; enqueue/reset і receipt commit
+атомарні, без network/inference у submit. Worker виконує звичайний pipeline
+з lease/current source/digest guard і failure history. Receipt переживає
+worker completion/re-failure, restart/restore; restored workers paused.

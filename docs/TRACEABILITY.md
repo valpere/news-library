@@ -145,3 +145,15 @@ Config default/env/flag tests у config_test.go.
 `scripts/smoke_knowledge_ui.py` — два URL з manual source → automatic digest/
 metadata/thematic note → backlinks/author/MD/search, тільки loopback fake cloud.
 Попередні digest-only browser fixtures явно вимикають knowledge для ізоляції.
+
+
+Пакетна knowledge дообробка FR-04/05/07/08/10/11/12/14:
+knowledge_batch_test.go — наступні5/решта, done/active skip, model switch
+не regenerates completed data, exact pinned checkpoint після збою,
+failure history, blocked causes/retry opt-out/new priority, malformed
+limit/missing files, no starvation через битий перший файл, CSRF/agent
+denial, durable receipt і paused restore, concurrent replay та replay
+після завершення або нового failure. Browser smoke_knowledge_batch_ui.py
+створює старі ready digests, вмикає knowledge після restart, batch →
+metadata/notes, повтор того самого POST і новий пакет дають zero new calls
+для completed items; digest calls незмінні. Усе isolated fake cloud.
