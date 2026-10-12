@@ -77,8 +77,17 @@ flowchart LR
 ## Модель даних
 
 SQLite містить метадані, чергу й історію. Тексти зберігаються у
-`texts/<sha256>.txt`, дайджести — `digests/<sha256>.md`; посилання відносні
-до каталогу даних. Raw HTTP-кеш має окремі `cache/http/<sha256>.body`.
+`texts/aa/bb/cc/dd/<sha256>.txt`, дайджести —
+`digests/aa/bb/cc/dd/<sha256>.md`, де `aa/bb/cc/dd` — перші чотири
+пари символів SHA-256. Нові записи використовують цю структуру; старі
+плоскі шляхи читаються та входять у backup/restore без переписування історії.
+`repack-files` відновлює перевірений backup у новий каталог, копіює
+плоскі файли в розріджені шляхи та транзакційно змінює лише файлові
+посилання. Незмінність записів відновлюється до commit; старі копії
+у новому каталозі видаляються після commit. Незавершений результат
+блокується `.transfer-in-progress`; успішний — з paused workers та
+такою самою карантинізацією незавершених Telegram-доставок, як restore.
+Посилання відносні до каталогу даних. Raw HTTP-кеш має окремі `cache/http/<sha256>.body`.
 Атомарний запис і fsync файла/каталогу передують commit DB-посилання.
 Rollback може лишити файл без посилання, але не публікує невдалий запис.
 Читання перевіряє SHA-256; FTS5 contentless зберігає похідний індекс.
@@ -492,7 +501,7 @@ item/snapshot/optional digest IDs та role) не змінюють primary ст�
 Ручне збереження перевіряє 2–20 різних статей, source/digest ownership,
 обов’язкову роль, межі тексту й метаданих. Коротка транзакція перевіряє
 expected version, резервує stable_id для нової нотатки, записує/fsync
-content-addressed `digests/<sha256>.md` до публікації DB-посилання і додає
+content-addressed `digests/aa/bb/cc/dd/<sha256>.md` до публікації DB-посилання і додає
 immutable revision/members. Конфлікт залишає чернетку користувачу. SQL
 тригери забороняють UPDATE/DELETE версій і members, перевіряють ownership.
 Frontmatter використовує JSON scalars/lists (сумісний YAML), дублює metadata
@@ -565,7 +574,7 @@ SourceError.Kind, bounded Diagnostic response; transports/429/5xx separate
 Schema 10 додає immutable `job_failures` (job FK, attempt, kind, message,
 retryable, recorded_at, response_path/hash). `Worker.FailError` і `Store.fail`
 перевіряють lease та атомарно записують failure event і job/item state. Якщо
-є raw reply, Files.Put/fsync у digests/hash.md передує DB publication. Reset
+є raw reply, Files.Put/fsync у розрідженому каталозі digests передує DB publication. Reset
 manual retry не стирає failure history. Format/configuration/limit/source
 примусово non-auto-retry; unknown legacy label не є вигаданим діагнозом.
 Нормальний код користувацьких оцінок/source versions не змінюється.

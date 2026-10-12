@@ -1,7 +1,9 @@
 package library
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,7 +75,7 @@ func TestExistingDatabaseMigrationAndPortableFiles(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	os.MkdirAll(filepath.Join(restored, "texts"), 0700)
+	os.MkdirAll(filepath.Dir(filepath.Join(restored, blob)), 0700)
 	os.WriteFile(filepath.Join(restored, blob), data, 0600)
 	s, e = Open(filepath.Join(restored, "library.db"))
 	if e != nil {
@@ -217,5 +219,39 @@ func TestV3MigrationKeepsPreviouslyGeneratedData(t *testing.T) {
 	jobs, _ := s.Jobs(7)
 	if jobs[0].Stage != "digest" || jobs[0].State != "queued" || jobs[0].ID <= 56 {
 		t.Fatal("override did not create a fresh generation job")
+	}
+}
+
+func TestPrimaryFilesUseFourHashPairs(t *testing.T) {
+	f := Files{Root: t.TempDir()}
+	data := []byte("sharded primary fixture")
+	hash := fmt.Sprintf("%x", sha256.Sum256(data))
+	for kind, extension := range map[string]string{"texts": ".txt", "digests": ".md", "cache/http": ".body"} {
+		path, err := f.Put(kind, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := filepath.Join(kind, hash[:2], hash[2:4], hash[4:6], hash[6:8], hash+extension)
+		if kind == "cache/http" {
+			want = filepath.Join(kind, hash+extension)
+		}
+		if path != want {
+			t.Fatalf("%s: got %s, want %s", kind, path, want)
+		}
+		if got, err := f.Read(path, hash); err != nil || string(got) != string(data) {
+			t.Fatal("read sharded blob", err)
+		}
+		if again, err := f.Put(kind, data); err != nil || again != path {
+			t.Fatal("dedup changed path", err)
+		}
+		if err := os.WriteFile(filepath.Join(f.Root, path), []byte("corrupt"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.Read(path, hash); err == nil {
+			t.Fatal("accepted corrupt blob")
+		}
+		if _, err := f.Put(kind, data); kind != "cache/http" && err == nil {
+			t.Fatal("overwrote corrupt immutable primary")
+		}
 	}
 }

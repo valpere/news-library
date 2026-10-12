@@ -11,7 +11,7 @@ import (
 
 func archiveCommand(command string, args []string) error {
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
-	source := flags.String("source", "", "каталог даних для backup або резервна копія для restore/verify-backup")
+	source := flags.String("source", "", "каталог даних для backup або резервна копія для restore/repack-files/verify-backup")
 	output := flags.String("output", "", "новий неіснуючий каталог")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -20,7 +20,7 @@ func archiveCommand(command string, args []string) error {
 		return err
 	}
 	if *source == "" || flags.NArg() != 0 || (command != "verify-backup" && *output == "") {
-		return errors.New("archive command requires -source and (backup/restore) -output")
+		return errors.New("archive command requires -source and (backup/restore/repack-files) -output")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -37,6 +37,11 @@ func archiveCommand(command string, args []string) error {
 			return err
 		}
 		fmt.Printf("backup verified: %d files, schema %d\n", len(m.Files), m.Schema)
+	case "repack-files":
+		if err := library.RepackFiles(ctx, *source, *output); err != nil {
+			return err
+		}
+		fmt.Printf("repack complete: %s; background execution paused\n", *output)
 	case "restore":
 		if err := library.Restore(ctx, *source, *output); err != nil {
 			return err
