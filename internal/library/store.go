@@ -52,6 +52,9 @@ var schemaV11 string
 //go:embed schema_v12.sql
 var schemaV12 string
 
+//go:embed schema_v13.sql
+var schemaV13 string
+
 type Store struct {
 	KnowledgeEnabled bool
 	DB               *sql.DB
@@ -97,6 +100,7 @@ type Job struct {
 	ChunkLimit, ChunkMaxParts                  int
 }
 type Filters struct {
+	Category                                               string
 	Query, Placement, Rating, Read, State, Sort, Direction string
 	Filter, ConfidenceMin, ConfidenceMax                   string
 	Tags                                                   []string
@@ -163,6 +167,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 12 {
 			_, err = tx.Exec(schemaV12)
+		}
+		if err == nil && version < 13 {
+			_, err = tx.Exec(schemaV13)
 		}
 		if err == nil {
 			err = tx.Commit()
@@ -626,6 +633,10 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		}
 		query += " AND i.filter_state=?"
 		args = append(args, f.Filter)
+	}
+	if f.Category != "" {
+		query += " AND EXISTS(SELECT 1 FROM article_knowledge k WHERE k.item_id=i.id AND k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND k.category=?)"
+		args = append(args, f.Category)
 	}
 	var minimum, maximum *float64
 	for _, entry := range []struct {

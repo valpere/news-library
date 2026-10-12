@@ -14,6 +14,9 @@ import (
 )
 
 type config struct {
+	Chat                    bool
+	ChatModel               string
+	ChatTimeout             time.Duration
 	Knowledge               bool
 	YTDLP, YouTubeLanguages string
 
@@ -64,7 +67,8 @@ func readConfig(args []string) (config, error) {
 	// setting must not reject a valid command-line override.
 	flagNames := map[string]string{
 		"knowledge": "NEWS_LIBRARY_KNOWLEDGE",
-		"yt-dlp":    "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
+		"chat":      "NEWS_LIBRARY_CHAT", "chat-model": "NEWS_LIBRARY_CHAT_MODEL", "chat-timeout": "NEWS_LIBRARY_CHAT_TIMEOUT",
+		"yt-dlp": "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
 		"telegram": "NEWS_LIBRARY_TELEGRAM_ENABLED", "telegram-chat": "NEWS_LIBRARY_TELEGRAM_CHAT_ID", "telegram-daily": "NEWS_LIBRARY_TELEGRAM_DAILY", "telegram-size": "NEWS_LIBRARY_TELEGRAM_SIZE",
 		"embeddings": "NEWS_LIBRARY_EMBEDDINGS", "embed-url": "NEWS_LIBRARY_EMBED_URL", "embed-timeout": "NEWS_LIBRARY_EMBED_TIMEOUT", "read-token": "NEWS_LIBRARY_READ_TOKEN",
 		"chunk-max-parts": "NEWS_LIBRARY_CHUNK_MAX_PARTS", "cache-max-bytes": "NEWS_LIBRARY_CACHE_MAX_BYTES", "cache-retention": "NEWS_LIBRARY_CACHE_RETENTION", "cache-cleanup-interval": "NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL",
@@ -85,7 +89,7 @@ func readConfig(args []string) (config, error) {
 			continue
 		}
 		if !hasValue {
-			if name == "knowledge" || name == "no-worker" || name == "no-digests" || name == "embeddings" || name == "telegram" {
+			if name == "chat" || name == "knowledge" || name == "no-worker" || name == "no-digests" || name == "embeddings" || name == "telegram" {
 				value = "true"
 			} else if i+1 < len(args) {
 				i++
@@ -130,6 +134,10 @@ func readConfig(args []string) (config, error) {
 		return v, nil
 	}
 	c := config{YTDLP: get("NEWS_LIBRARY_YT_DLP", "yt-dlp"), YouTubeLanguages: get("NEWS_LIBRARY_YOUTUBE_LANGUAGES", "uk,en"), EmbedURL: get("NEWS_LIBRARY_EMBED_URL", "http://localhost:11434/api/embed"), ReadToken: get("NEWS_LIBRARY_READ_TOKEN", ""), Interests: get("NEWS_LIBRARY_INTERESTS", ""), FilterRules: get("NEWS_LIBRARY_FILTER_RULES", "[]"), Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
+	c.ChatModel = get("NEWS_LIBRARY_CHAT_MODEL", c.Model)
+	if strings.TrimSpace(c.ChatModel) == "" {
+		c.ChatModel = c.Model
+	}
 	var thresholdErr error
 	c.FilterThreshold, thresholdErr = strconv.ParseFloat(get("NEWS_LIBRARY_FILTER_THRESHOLD", "0.8"), 64)
 	if thresholdErr != nil {
@@ -138,7 +146,7 @@ func readConfig(args []string) (config, error) {
 	for _, entry := range []struct {
 		name, value string
 		target      *time.Duration
-	}{{"NEWS_LIBRARY_EMBED_TIMEOUT", "30s", &c.EmbedTimeout}, {"NEWS_LIBRARY_CACHE_RETENTION", "168h", &c.CacheRetention}, {"NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL", "1h", &c.CacheCleanupInterval}, {"NEWS_LIBRARY_FETCH_TIMEOUT", "30s", &c.FetchTimeout}, {"NEWS_LIBRARY_DIGEST_TIMEOUT", "300s", &c.DigestTimeout}, {"NEWS_LIBRARY_LEASE", "1m", &c.Lease}, {"NEWS_LIBRARY_BACKOFF", "10s", &c.Backoff}, {"NEWS_LIBRARY_CACHE_TTL", "24h", &c.CacheTTL}} {
+	}{{"NEWS_LIBRARY_CHAT_TIMEOUT", "90s", &c.ChatTimeout}, {"NEWS_LIBRARY_EMBED_TIMEOUT", "30s", &c.EmbedTimeout}, {"NEWS_LIBRARY_CACHE_RETENTION", "168h", &c.CacheRetention}, {"NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL", "1h", &c.CacheCleanupInterval}, {"NEWS_LIBRARY_FETCH_TIMEOUT", "30s", &c.FetchTimeout}, {"NEWS_LIBRARY_DIGEST_TIMEOUT", "300s", &c.DigestTimeout}, {"NEWS_LIBRARY_LEASE", "1m", &c.Lease}, {"NEWS_LIBRARY_BACKOFF", "10s", &c.Backoff}, {"NEWS_LIBRARY_CACHE_TTL", "24h", &c.CacheTTL}} {
 		v, e := duration(entry.name, entry.value)
 		if e != nil {
 			return c, e
@@ -187,6 +195,10 @@ func readConfig(args []string) (config, error) {
 	if e != nil {
 		return c, e
 	}
+	c.Chat, e = boolean("NEWS_LIBRARY_CHAT", "true")
+	if e != nil {
+		return c, e
+	}
 	c.NoDigests, e = boolean("NEWS_LIBRARY_NO_DIGESTS", "false")
 	if e != nil {
 		return c, e
@@ -228,6 +240,9 @@ func readConfig(args []string) (config, error) {
 	flags.Float64Var(&c.FilterThreshold, "filter-threshold", c.FilterThreshold, "поріг відсіву R > T")
 	flags.StringVar(&c.Data, "data", c.Data, "каталог SQLite, текстів, дайджестів та HTTP-кешу")
 	flags.StringVar(&c.Bind, "bind", c.Bind, "loopback host:port")
+	flags.BoolVar(&c.Chat, "chat", c.Chat, "увімкнути cloud розуміння діалогу")
+	flags.StringVar(&c.ChatModel, "chat-model", c.ChatModel, "cloud модель діалогу")
+	flags.DurationVar(&c.ChatTimeout, "chat-timeout", c.ChatTimeout, "час планування діалогу")
 	flags.StringVar(&c.Model, "model", c.Model, "Ollama cloud модель дайджесту")
 	flags.StringVar(&c.OllamaURL, "ollama-url", c.OllamaURL, "локальний Ollama /api/chat")
 	flags.DurationVar(&c.FetchTimeout, "fetch-timeout", c.FetchTimeout, "час отримання одного джерела")
@@ -262,6 +277,9 @@ func readConfig(args []string) (config, error) {
 		if _, e = library.NewBGE(c.EmbedURL, c.EmbedTimeout); e != nil {
 			return c, errors.New("некоректний embedding endpoint")
 		}
+	}
+	if c.ChatTimeout <= 0 || c.ChatTimeout > 5*time.Minute {
+		return c, errors.New("chat-timeout має бути більше нуля й не більше 5m")
 	}
 	if c.FetchTimeout <= 0 || c.DigestTimeout <= 0 || c.Lease < time.Second || c.Backoff <= 0 || c.CacheTTL < 0 || c.Attempts < 1 || c.Attempts > 100 || c.MaxBytes < 1024 || c.MaxBytes > 64<<20 || c.InputLimit < 1024 || c.InputLimit > 4<<20 {
 		return c, errors.New("некоректні таймаути/ліміти конфігурації")

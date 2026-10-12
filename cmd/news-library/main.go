@@ -96,6 +96,15 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	web.ChatModel = c.ChatModel
+	web.ChatTimeout = c.ChatTimeout
+	if c.Chat {
+		planner, e := library.NewOllama(c.OllamaURL, c.OllamaKey, c.ChatTimeout)
+		if e != nil {
+			return e
+		}
+		web.ChatPlanner = planner
+	}
 	web.Cache = cache
 	web.Telegram = c.Telegram
 	web.BackgroundPaused = c.NoWorker
@@ -150,7 +159,7 @@ func run() error {
 	} else {
 		close(done)
 	}
-	server := &http.Server{Handler: web.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: max(30*time.Second, c.FetchTimeout+5*time.Second, c.EmbedTimeout+5*time.Second), IdleTimeout: time.Minute, MaxHeaderBytes: 32 << 10}
+	server := &http.Server{Handler: web.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: max(30*time.Second, c.FetchTimeout+5*time.Second, c.EmbedTimeout+5*time.Second, c.ChatTimeout+c.EmbedTimeout+10*time.Second), IdleTimeout: time.Minute, MaxHeaderBytes: 32 << 10}
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)

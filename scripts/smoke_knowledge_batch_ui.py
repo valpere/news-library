@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='news-library-knowledge-b
             page = browser.new_page()
             ids=[]
             for index in range(3):
-                page.goto(origin)
+                page.goto(origin+'/browse')
                 page.locator('input[name=url]').fill(f'http://127.0.0.1/batch-knowledge-{index}')
                 page.get_by_role('button',name='Додати URL',exact=True).click()
                 ids.append(page.url.rsplit('/',1)[1])
@@ -75,7 +75,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='news-library-knowledge-b
             assert Gateway.calls == {'digest':3,'metadata':0,'links':0},Gateway.calls
             stop(process)
             process,origin=start(data,True)
-            page.goto(origin)
+            page.goto(origin+'/browse')
             page.get_by_role('link',name='Дообробити статті пачкою',exact=True).click()
             assert 'Ще не почато: 3' in page.locator('body').inner_text()
             token=page.locator('input[name=request_token]').input_value()

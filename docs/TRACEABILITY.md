@@ -157,3 +157,15 @@ denial, durable receipt і paused restore, concurrent replay та replay
 створює старі ready digests, вмикає knowledge після restart, batch →
 metadata/notes, повтор того самого POST і новий пакет дають zero new calls
 для completed items; digest calls незмінні. Усе isolated fake cloud.
+
+
+Діалогова головна FR-01/02/05/07/08/10/11/12/15/17/18/19/20:
+chat_test.go і config_test.go — URL/no planner, persistent replay/restart/
+paused restore, criteria/category/tags/facets/stable paging, contextual
+clarification, exact rating provenance/explicit values, typed retry/batch
+progress, busy/stale/interrupted, denied origins/CSRF/agent writes,
+unknown model actions, untrusted context і cloud-only JSON adapter.
+smoke_chat_ui.py — isolated fake cloud dialogue, shared URL input,
+FTS fallback/refinement, reading/rating, actual queue, history/new dialogue,
+escaped preview та desktop/mobile without horizontal overflow.
+Live model quality/latency лишаються окремим integration check.

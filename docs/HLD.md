@@ -650,3 +650,11 @@ Unexpected DB failure rolls back batch; enqueue/reset і receipt commit
 атомарні, без network/inference у submit. Worker виконує звичайний pipeline
 з lease/current source/digest guard і failure history. Receipt переживає
 worker completion/re-failure, restart/restore; restored workers paused.
+
+
+Діалогова головна — див. [CHAT_HOME.md](CHAT_HOME.md). Stateful dialogue
+controller + bounded cloud intent adapter, persistent session/turn receipts,
+server-side validated execution, escaped card rendering and facet panels.
+Original ingestion/search/queue operations reused; legacy list on /browse.
+GET read-only; mutating chat POST uses shared web guards. Interrupted writes
+are not replayed automatically; model never generates DB queries.

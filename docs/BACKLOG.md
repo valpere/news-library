@@ -155,3 +155,10 @@ per-item skip/results. Ready/active/filtered/stale записи захищені
 explicit failure retry, new-work priority, file skip, immutable request
 receipts для repeated POST/restart/restore. UserDB не ставилася в чергу
 агентом; користувач натискає кнопку після оновлення сервісу.
+
+
+Діалогова головна реалізована за CHAT_HOME.md: спочатку контракт, потім
+persistent sessions/cloud planner/validated actions, chat/facets/cards UI.
+Go та fake-cloud browser acceptance пройшли; legacy fixtures використовують
+/browse. Залишилося окремо оцінити якість/латентність природного діалогу
+на живій Gemma за явного запуску integration перевірки.
