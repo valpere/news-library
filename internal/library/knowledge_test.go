@@ -277,6 +277,15 @@ func TestKnowledgeUIExportAndReadOnlyGuards(t *testing.T) {
 	if response.Code != 200 || !strings.Contains(response.Body.String(), "Зберігання даних") || g.MetadataCalls != 1 {
 		t.Fatal(response.Code, response.Body.String(), g)
 	}
+	response = webRequest(w, "GET", "/api/read/items/1/context?limit=128", nil, map[string]string{"Authorization": "Bearer " + w.ReadToken})
+	var contextPayload map[string]any
+	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &contextPayload) != nil {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	metadata, ok := contextPayload["knowledge"].(map[string]any)
+	if !ok || metadata["category"] != "Зберігання даних" || metadata["Markdown"] != nil || metadata["markdown"] != nil {
+		t.Fatal(metadata)
+	}
 	var path string
 	s.DB.QueryRow("SELECT markdown_path FROM article_knowledge WHERE item_id=?", id).Scan(&path)
 	if err := os.Remove(filepath.Join(s.Files.Root, path)); err != nil {

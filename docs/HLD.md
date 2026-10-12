@@ -623,7 +623,8 @@ knowledge_failures immutable, class/message/date/optional raw reply file;
 Метадані/дайджест лишаються доступними після link failure; diagnostics у
 details, file loss показує warning. Backup primaryRefs schema11 додає metadata
 і knowledge failure files. Exports GET /items/{id}/knowledge/markdown?source=…;
-read API item/context повертає knowledge, без inference/writes. Картка polls
+read API item/context повертає компактні knowledge metadata без дублювання
+повного Markdown у короткому контексті, без inference/writes. Картка polls
 analysis pending без перезапису введення. POST knowledge-retry захищено
 спільними Host/Origin/CSRF/agent guards. Пошук додає current metadata
 Unicode-normalized search_text і model tags, не підміняє людські теги.
