@@ -658,3 +658,13 @@ server-side validated execution, escaped card rendering and facet panels.
 Original ingestion/search/queue operations reused; legacy list on /browse.
 GET read-only; mutating chat POST uses shared web guards. Interrupted writes
 are not replayed automatically; model never generates DB queries.
+
+
+Read-only conversational `answer` повертає обмежений plain-text від cloud
+planner, не виконує бібліотечних операцій і зберігає pending question.
+`queue` дає короткий стан; `diagnose` пояснює актуальні невдалі knowledge runs,
+тип причини та повторні відмови з immutable history. Лічильники, стан
+черги й підтвердження операцій формує сервер; raw diagnostics не передаються
+в модель чи загальну відповідь чату. Одна повна JSON Markdown-обгортка
+знімається перед strict schema/content validation аналізу, без ремонту JSON
+або зміни історичних відмов. Запит пояснення не ставить роботи в чергу.

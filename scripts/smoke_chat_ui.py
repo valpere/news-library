@@ -37,6 +37,8 @@ class Gateway(BaseHTTPRequestHandler):
             assert Gateway.release.wait(timeout=15), 'browser did not release pending request'
         if message=='тільки непрочитане':
             command={'action':'refine','criteria':{'read':'0'}}
+        elif message=='поясни різницю між тегом і категорією':
+            command={'action':'answer','answer':'Категорія описує широку тему, а тег — окреме поняття.'}
         elif message=='дивний запит':
             command={'action':'sql'}
         else:
@@ -135,7 +137,11 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             send('дивний запит')
             assert 'невідома дія чату' in page.locator('.turn').last.inner_text()
             send('стан')
-            assert 'Отримання тексту:' in page.locator('.turn').last.inner_text()
+            assert 'Зараз отримання тексту' in page.locator('.turn').last.inner_text()
+            send('поясни різницю між тегом і категорією')
+            assert 'Категорія описує широку тему' in page.locator('.turn').last.inner_text()
+            send('чому аналіз не завершено?')
+            assert 'завершилися помилкою' in page.locator('.turn').last.inner_text()
             previous=page.locator('.turn').count()
             page.get_by_role('textbox',name='Повідомлення бібліотеці').fill('очікування')
             page.get_by_role('textbox',name='Повідомлення бібліотеці').press('Enter')

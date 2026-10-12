@@ -176,6 +176,9 @@ func chatLocalCommand(input ChatInput, state ChatState) (ChatCommand, bool, erro
 		}
 	}
 
+	if action := chatProcessingQuestion(text); action != "" {
+		return ChatCommand{Action: action}, true, nil
+	}
 	urls := extractChatURLs(text)
 	if len(urls) > 0 && (bareChatURLs(text) || (!readonlyChatPrefix(lower) && (strings.Contains(lower, "дод") || strings.Contains(lower, "добав") || strings.HasPrefix(lower, "ось посилання")))) {
 		return ChatCommand{Action: "add"}, true, nil
@@ -381,6 +384,12 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 	if err := validateChatCommand(command); err != nil {
 		return ChatReply{}, err
 	}
+	if command.Action == "answer" {
+		return ChatReply{Message: strings.TrimSpace(command.Answer)}, nil
+	}
+	if command.Action == "queue" || command.Action == "diagnose" {
+		return w.chatProcessingReply(command.Action == "diagnose")
+	}
 	writes := command.Action == "add" || command.Action == "item" || command.Action == "retry_digests" || command.Action == "complete" || command.Action == "index"
 	if writes && input.Event == "" && !explicitChatMutation(input.Text) && !bareChatURLs(input.Text) && !(oldPendingMutation && !readonlyChatPrefix(input.Text)) {
 		state.Pending = "item"
@@ -483,25 +492,6 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 		return ChatReply{Message: "Критерії пошуку скинуто. Що знайти?", Kind: "question"}, nil
 	case "help":
 		return ChatReply{Message: "Пошук за змістом знаходить близькі ідеї, навіть якщо слова різні. Наприклад «як не втратити дані після аварії» може знайти матеріал про відновлення SQLite. Поєдную збіг слів із близькістю змісту; категорії, теги та непрочитане додатково звужують вибірку. Якщо індекс недоступний, покажу текстові збіги й повідомлю про це.", Actions: []ChatSuggestion{{"Знайти матеріал", "find", ""}, {"Стан індексу й черги", "queue", ""}, {"Перебудувати індекс", "index", ""}}}, nil
-	case "queue":
-		summary, err := w.Store.KnowledgeBatchSummary()
-		if err != nil {
-			return ChatReply{}, err
-		}
-		var sourcePending, digestPending, digestFailed, withoutText int
-		for _, q := range []struct {
-			sql string
-			to  *int
-		}{{"SELECT count(*) FROM jobs WHERE stage='fetch' AND state IN ('queued','running','retry_wait')", &sourcePending}, {"SELECT count(*) FROM jobs WHERE stage='digest' AND state IN ('queued','running','retry_wait')", &digestPending}, {"SELECT count(*) FROM items WHERE state='digest_failed'", &digestFailed}, {"SELECT count(*) FROM items WHERE selected_snapshot IS NULL", &withoutText}} {
-			if err = w.Store.DB.QueryRow(q.sql).Scan(q.to); err != nil {
-				return ChatReply{}, err
-			}
-		}
-		reply := ChatReply{Message: fmt.Sprintf("Отримання тексту: %d · Дайджест у роботі: %d · Невдалих дайджестів: %d · Без тексту: %d.\nДообробка: ще не почато %d, незавершено %d, у роботі %d, завершено %d, потребують виправлення причини %d.\nПошук за змістом: %s.", sourcePending, digestPending, digestFailed, withoutText, summary.New, summary.Continue, summary.Active, summary.Done, summary.Blocked, w.Store.EmbeddingStatus()), Actions: []ChatSuggestion{{"Дообробити наступні 5", "complete", "5"}, {"Дообробити решту", "complete", "500"}, {"Повторити невдалі дайджести", "retry_digests", ""}}}
-		if w.BackgroundPaused {
-			reply.Message += "\nФонове виконання призупинено; задачі залишаються в черзі до запуску робітників."
-		}
-		return reply, nil
 	case "complete":
 		limit := command.Limit
 		if limit == 0 {
@@ -511,7 +501,7 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 		if err != nil {
 			return ChatReply{}, err
 		}
-		return ChatReply{Message: fmt.Sprintf("Дообробка: нових задач %d · Продовжено зі збереженої спроби %d · Пропущено через файли %d. Завершені та активні записи пропущено.", result.New, result.Resumed, result.Skipped), Actions: []ChatSuggestion{{"Стан обробки", "queue", ""}, {"Дообробити наступні 5", "complete", "5"}, {"Дообробити решту", "complete", "500"}}}, nil
+		return ChatReply{Message: fmt.Sprintf("Поставив у чергу дообробку %d матеріалів: нових задач %d, продовжено зі збереженої спроби %d. Це ще не означає завершення — аналіз виконається у фоні. Пропущено через файли %d; завершені та вже активні матеріали не запускав заново.", result.New+result.Resumed, result.New, result.Resumed, result.Skipped), Actions: []ChatSuggestion{{"Стан обробки", "queue", ""}, {"Дообробити наступні 5", "complete", "5"}, {"Дообробити решту", "complete", "500"}}}, nil
 	case "retry_digests":
 		candidates, more, err := w.chatRetryCandidates()
 		if err != nil {
