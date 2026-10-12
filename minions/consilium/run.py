@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import signal
@@ -22,6 +23,7 @@ AGENTS = {
     'agy': ('Gemini 3.8 Flash (Low)', ['agy', '--print', '--mode', 'plan', '--sandbox', '--model', 'Gemini 3.8 Flash (Low)', '--output-format', 'json']),
     'kiro-cli': ('CLI default (unknown)', ['kiro-cli', 'chat', '--no-interactive', '--agent-engine', 'v2', '--trust-tools=fs_read', '--output-format', 'stream-json']),
 }
+AGENTS['claude'] = ('sonnet (CLI alias)', ['claude', '--print', '--permission-mode', 'plan', '--tools', 'Read,Grep,Glob', '--allowedTools', 'Read,Grep,Glob', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--model', 'sonnet', '--output-format', 'json', '--no-session-persistence'])
 CRITERIA = ('correctness', 'clarity', 'consistency', 'usability')
 TASK = '''Ти незалежний рецензент документації особистої бібліотеки news-library.
 Оціни ВСІ зазначені документи, перевіряючи твердження за кодом знімка.
@@ -80,6 +82,8 @@ def fingerprints(directory):
     entries = {}
     for p in directory.rglob('*'):
         name = str(p.relative_to(directory))
+        if p.relative_to(directory).parts[0] == '.git':
+            continue
         if p.is_symlink():
             entries[name] = 'symlink:' + os.readlink(p)
         elif p.is_file():
@@ -107,11 +111,16 @@ def report_text(agent, raw):
     if agent == 'kiro-cli':
         texts = [v.get('data', {}).get('finalText', '') for v in objects(raw) if v.get('type') == 'runFinished']
         return texts[-1] if texts else ''
-    envelopes = [v.get('response') for v in objects(raw) if isinstance(v.get('response'), str)]
+    envelopes = [v.get('response', v.get('result')) for v in objects(raw) if isinstance(v.get('response', v.get('result')), str)]
     return envelopes[-1] if envelopes else raw
 
 
 def validate_report(text, documents, snapshot):
+    # CLI finalText may concatenate an intermediate draft and a final fenced answer.
+    # Only an unambiguous terminal JSON block may supersede preceding prose.
+    blocks = list(re.finditer(r'(?ms)^```(?:json)?[ \t]*\r?\n(.*?)\r?\n```[ \t]*(?=\n|$)', text))
+    if blocks and not text[blocks[-1].end():].strip():
+        text = blocks[-1].group(1)
     reports = [v for v in objects(text) if 'findings' in v and 'reviewed_files' in v]
     if len(reports) != 1:
         raise ValueError('expected exactly one structured review')
@@ -133,6 +142,21 @@ def validate_report(text, documents, snapshot):
         for key in ('file', 'trigger', 'impact', 'evidence', 'suggested_fix'):
             if not isinstance(finding.get(key), str) or not finding[key].strip():
                 raise ValueError('invalid finding ' + key)
+        reference = Path(finding['file'])
+        if '..' in reference.parts:
+            raise ValueError('finding points outside snapshot')
+        if reference.is_absolute():
+            resolved = reference.resolve()
+            if not resolved.is_relative_to(snapshot.resolve()):
+                raise ValueError('finding points outside snapshot')
+            finding['original_reference'] = finding['file']
+            finding['file'] = str(resolved.relative_to(snapshot.resolve()))
+            reference = Path(finding['file'])
+        if len(reference.parts) == 1 and not (snapshot / reference).exists():
+            matches = [f for f in documents if Path(f).name == reference.name]
+            if len(matches) == 1:
+                finding['original_reference'] = finding['file']
+                finding['file'] = matches[0]
         target = (snapshot / finding['file']).resolve()
         if not target.is_relative_to(snapshot.resolve()) or not target.is_file():
             raise ValueError('finding points outside snapshot')
@@ -145,13 +169,16 @@ def run_agent(name, archive, prompt, documents, directory, timeout):
     directory.mkdir()
     snapshot = directory / 'src'
     extract_snapshot(archive, snapshot)
+    subprocess.run(['git', 'init', '--quiet', '--template=', str(snapshot)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     if (snapshot / 'review-task.md').exists():
         raise ValueError('reserved review-task.md path already committed')
     (snapshot / 'review-task.md').write_text(prompt)
     before = fingerprints(snapshot)
     model, command = AGENTS[name]
-    instruction = 'Read review-task.md IN FULL (in chunks if needed), then independently produce the JSON review requested there. Read-only: no edits, shell, network, git or subagents.'
-    command = command + [instruction]
+    instruction = 'Read ' + str(snapshot / 'review-task.md') + ' IN FULL (in chunks if needed), then independently produce the JSON review requested there. Read-only: no edits, shell, network, git or subagents.'
+    if name in ('opencode', 'kilo'):
+        command = command + ['--dir', str(snapshot)]
+    command = ([arg for arg in command if arg != '--print'] + ['--print=' + instruction]) if name == 'agy' else command + [instruction]
     result = {'agent': name, 'configured_model': model, 'actual_model': 'unknown', 'argv': command, 'status': 'failed', 'duration_seconds': 0}
     start = time.monotonic()
     try:
@@ -193,7 +220,7 @@ def main():
     mode.add_argument('--dry-run', action='store_true')
     mode.add_argument('--run-agents', action='store_true')
     parser.add_argument('--ref', default='HEAD')
-    parser.add_argument('--agents', default=','.join(AGENTS))
+    parser.add_argument('--agents', default='opencode,kilo,agy,kiro-cli')
     parser.add_argument('--timeout', type=int, default=600)
     parser.add_argument('--document', action='append')
     args = parser.parse_args()

@@ -43,6 +43,10 @@ class CouncilTest(unittest.TestCase):
             report={'summary':'Reviewed', 'scores':dict.fromkeys(council.CRITERIA,3),
                     'reviewed_files':['README.md'],'findings':[], 'limitations':[]}
             self.assertEqual(council.validate_report(json.dumps(report),['README.md'],path),report)
+            wrapped = 'draft\n' + json.dumps(report) + '\n```json\n' + json.dumps(report) + '\n```'
+            self.assertEqual(council.validate_report(wrapped,['README.md'],path),report)
+            with self.assertRaises(ValueError):
+                council.validate_report(json.dumps(report) + json.dumps(report),['README.md'],path)
             report['scores']['clarity']=True
             with self.assertRaises(ValueError): council.validate_report(json.dumps(report),['README.md'],path)
             report['scores']['clarity']=3
