@@ -82,14 +82,14 @@ func TestBatchBoundsAndIsolatedStorageFailure(t *testing.T) {
 }
 func TestBatchWebReportCorrectionAndMutationGuards(t *testing.T) {
 	s := backupStore(t)
-	web, err := NewWeb(s, "http://127.0.0.1:8787", 1<<20)
+	web, err := NewWeb(s, "http://192.0.2.1:8787", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
 	handler := web.Handler()
 	request := func(auth, origin, csrf string) *httptest.ResponseRecorder {
 		form := url.Values{"csrf": {csrf}, "urls": {"https://example.com/first\n<script>unsafe()</script>\nhttps://example.com/second"}}
-		r := httptest.NewRequest("POST", "http://127.0.0.1:8787/items/batch", strings.NewReader(form.Encode()))
+		r := httptest.NewRequest("POST", "http://192.0.2.1:8787/items/batch", strings.NewReader(form.Encode()))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		r.Header.Set("Authorization", auth)
 		r.Header.Set("Origin", origin)
@@ -107,7 +107,7 @@ func TestBatchWebReportCorrectionAndMutationGuards(t *testing.T) {
 	if count != 0 {
 		t.Fatal("guard allowed writes", count)
 	}
-	out := request("", "http://127.0.0.1:8787", web.CSRF)
+	out := request("", "http://192.0.2.1:8787", web.CSRF)
 	if out.Code != 200 || !strings.Contains(out.Body.String(), "Нових: 2") || !strings.Contains(out.Body.String(), "Не додано: 1") || strings.Contains(out.Body.String(), "<script>unsafe()</script>") {
 		t.Fatal(out.Code, out.Body.String())
 	}

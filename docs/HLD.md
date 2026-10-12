@@ -277,9 +277,9 @@ Readability виділяє HTML без додаткових запитів. По
 вичерпання обох шляхів показується needs_input. Shell не використовується.
 
 Початкові параметри й запуск — README. Лише loopback; дозволені
-налаштований Host та `localhost` із тим самим портом. Origin має
-відповідати Host запиту; CSRF у POST body, Sec-Fetch-Site, CSP та
-html/template escaping залишаються обов’язковими.
+налаштований Host та `localhost` із тим самим портом. На localhost/loopback CSRF token, Origin та Sec-Fetch-Site не перевіряються
+за вказівкою користувача. Для нелокального origin ці перевірки залишаються
+у handler; CSP та html/template escaping працюють у поточному UI.
 Authorization не дає доступу до UI-мутацій. Worker вимикається через
 `-no-worker`; runtime каталог поза Git. Тексти джерел не виконуються.
 
@@ -474,7 +474,7 @@ missed row; дні offline не генерують retrospective batches. За �
 private .env daily09:00/size5; default template disabled/no destination. При
 missing credentials нема network delivery; UI preview працює. NoWorker і
 restore pause блокують sender/scheduler разом із source/embedding workers.
-UI /deliveries preview/history/state protected shared Host/Origin/CSRF/auth
+UI /deliveries preview/history/state protected shared Host/CSRF (для нелокального origin)/auth
 mutation guards. Agent read API не має delivery mutation capabilities.
 
 ## Нотатки-зв’язкові (schema v9)
@@ -500,7 +500,7 @@ Backlinks — запит members тільки останньої revision кож
 за normalized `search_text`, а не ASCII-only SQLite lower. До100результатів.
 Vocabulary підказки збираються з item_tags та актуальних revision metadata;
 людські теги статей не змінюються, модельні метадані зберігаються окремо. HTTP UI створює/редагує,
-читає, шукає, експортує; спільні Host/Origin/CSRF/agent-mutation guards діють.
+читає, шукає, експортує; спільні Host/CSRF (для нелокального origin)/agent-mutation guards діють.
 `GET /api/read/connections[/{id}?version=…]` використовує чинний bearer guard,
 `/api/read/items/{id}` також повертає current backlinks. Views escape HTML.
 
@@ -579,7 +579,7 @@ GET /digest-retries — read-only preview останньої failed digest job �
 selected_snapshot без artifact/active job, keyset pagination за item ID
 по 500. Legacy known validator messages мають derived format; неоднозначні
 limit/error без історії — unknown. POST /digest-retries захищений загальними
-Host/Origin/CSRF guards і забороною agent writes; вся форма валідована до
+Host/CSRF (для нелокального origin) guards і забороною agent writes; вся форма валідована до
 першого запису. Кожен вибір item:snapshot:job:attempt-token повторно перевіряється у власній
 транзакції, source file читається з hash validation. Спільний retryDigestTx
 перевіряє також legacy rule decision до reset job, зберігаючи новий rejection
@@ -626,7 +626,7 @@ details, file loss показує warning. Backup primaryRefs schema11 дода�
 read API item/context повертає компактні knowledge metadata без дублювання
 повного Markdown у короткому контексті, без inference/writes. Картка polls
 analysis pending без перезапису введення. POST knowledge-retry захищено
-спільними Host/Origin/CSRF/agent guards. Пошук додає current metadata
+спільними Host/CSRF (для нелокального origin)/agent guards. Пошук додає current metadata
 Unicode-normalized search_text і model tags, не підміняє людські теги.
 
 
@@ -634,7 +634,7 @@ Unicode-normalized search_text і model tags, не підміняє людськ
 
 knowledge_batch.go: GET /knowledge-batch тільки читає current ready allowed
 items/latest digest/latest run і aggregates прогрес. POST має звичайні
-Host/Origin/CSRF/agent guards, limit 1..500 і bounded request token. Schema12
+Host/CSRF (для нелокального origin)/agent guards, limit 1..500 і bounded request token. Schema12
 додає immutable knowledge_batches receipt (token PK, limit/retry/date/JSON
 результату); backup DB містить receipts, нових primary refs немає.
 

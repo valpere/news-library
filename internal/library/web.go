@@ -207,7 +207,12 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Web{Store: s, Origin: origin, CSRF: rand.Text(), MaxText: maxText, tmpl: tmpl, zone: zone}, nil
+	csrf := ""
+	ip := net.ParseIP(u.Hostname())
+	if u.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		csrf = rand.Text()
+	}
+	return &Web{Store: s, Origin: origin, CSRF: csrf, MaxText: maxText, tmpl: tmpl, zone: zone}, nil
 }
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -283,13 +288,15 @@ func (w *Web) Handler() http.Handler {
 				http.Error(rw, "користувацькі мутації не приймають агентські облікові дані", http.StatusForbidden)
 				return
 			}
-			if origin := r.Header.Get("Origin"); origin != "" && origin != u.Scheme+"://"+r.Host {
-				http.Error(rw, "сторонній Origin", http.StatusForbidden)
-				return
-			}
-			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
-				http.Error(rw, "сторонній browser запит", http.StatusForbidden)
-				return
+			if w.CSRF != "" {
+				if origin := r.Header.Get("Origin"); origin != "" && origin != u.Scheme+"://"+r.Host {
+					http.Error(rw, "сторонній Origin", http.StatusForbidden)
+					return
+				}
+				if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+					http.Error(rw, "сторонній browser запит", http.StatusForbidden)
+					return
+				}
 			}
 			r.Body = http.MaxBytesReader(rw, r.Body, w.MaxText+65536)
 			if err := r.ParseForm(); err != nil {
@@ -297,7 +304,7 @@ func (w *Web) Handler() http.Handler {
 				return
 			}
 			token := r.PostForm.Get("csrf")
-			if subtle.ConstantTimeCompare([]byte(token), []byte(w.CSRF)) != 1 {
+			if w.CSRF != "" && subtle.ConstantTimeCompare([]byte(token), []byte(w.CSRF)) != 1 {
 				http.Error(rw, "некоректний CSRF token; оновіть сторінку", http.StatusForbidden)
 				return
 			}

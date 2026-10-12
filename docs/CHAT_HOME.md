@@ -84,7 +84,7 @@ Cloud Gemma 4 31B через локальний Ollama — первісна мо
 доступні прямі дії. Довга дія має видимий індикатор виконання. Історія і
 стан переживають перезапуск, входять у DB backup; GET не виконує дій і
 не позначає прочитаним. Session cookie HttpOnly/SameSite, POST захищений
-Host/Origin/CSRF, агентські credentials не дають права запису.
+Host; на localhost/loopback CSRF-перевірки вимкнено. Агентські credentials не дають права запису.
 
 Ідентифікатор повідомлення запобігає повторному виконанню після double-click/
 повторного POST. Повтор прийнятого повідомлення повертає збережений результат.
@@ -109,7 +109,7 @@ references; completed/active work і checkpoint policy збережені. Яв�
    completed work заново. Queue status і index actions доступні в діалозі.
 6. Item actions прив’язані до показаних джерел; людська rating history
    зберігається; GET/модель без явної оцінки її не змінює.
-7. Denied origins/CSRF/agent writes, unknown model actions/параметри,
+7. Local POST без CSRF, denied nonlocal origins/CSRF/agent writes, unknown model actions/параметри,
    malicious retrieved text, stale/concurrent/replayed turns — без зайвих
    мутацій. Fake-cloud browser/Go acceptance; live model tests окремо.
 

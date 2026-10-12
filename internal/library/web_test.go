@@ -134,8 +134,17 @@ func TestWebRejectsInvalidScoresAndForeignContext(t *testing.T) {
 		t.Fatal("int64 maximum rejected")
 	}
 }
+func protectedTestWeb(t *testing.T) (*Store, *Web) {
+	t.Helper()
+	s := testStore(t)
+	w, err := NewWeb(s, "http://192.0.2.1:8787", 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s, w
+}
 func TestWebMutationBoundaries(t *testing.T) {
-	s, w := testWeb(t)
+	s, w := protectedTestWeb(t)
 	id := add(t, s, "https://example.com/a")
 	tests := []struct {
 		name    string
@@ -176,39 +185,72 @@ func TestWebMutationBoundaries(t *testing.T) {
 	post(t, w, "/items/1/read", url.Values{"read": {"1"}})
 }
 
-func TestWebLocalhostAccessAndOrigin(t *testing.T) {
+func TestWebLocalhostWithoutCSRF(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/localhost")
+	if w.CSRF != "" {
+		t.Fatal("local CSRF enabled")
+	}
 	for _, path := range []string{"/", "/items/1"} {
 		rw := webRequest(w, "GET", path, nil, map[string]string{"Host": "localhost:8787"})
 		if rw.Code != 200 {
-			t.Fatalf("localhost GET %s: %d %s", path, rw.Code, rw.Body.String())
+			t.Fatal(path, rw.Code)
 		}
 	}
-	form := url.Values{"read": {"1"}, "csrf": {w.CSRF}}
 	for _, headers := range []map[string]string{
-		{"Host": "localhost:8787", "Origin": "https://evil.example"},
+		nil,
+		{"Host": "localhost:8787", "Origin": "https://example.invalid", "Sec-Fetch-Site": "cross-site"},
+		{"Host": "localhost:8787", "Origin": "null"},
 		{"Host": "localhost:8787", "Origin": "http://localhost:9999"},
-		{"Host": "localhost:8787", "Origin": w.Origin},
-		{"Host": "localhost:9999", "Origin": "http://localhost:9999"},
-		{"Host": "evil.localhost:8787", "Origin": "http://evil.localhost:8787"},
 	} {
-		rw := webRequest(w, "POST", "/items/1/read", form, headers)
-		if rw.Code != 403 {
-			t.Fatal("untrusted host/origin accepted", headers, rw.Code)
+		for _, token := range []string{"", "previous-process-token"} {
+			form := url.Values{"read": {"1"}}
+			if token != "" {
+				form.Set("csrf", token)
+			}
+			rw := webRequest(w, "POST", "/items/1/read", form, headers)
+			if rw.Code != 303 {
+				t.Fatal(headers, token, rw.Code, rw.Body.String())
+			}
+			item, _ := s.Item(id)
+			if !item.Read {
+				t.Fatal("POST did not persist")
+			}
 		}
-		i, _ := s.Item(id)
-		if i.Read {
+	}
+	for _, headers := range []map[string]string{
+		{"Host": "localhost:9999"},
+		{"Host": "evil.localhost:8787"},
+		{"Authorization": "Bearer agent-token"},
+	} {
+		rw := webRequest(w, "POST", "/items/1/read", url.Values{"read": {"0"}}, headers)
+		if rw.Code != 403 {
+			t.Fatal(headers, rw.Code)
+		}
+		item, _ := s.Item(id)
+		if !item.Read {
 			t.Fatal("rejected request changed state")
 		}
 	}
-	rw := webRequest(w, "POST", "/items/1/read", form, map[string]string{"Host": "localhost:8787", "Origin": "http://localhost:8787", "Sec-Fetch-Site": "same-origin"})
-	if rw.Code != 303 {
-		t.Fatal("localhost form failed", rw.Code, rw.Body.String())
-	}
-	i, _ := s.Item(id)
-	if !i.Read {
-		t.Fatal("localhost form did not persist")
+}
+
+func TestWebCSRFPolicyByOrigin(t *testing.T) {
+	s := testStore(t)
+	for _, tc := range []struct {
+		origin  string
+		enabled bool
+	}{
+		{"http://localhost:8787", false},
+		{"http://127.0.0.1:8787", false},
+		{"http://127.0.0.2:8787", false},
+		{"http://[::1]:8787", false},
+		{"http://192.0.2.1:8787", true},
+		{"http://example.test:8787", true},
+	} {
+		w, err := NewWeb(s, tc.origin, 1<<20)
+		if err != nil || (w.CSRF != "") != tc.enabled {
+			t.Fatal(tc, err)
+		}
 	}
 }
 

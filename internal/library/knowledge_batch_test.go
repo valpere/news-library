@@ -169,7 +169,7 @@ func TestKnowledgeBatchValidationAndMissingFiles(t *testing.T) {
 }
 func TestKnowledgeBatchReceiptRestoreAndWebGuards(t *testing.T) {
 	s, _ := batchFixture(t)
-	w, err := NewWeb(s, "http://127.0.0.1:8787", 1<<20)
+	w, err := NewWeb(s, "http://192.0.2.1:8787", 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}

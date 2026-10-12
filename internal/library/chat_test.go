@@ -363,7 +363,7 @@ func TestChatBackupHistoryAndNoReplayAfterRestore(t *testing.T) {
 	}
 }
 func TestChatHTTPBoundariesAndAJAXEscaping(t *testing.T) {
-	s, w := testWeb(t)
+	s, w := protectedTestWeb(t)
 	input := url.Values{"message": {"https://example.com/<script>alert(1)</script>"}, "token": {rand.Text()}, "revision": {"0"}, "csrf": {w.CSRF}}
 	for _, headers := range []map[string]string{{"Origin": "https://evil.example"}, {"Authorization": "Bearer agent"}, {"Host": "evil.example:8787"}, {"Sec-Fetch-Site": "cross-site"}} {
 		rw := webRequest(w, "POST", "/chat", input, headers)
@@ -612,5 +612,19 @@ func TestChatPreviouslySavedGenericRatingQuestionResumesWithoutPlanner(t *testin
 	ratings, _ := s.Ratings(target.Item.ID)
 	if reply.Kind == "error" || len(ratings) != 1 || ratings[0].Score != 3 || ratings[0].SourceVersionID.Int64 != target.SourceID {
 		t.Fatal(reply, ratings)
+	}
+}
+
+func TestChatLocalHTTPDoesNotRequireCSRF(t *testing.T) {
+	s, w := testWeb(t)
+	input := url.Values{"message": {"https://example.com/no-csrf"}, "token": {rand.Text()}, "revision": {"0"}}
+	rw := webRequest(w, "POST", "/chat", input, map[string]string{"X-Chat-Request": "1", "Origin": "null", "Sec-Fetch-Site": "cross-site"})
+	if rw.Code != 200 {
+		t.Fatal(rw.Code, rw.Body.String())
+	}
+	var items int
+	s.DB.QueryRow("SELECT count(*) FROM items").Scan(&items)
+	if items != 1 {
+		t.Fatal(items)
 	}
 }
