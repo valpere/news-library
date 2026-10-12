@@ -13,3 +13,9 @@ size/warnings, does not write a database or invoke models. Not routine CI.
 Offline digest check: `go run ./minions/validate-digest -file PATH` or add
 `-ollama-response` for a captured `/api/chat` JSON envelope. Read-only, no
 network/model calls, uses the application's validator and prints only result.
+
+
+Консиліум документів без Codex: `python3 minions/consilium/run.py --dry-run`
+готує знімок; `--run-agents` явно запускає незалежні CLI-рецензенти.
+Коміт і повний склад фіксуються; звіти та помилки зберігаються в `tmp/consilium/`.
+Інструкції: [consilium/README.md](consilium/README.md).

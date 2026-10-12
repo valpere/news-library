@@ -497,3 +497,13 @@ embeddings/Telegram disabled, перевіряє 13 ходів і зберіга
 Невдала перевірка завершує helper; автоматичних повторів немає.
 Це smoke намірів/уточнень, не semantic retrieval benchmark або оцінка
 якості дайджестів/рекомендацій. До routine `make check` live run не входить.
+
+
+## Консиліум документів
+
+Незалежна оцінка документації зовнішніми агентами, без Codex:
+[інструкція та склад](minions/consilium/README.md). Попередній перегляд
+без виклику агентів: `python3 minions/consilium/run.py --dry-run`.
+Для оцінювання: `python3 minions/consilium/run.py --run-agents`.
+Звіти залишаються локальними у `tmp/consilium/`, робочі та приватні дані
+не додаються до зафіксованого публічного знімка.
