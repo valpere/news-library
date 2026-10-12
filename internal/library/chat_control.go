@@ -147,6 +147,12 @@ func chatLocalCommand(input ChatInput, state ChatState) (ChatCommand, bool, erro
 	}
 	text := strings.TrimSpace(input.Text)
 	lower := strings.ToLower(text)
+	// Sessions saved by an earlier planner may retain only the question.
+	if state.PendingMutation && state.Pending == "item" && state.PendingCommand.Action == "clarify" {
+		if pending, ok := chatKnownRating(state.PendingText, state.PendingCommand); ok && pending.Index > 0 {
+			state.PendingCommand = pending
+		}
+	}
 	if state.PendingMutation && state.PendingCommand.Action != "clarify" && state.PendingCommand.Action != "" {
 		pending := state.PendingCommand
 		if lower == "так" || lower == "виконай" {
@@ -364,6 +370,12 @@ func (w *Web) chatPageResults(state *ChatState) (ChatReply, error) {
 }
 func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCommand, input ChatInput) (ChatReply, error) {
 	state := &session.State
+	// Preserve a known human operation when a planner supplies only its question.
+	if command.Action == "clarify" && command.Pending == "item" {
+		if pending, ok := chatKnownRating(input.Text, command); ok {
+			command = pending
+		}
+	}
 	oldPendingMutation := state.PendingMutation
 	pendingText := state.PendingText
 	if err := validateChatCommand(command); err != nil {
@@ -564,7 +576,7 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 				state.PendingCommand = command
 				state.PendingMutation = true
 				state.PendingText = input.Text
-				return ChatReply{Kind: "question", Message: "Яку власну оцінку дати цьому матеріалу? Напишіть невід’ємне ціле число."}, nil
+				return ChatReply{Kind: "question", Message: fmt.Sprintf("Яку власну оцінку дати матеріалу №%d? Напишіть невід’ємне ціле число.", command.Index)}, nil
 			}
 			if card.SourceID == 0 || !card.CanRate {
 				return ChatReply{Message: "Текст або дайджест цього матеріалу не було показано. Спершу відкрийте картку й доповніть текст або відновіть файли, щоб оцінити побачене."}, nil
@@ -773,3 +785,36 @@ func (w *Web) chatRetryCandidates() ([]DigestRetryCandidate, bool, error) {
 	}
 	return all, true, nil
 }
+
+// Only an explicit rating request can supply these slots. The source of the
+// score is still checked separately before any human rating is written.
+func chatKnownRating(text string, question ChatCommand) (ChatCommand, bool) {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	if readonlyChatPrefix(lower) || !(strings.HasPrefix(lower, "оціни ") || strings.HasPrefix(lower, "оцінити ") || strings.HasPrefix(lower, "постав оцінку ") || strings.HasPrefix(lower, "дай оцінку ")) {
+		return ChatCommand{}, false
+	}
+	index := question.Index
+	object := lower
+	for _, prefix := range []string{"оціни ", "оцінити ", "постав оцінку ", "дай оцінку "} {
+		if strings.HasPrefix(object, prefix) {
+			object = strings.TrimSpace(strings.TrimPrefix(object, prefix))
+			break
+		}
+	}
+	if index == 0 {
+		words := strings.Fields(object)
+		ordinals := map[string]int{"перший": 1, "першу": 1, "перше": 1, "першого": 1, "першій": 1, "другий": 2, "другу": 2, "друге": 2, "другого": 2, "другій": 2, "третій": 3, "третю": 3, "третє": 3, "третього": 3, "четвертий": 4, "четверту": 4, "четверте": 4, "четвертого": 4, "п’ятий": 5, "п'ятий": 5, "п’яту": 5, "п'яту": 5}
+		if len(words) > 0 && (len(words) == 1 || (len(words) > 1 && (strings.HasPrefix(words[1], "матеріал") || strings.HasPrefix(words[1], "картк")))) {
+			index = ordinals[strings.TrimRight(words[0], ".,?!")]
+		}
+		// Numeric references need an explicit object role at the start of the request.
+		// Article titles containing an ordinal or number must not supply a card index.
+		if match := chatItemReference.FindStringSubmatch(object); match != nil {
+			index, _ = strconv.Atoi(match[1])
+		}
+	}
+
+	return ChatCommand{Action: "item", ItemAction: "rate", Index: index, Score: question.Score}, true
+}
+
+var chatItemReference = regexp.MustCompile(`^(?:№|номер|матеріал[а-яіїєґ]*|картк[а-яіїєґ]*)\s*(?:№\s*)?([1-5])(?:\D|$)`)

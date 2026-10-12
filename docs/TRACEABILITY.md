@@ -169,3 +169,13 @@ smoke_chat_ui.py — isolated fake cloud dialogue, shared URL input,
 FTS fallback/refinement, reading/rating, actual queue, history/new dialogue,
 escaped preview та desktop/mobile without horizontal overflow.
 Live model quality/latency лишаються окремим integration check.
+
+
+Жива перевірка chat intents (explicit invocation): live_chat_smoke.py,
+Gemma cloud remote identity gemma4:31b — 13 synthetic ходів пройшли;
+workers paused/embeddings/TG off, no real corpus. Виправлено rating clarification
+slot loss; chat_test.go перевіряє generic cloud question → typed rating action
+→ short numeric answer без повторного planner call, missing target і відсутність
+помилкового індексу з назви статті/числа оцінки. test_live_chat_smoke.py —
+opt-in guard, local endpoint boundary, auth-free recorded evidence й fake
+upstream failure. Live output зберігається локально в tmp, не є routine CI.

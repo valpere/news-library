@@ -471,3 +471,17 @@ cloud-планувальник. Інтерактивний пошук за зм�
 `make check` та `python3 scripts/smoke_chat_ui.py` після `make build`.
 Browser smoke використовує ізольовану DB, paused workers та fake cloud;
 якість/латентність живої моделі перевіряються окремо.
+
+
+Явна жива перевірка намірів діалогу: після `make build` виконайте
+`python3 minions/live_chat_smoke.py --run-cloud`. Початкова модель
+`gemma4:31b-cloud` (alias `gemma4:cloud`); `--model` дозволяє вибрати іншу
+зареєстровану cloud-модель. Тільки loopback Ollama endpoint, без fallback.
+Helper запускає окремий сервіс/синтетичну DB у `./tmp/`, workers paused,
+embeddings/Telegram disabled, перевіряє 13 ходів і зберігає `report.json`
+із намірами, відповідями, actual model/remote identity і тривалістю.
+Приватний `.env` читає сам застосунок, секрети не копіюються у звіт.
+Зупиняється лише власний subprocess; реальна бібліотека не змінюється.
+Невдала перевірка завершує helper; автоматичних повторів немає.
+Це smoke намірів/уточнень, не semantic retrieval benchmark або оцінка
+якості дайджестів/рекомендацій. До routine `make check` live run не входить.

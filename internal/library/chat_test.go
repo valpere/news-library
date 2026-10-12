@@ -542,3 +542,75 @@ func TestChatPausedBackgroundIsVisible(t *testing.T) {
 		t.Fatal(reply)
 	}
 }
+
+func TestChatGenericRatingQuestionRetainsOperationAndShownCard(t *testing.T) {
+	s, w := testWeb(t)
+	for i := 0; i < 3; i++ {
+		id := add(t, s, fmt.Sprintf("https://example.com/known-rating/%d", i))
+		manual(t, s, id, "Shown article source")
+	}
+	session, _ := chatTurn(t, w, ChatSession{}, "", "inbox", "")
+	calls := 0
+	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
+		calls++
+		return ChatCommand{Action: "clarify", Pending: "item", Question: "Яку оцінку поставити другому матеріалу?"}, nil
+	})
+	target := session.State.Cards[1]
+	session, reply := chatTurn(t, w, session, "Оціни другий матеріал", "", "")
+	if reply.Kind != "question" || session.State.PendingCommand.Action != "item" || session.State.PendingCommand.ItemAction != "rate" || session.State.PendingCommand.Index != 2 {
+		t.Fatal(session.State, reply)
+	}
+	session, _ = chatTurn(t, w, session, "3", "", "")
+	ratings, _ := s.Ratings(target.Item.ID)
+	if calls != 1 || len(ratings) != 1 || ratings[0].Score != 3 || ratings[0].SourceVersionID.Int64 != target.SourceID {
+		t.Fatal(calls, ratings)
+	}
+	// When no card was identified, the numeric answer identifies a card first.
+	session, _ = chatTurn(t, w, session, "Оціни матеріал", "", "")
+	session, _ = chatTurn(t, w, session, "1", "", "")
+	if session.State.PendingCommand.Index != 1 || session.State.PendingCommand.Score != nil {
+		t.Fatal(session.State)
+	}
+	ratings, _ = s.Ratings(session.State.Cards[0].Item.ID)
+	if len(ratings) != 0 {
+		t.Fatal("card number became a score", ratings)
+	}
+}
+func TestChatKnownRatingReferenceDoesNotUseScoreAsIndex(t *testing.T) {
+	for _, test := range []struct {
+		text  string
+		index int
+		known bool
+	}{{"Оціни картку №2", 2, true}, {"Оціни матеріал на 3", 0, true}, {"Оціни п’яту", 5, true}, {"Оціни статтю Перший запуск", 0, true}, {"Оціни статтю Картка 2 про backup", 0, true}, {"Знайди статті з оцінкою 3", 0, false}} {
+		c, ok := chatKnownRating(test.text, ChatCommand{})
+		if ok != test.known || c.Index != test.index {
+			t.Fatal(test, c, ok)
+		}
+	}
+}
+
+func TestChatPreviouslySavedGenericRatingQuestionResumesWithoutPlanner(t *testing.T) {
+	s, w := testWeb(t)
+	for i := 0; i < 2; i++ {
+		id := add(t, s, fmt.Sprintf("https://example.com/old-question/%d", i))
+		manual(t, s, id, "Existing shown source")
+	}
+	session, _ := chatTurn(t, w, ChatSession{}, "", "inbox", "")
+	target := session.State.Cards[1]
+	session.State.Pending = "item"
+	session.State.PendingMutation = true
+	session.State.PendingText = "Оціни другий матеріал"
+	session.State.PendingCommand = ChatCommand{Action: "clarify", Pending: "item", Question: "Яку оцінку?"}
+	if _, e := s.DB.Exec("UPDATE chat_sessions SET state_json=? WHERE id=?", jsonString(session.State), session.ID); e != nil {
+		t.Fatal(e)
+	}
+	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
+		t.Fatal("known pending score called model")
+		return ChatCommand{}, nil
+	})
+	_, reply := chatTurn(t, w, session, "3", "", "")
+	ratings, _ := s.Ratings(target.Item.ID)
+	if reply.Kind == "error" || len(ratings) != 1 || ratings[0].Score != 3 || ratings[0].SourceVersionID.Int64 != target.SourceID {
+		t.Fatal(reply, ratings)
+	}
+}

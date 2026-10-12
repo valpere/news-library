@@ -160,5 +160,7 @@ receipts для repeated POST/restart/restore. UserDB не ставилася в
 Діалогова головна реалізована за CHAT_HOME.md: спочатку контракт, потім
 persistent sessions/cloud planner/validated actions, chat/facets/cards UI.
 Go та fake-cloud browser acceptance пройшли; legacy fixtures використовують
-/browse. Залишилося окремо оцінити якість/латентність природного діалогу
-на живій Gemma за явного запуску integration перевірки.
+/browse. Жива smoke перевірка Gemma виконана: 13 synthetic ходів, 10 cloud calls,
+виявлено й виправлено repeated rating question після короткої відповіді.
+Recurring minions/live_chat_smoke.py explicit-only; real corpus retrieval
+quality/рекомендації й latency під навантаженням залишаються окремою оцінкою.

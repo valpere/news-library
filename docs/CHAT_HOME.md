@@ -107,3 +107,43 @@ Browser: smoke_chat_ui.py — unified input, natural intent через fake clou
 FTS fallback/refinement, five-at-a-time, explicit rating/clarification,
 queue/history/new dialogue, escaped text та desktop/mobile viewport.
 Live Gemma quality/latency не вимірювалися цими перевірками.
+
+## Жива перевірка діалогу
+
+Наступна integration перевірка — українські запити до налаштованої cloud
+Gemma через локальний Ollama. Окремий fixture store у ./tmp/, лише
+синтетичні статті/теги; workers paused, embeddings/Telegram disabled.
+Немає запису в реальну бібліотеку, читання особистого корпусу або локальної
+генерації. Пошук/refinement, теги, явні дії/оцінка, коротка відповідь на
+уточнення й неоднозначний повтор перевіряються через справжній chat POST.
+Записуються actual cloud alias, намір/результат та тривалість кожного ходу.
+Це вибіркова перевірка інтеграції/розуміння намірів, не бенчмарк якості
+semantic retrieval чи особистих рекомендацій. Live helper
+minions/live_chat_smoke.py потребує явного --run-cloud й не входить у make check.
+
+Виявлений live випадок: Gemma повернула текстове clarify для «Оціни перший
+матеріал», а після «3» повторила його. Для вже відомої дії/картки pending
+має зберігати typed item command, а не лише текст запитання. Для item action
+модель передає відомі item_action/index; missing score/index уточнює сервер.
+Якщо cloud повертає generic clarify для явного rating request з номером чи
+порядковим словом, сервер зберігає цей безпечний слот сам. Значення власної
+оцінки все одно вводить користувач; номер картки не стає оцінкою.
+
+
+Живу перевірку виконано 2026-10-12: 13/13 ходів пройшли після виправлення,
+10 cloud запитів; `gemma4:cloud`, remote model `gemma4:31b` на ollama.com,
+actual reply model `gemma4`. Український пошук/refinement, додати/прибрати тег,
+збереження другої картки, explicit rating/short answer, read, ambiguous retry,
+short retry-kind answer, knowledge batch та пошук за власною оцінкою.
+Число оцінки, retry-kind і пачка URL завершуються без cloud inference.
+У кількох малих fixture запусках ходи з моделлю займали приблизно0.4–1.6s;
+це спостереження для синтетичного малого контексту, не обіцянка production
+latency. Workers paused, semantic retrieval disabled (перевірено FTS fallback),
+немає ready digest candidates: пакетні наміри перевірені з фактичним нульовим
+результатом, pipeline/progress перевірені окремими offline tests.
+Перевірка не записувала в реальну DB/оцінки й не надсилала Telegram. Повні локальні reports у ./tmp/.
+Offline tests також перевіряють explicit opt-in, loopback-only forwarding,
+cloud identity, відсутність auth у звіті та облік невдалого запиту без повтору.
+
+Раніше збережене generic rating question також відновлює відому дію/картку
+для короткої числової відповіді без повторного planner call (Go regression).
