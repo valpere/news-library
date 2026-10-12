@@ -42,7 +42,7 @@ func (o *Ollama) knowledgeJSON(ctx context.Context, model, instruction string, i
 	}
 	raw := strings.TrimSpace(response.Message.Content)
 	*rawReply = raw
-	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder := json.NewDecoder(strings.NewReader(unwrapKnowledgeJSON(raw)))
 	decoder.DisallowUnknownFields()
 	if err = decoder.Decode(out); err != nil {
 		return &SourceError{Kind: "format", Message: "некоректний JSON аналізу", Diagnostic: raw}
@@ -52,6 +52,16 @@ func (o *Ollama) knowledgeJSON(ctx context.Context, model, instruction string, i
 	}
 	return nil
 }
+
+// Accept only one complete JSON code block, keeping the original diagnostic intact.
+func unwrapKnowledgeJSON(raw string) string {
+	lines := strings.Split(strings.TrimSpace(raw), "\n")
+	if len(lines) >= 3 && (strings.TrimSpace(lines[0]) == "```json" || strings.TrimSpace(lines[0]) == "```") && strings.TrimSpace(lines[len(lines)-1]) == "```" {
+		return strings.Join(lines[1:len(lines)-1], "\n")
+	}
+	return raw
+}
+
 func (o *Ollama) Metadata(ctx context.Context, model string, c KnowledgeContext, vocabulary map[string][]string) (ArticleKnowledge, error) {
 	var response struct {
 		Category  string   `json:"category"`

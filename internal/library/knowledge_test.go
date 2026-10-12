@@ -469,7 +469,7 @@ func TestKnowledgeMigrationPreservesExistingNotes(t *testing.T) {
 }
 
 func TestKnowledgeCloudJSONValidationAndNoLocalFallback(t *testing.T) {
-	replies := []string{`{}`, `{"links":null}`, `{"links":[]}`, `{"links":[],"unexpected":true}`}
+	replies := []string{`{}`, `{"links":null}`, `{"links":[]}`, `{"links":[],"unexpected":true}`, "```json\n{\"links\":[]}\n```", "```\n{\"links\":[]}\n```", "before\n```json\n{\"links\":[]}\n```", "```json\n{\"links\":[],\"unexpected\":true}\n```", "```json\n{\"links\":[]} {}\n```", "```json\n{\"links\":[]"}
 	for _, reply := range replies {
 		t.Run(reply, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -486,7 +486,7 @@ func TestKnowledgeCloudJSONValidationAndNoLocalFallback(t *testing.T) {
 				t.Fatal(err)
 			}
 			links, err := gateway.Links(context.Background(), "fixture:cloud", KnowledgeContext{}, nil)
-			if reply == `{"links":[]}` {
+			if unwrapKnowledgeJSON(reply) == `{"links":[]}` {
 				if err != nil || len(links) != 0 {
 					t.Fatal(links, err)
 				}
@@ -541,5 +541,46 @@ func TestKnowledgeRetryUsesExactCheckpointAfterModelSwitch(t *testing.T) {
 	status, err := s.KnowledgeStatus(id, item.Selected.Int64)
 	if err != nil || status.ID != first.RunID || status.State != "done" || g.MetadataCalls != 3 {
 		t.Fatal(status, g, err)
+	}
+}
+
+func TestKnowledgeMetadataFencedJSONStillValidatesSchema(t *testing.T) {
+	valid := `{"category":"Storage","tags":["backup"],"questions":["How to restore?"]}`
+	reply := ""
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			fmt.Fprint(rw, `{"models":[{"name":"fixture:cloud","remote_model":"fixture","remote_host":"https://ollama.com"}]}`)
+			return
+		}
+		json.NewEncoder(rw).Encode(map[string]any{"done": true, "message": map[string]string{"content": reply}})
+	}))
+	defer server.Close()
+	gateway, err := NewOllama(server.URL+"/api/chat", "", time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		raw      string
+		accepted bool
+	}{
+		{valid, true}, {"```json\n" + valid + "\n```", true},
+		{"```json\r\n" + valid + "\r\n```", true},
+		{"```json\n" + valid + "\n```\nextra", false},
+		{"```json\n" + strings.TrimSuffix(valid, "}") + `,"links":[]}` + "\n```", false},
+		{"```json\n" + valid + "\n```\n```json\n" + valid + "\n```", false},
+		{"```json\n{}\n```", false},
+	} {
+		reply = test.raw
+		result, err := gateway.Metadata(context.Background(), "fixture:cloud", KnowledgeContext{}, nil)
+		if test.accepted {
+			if err != nil || result.Category != "Storage" {
+				t.Fatal(test.raw, result, err)
+			}
+		} else {
+			var cause *SourceError
+			if !errors.As(err, &cause) || cause.Kind != "format" || cause.Diagnostic != reply {
+				t.Fatal("schema/diagnostic changed", test.raw, err)
+			}
+		}
 	}
 }

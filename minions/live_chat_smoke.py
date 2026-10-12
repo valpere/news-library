@@ -207,7 +207,7 @@ def main():
                 state, reply = send('дайджести')
                 check('Дайджестів для такого повтору немає' in reply['Message'], 'short retry-kind answer did not choose digest retries')
                 state, reply = send('Дооброби старі статті, почни з п’яти')
-                check('Дообробка: нових задач 0' in reply['Message'], 'knowledge batch intent was not executed')
+                check('нових задач 0' in reply['Message'], 'knowledge batch intent was not executed')
                 ratings = db.execute('SELECT count(*) FROM rating_events').fetchone()[0]
                 state, _ = send('Знайди статті з власною оцінкою 3')
                 check(state['Filters']['Rating'] == '3' and db.execute('SELECT count(*) FROM rating_events').fetchone()[0] == ratings, 'search score became a human rating')

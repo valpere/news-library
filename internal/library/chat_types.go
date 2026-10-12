@@ -22,6 +22,7 @@ type ChatCriteria struct {
 }
 type ChatCommand struct {
 	Action         string       `json:"action"`
+	Answer         string       `json:"answer,omitempty"`
 	Criteria       ChatCriteria `json:"criteria,omitempty"`
 	RemoveTags     []string     `json:"remove_tags,omitempty"`
 	Question       string       `json:"question,omitempty"`
