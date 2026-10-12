@@ -46,11 +46,15 @@ var schemaV9 string
 //go:embed schema_v10.sql
 var schemaV10 string
 
+//go:embed schema_v11.sql
+var schemaV11 string
+
 type Store struct {
-	DB           *sql.DB
-	DigestConfig *DigestConfig
-	Files        Files
-	Rules        RuleSet
+	KnowledgeEnabled bool
+	DB               *sql.DB
+	DigestConfig     *DigestConfig
+	Files            Files
+	Rules            RuleSet
 }
 type Item struct {
 	MatchSnippet                                              string
@@ -150,6 +154,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 10 {
 			_, err = tx.Exec(schemaV10)
+		}
+		if err == nil && version < 11 {
+			_, err = tx.Exec(schemaV11)
 		}
 		if err == nil {
 			err = tx.Commit()
@@ -598,8 +605,8 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		for _, word := range strings.Fields(f.Query) {
 			terms = append(terms, `"`+strings.ReplaceAll(word, `"`, `""`)+`"`)
 		}
-		query += " AND i.id IN (SELECT rowid FROM item_fts WHERE item_fts MATCH ?)"
-		args = append(args, strings.Join(terms, " AND "))
+		query += " AND (i.id IN (SELECT rowid FROM item_fts WHERE item_fts MATCH ?) OR EXISTS(SELECT 1 FROM article_knowledge k WHERE k.item_id=i.id AND k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND instr(k.search_text,?)>0))"
+		args = append(args, strings.Join(terms, " AND "), strings.ToLower(f.Query))
 	}
 	for _, pair := range []struct{ v, column string }{{f.Placement, "i.placement"}, {f.State, "i.state"}} {
 		if pair.v != "" {
@@ -648,9 +655,11 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		args = append(args, f.Rating)
 	}
 	if len(f.Tags) > 0 {
-		query += " AND EXISTS(SELECT 1 FROM item_tags WHERE item_id=i.id AND tag IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.Tags)), ",") + "))"
-		for _, tag := range f.Tags {
-			args = append(args, tag)
+		query += " AND (EXISTS(SELECT 1 FROM item_tags WHERE item_id=i.id AND tag IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.Tags)), ",") + ")) OR EXISTS(SELECT 1 FROM article_knowledge k,json_each(k.tags_json) t WHERE k.item_id=i.id AND k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND t.value IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.Tags)), ",") + ")))"
+		for range 2 {
+			for _, tag := range f.Tags {
+				args = append(args, tag)
+			}
 		}
 	}
 	direction := "DESC"
@@ -666,7 +675,7 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		if f.Query == "" {
 			return nil, errors.New("релевантність потребує запиту")
 		}
-		query += " ORDER BY (SELECT rank FROM item_fts WHERE rowid=i.id AND item_fts MATCH ?) ASC,i.id ASC"
+		query += " ORDER BY coalesce((SELECT rank FROM item_fts WHERE rowid=i.id AND item_fts MATCH ?),1) ASC,i.id ASC"
 		args = append(args, strings.Join(func() []string {
 			var a []string
 			for _, w := range strings.Fields(f.Query) {

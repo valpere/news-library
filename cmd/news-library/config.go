@@ -14,6 +14,7 @@ import (
 )
 
 type config struct {
+	Knowledge               bool
 	YTDLP, YouTubeLanguages string
 
 	Telegram                                              library.TelegramConfig
@@ -62,7 +63,8 @@ func readConfig(args []string) (config, error) {
 	// Resolve supplied values before parsing defaults: an invalid lower-priority
 	// setting must not reject a valid command-line override.
 	flagNames := map[string]string{
-		"yt-dlp": "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
+		"knowledge": "NEWS_LIBRARY_KNOWLEDGE",
+		"yt-dlp":    "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
 		"telegram": "NEWS_LIBRARY_TELEGRAM_ENABLED", "telegram-chat": "NEWS_LIBRARY_TELEGRAM_CHAT_ID", "telegram-daily": "NEWS_LIBRARY_TELEGRAM_DAILY", "telegram-size": "NEWS_LIBRARY_TELEGRAM_SIZE",
 		"embeddings": "NEWS_LIBRARY_EMBEDDINGS", "embed-url": "NEWS_LIBRARY_EMBED_URL", "embed-timeout": "NEWS_LIBRARY_EMBED_TIMEOUT", "read-token": "NEWS_LIBRARY_READ_TOKEN",
 		"chunk-max-parts": "NEWS_LIBRARY_CHUNK_MAX_PARTS", "cache-max-bytes": "NEWS_LIBRARY_CACHE_MAX_BYTES", "cache-retention": "NEWS_LIBRARY_CACHE_RETENTION", "cache-cleanup-interval": "NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL",
@@ -83,7 +85,7 @@ func readConfig(args []string) (config, error) {
 			continue
 		}
 		if !hasValue {
-			if name == "no-worker" || name == "no-digests" || name == "embeddings" || name == "telegram" {
+			if name == "knowledge" || name == "no-worker" || name == "no-digests" || name == "embeddings" || name == "telegram" {
 				value = "true"
 			} else if i+1 < len(args) {
 				i++
@@ -177,6 +179,10 @@ func readConfig(args []string) (config, error) {
 	if e != nil {
 		return c, e
 	}
+	c.Knowledge, e = boolean("NEWS_LIBRARY_KNOWLEDGE", "true")
+	if e != nil {
+		return c, e
+	}
 	c.NoWorker, e = boolean("NEWS_LIBRARY_NO_WORKER", "false")
 	if e != nil {
 		return c, e
@@ -198,6 +204,7 @@ func readConfig(args []string) (config, error) {
 	}
 	c.ChunkMaxParts = int(parts)
 	flags := flag.NewFlagSet("news-library", flag.ContinueOnError)
+	flags.BoolVar(&c.Knowledge, "knowledge", c.Knowledge, "автоматичні метадані та нотатки-зв’язкові після дайджесту")
 	flags.StringVar(&c.YTDLP, "yt-dlp", c.YTDLP, "yt-dlp executable for YouTube metadata fallback; empty disables")
 	flags.StringVar(&c.YouTubeLanguages, "youtube-languages", c.YouTubeLanguages, "preferred subtitle languages, comma-separated")
 	flags.BoolVar(&c.Telegram.Enabled, "telegram", c.Telegram.Enabled, "увімкнути Telegram доставку")

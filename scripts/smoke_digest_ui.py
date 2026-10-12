@@ -38,7 +38,7 @@ gateway = ThreadingHTTPServer(('127.0.0.1', 0), Gateway)
 threading.Thread(target=gateway.serve_forever, daemon=True).start()
 with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-digest-smoke-') as data:
     process = subprocess.Popen([str(root/'build/news-library'), '-env-file', '', '-data', data,
-        '-bind', '127.0.0.1:0', '-model', 'fixture:cloud', '-ollama-url',
+        '-bind', '127.0.0.1:0', '-knowledge=false', '-model', 'fixture:cloud', '-ollama-url',
         f'http://127.0.0.1:{gateway.server_port}/api/chat'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         line = process.stdout.readline().strip()

@@ -25,7 +25,7 @@ class Gateway(BaseHTTPRequestHandler):
         body=json.dumps(value).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
 gateway=ThreadingHTTPServer(('127.0.0.1',0),Gateway);threading.Thread(target=gateway.serve_forever,daemon=True).start()
 with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-long-smoke-') as data:
-    process=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,'-bind','127.0.0.1:0','-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat','-digest-max-bytes','1024','-cache-cleanup-interval','1s','-cache-max-bytes','1024'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    process=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,'-bind','127.0.0.1:0','-knowledge=false', '-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat','-digest-max-bytes','1024','-cache-cleanup-interval','1s','-cache-max-bytes','1024'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     try:
         line=process.stdout.readline().strip();assert line.startswith('news-library: http://'),line
         origin=line.removeprefix('news-library: ')

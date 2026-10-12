@@ -15,6 +15,7 @@ type ConnectionMember struct {
 	Title, URL, Role             string
 }
 type ConnectionNote struct {
+	Author, Model, PromptVersion                         string
 	ID, VersionID, Revision                              int64
 	StableID, Title, Category, Body, CreatedAt, Markdown string
 	Tags, Questions                                      []string
@@ -52,7 +53,7 @@ func connectionList(values []string, maxCount, maxLength int) ([]string, error) 
 func jsonString(v any) string { b, _ := json.Marshal(v); return string(b) }
 func connectionMarkdown(n ConnectionNote) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "---\nschema: news-library/connection-v1\ntype: connection\nid: %s\nrevision: %d\ntitle: %s\ncategory: %s\ntags: %s\nquestions: %s\ncreated_at: %s\nauthor: user\nsources:\n", jsonString(n.StableID), n.Revision, jsonString(n.Title), jsonString(n.Category), jsonString(n.Tags), jsonString(n.Questions), jsonString(n.CreatedAt))
+	fmt.Fprintf(&b, "---\nschema: news-library/connection-v1\ntype: connection\nid: %s\nrevision: %d\ntitle: %s\ncategory: %s\ntags: %s\nquestions: %s\ncreated_at: %s\nauthor: %s\nmodel: %s\nprompt_version: %s\nsources:\n", jsonString(n.StableID), n.Revision, jsonString(n.Title), jsonString(n.Category), jsonString(n.Tags), jsonString(n.Questions), jsonString(n.CreatedAt), jsonString(n.Author), jsonString(n.Model), jsonString(n.PromptVersion))
 	for _, m := range n.Members {
 		fmt.Fprintf(&b, "  - item_id: %d\n    snapshot_id: %d\n    digest_id: ", m.ItemID, m.SnapshotID)
 		if m.DigestID == 0 {
@@ -76,6 +77,19 @@ func connectionMarkdown(n ConnectionNote) string {
 // SaveConnection publishes a new immutable revision, with optimistic concurrency
 // and references to the exact sources used. It never changes an article.
 func (s *Store) SaveConnection(n ConnectionNote, expectedVersion int64) (int64, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	n.Author, n.Model, n.PromptVersion = "user", "", ""
+	id, err := s.saveConnectionTx(tx, n, expectedVersion)
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
+}
+func (s *Store) saveConnectionTx(tx *sql.Tx, n ConnectionNote, expectedVersion int64) (int64, error) {
 	n.Title = strings.TrimSpace(n.Title)
 	n.Category = strings.TrimSpace(n.Category)
 	n.Body = strings.TrimSpace(n.Body)
@@ -102,11 +116,6 @@ func (s *Store) SaveConnection(n ConnectionNote, expectedVersion int64) (int64, 
 	if len(n.Members) < 2 || len(n.Members) > 20 {
 		return 0, errors.New("оберіть від 2 до 20 різних матеріалів")
 	}
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
 	n.CreatedAt = nowUTC()
 	n.Revision = 1
 	if n.ID == 0 {
@@ -173,7 +182,7 @@ func (s *Store) SaveConnection(n ConnectionNote, expectedVersion int64) (int64, 
 	if err != nil {
 		return 0, err
 	}
-	result, err := tx.Exec(`INSERT INTO connection_versions(note_id,revision,title,category,tags_json,questions_json,body,search_text,markdown_path,hash,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, n.ID, n.Revision, n.Title, n.Category, jsonString(n.Tags), jsonString(n.Questions), n.Body, strings.ToLower(n.Title+" "+n.Category+" "+strings.Join(n.Tags, " ")+" "+strings.Join(n.Questions, " ")+" "+n.Body), path, textHash(n.Markdown), n.CreatedAt)
+	result, err := tx.Exec(`INSERT INTO connection_versions(note_id,revision,title,category,tags_json,questions_json,body,search_text,markdown_path,hash,created_at,author,model,prompt_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, n.ID, n.Revision, n.Title, n.Category, jsonString(n.Tags), jsonString(n.Questions), n.Body, strings.ToLower(n.Title+" "+n.Category+" "+strings.Join(n.Tags, " ")+" "+strings.Join(n.Questions, " ")+" "+n.Body), path, textHash(n.Markdown), n.CreatedAt, n.Author, n.Model, n.PromptVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -190,12 +199,12 @@ func (s *Store) SaveConnection(n ConnectionNote, expectedVersion int64) (int64, 
 			return 0, err
 		}
 	}
-	return n.ID, tx.Commit()
+	return n.ID, nil
 }
 func (s *Store) Connection(id, version int64) (ConnectionNote, error) {
 	var n ConnectionNote
 	var tags, questions, path, hash string
-	err := s.DB.QueryRow(`SELECT c.id,c.stable_id,v.id,v.revision,v.title,v.category,v.tags_json,v.questions_json,v.body,v.created_at,v.markdown_path,v.hash FROM connection_notes c JOIN connection_versions v ON v.note_id=c.id WHERE c.id=? AND (?=0 OR v.id=?) ORDER BY v.revision DESC LIMIT 1`, id, version, version).Scan(&n.ID, &n.StableID, &n.VersionID, &n.Revision, &n.Title, &n.Category, &tags, &questions, &n.Body, &n.CreatedAt, &path, &hash)
+	err := s.DB.QueryRow(`SELECT c.id,c.stable_id,v.id,v.revision,v.title,v.category,v.tags_json,v.questions_json,v.body,v.created_at,v.markdown_path,v.hash,v.author,v.model,v.prompt_version FROM connection_notes c JOIN connection_versions v ON v.note_id=c.id WHERE c.id=? AND (?=0 OR v.id=?) ORDER BY v.revision DESC LIMIT 1`, id, version, version).Scan(&n.ID, &n.StableID, &n.VersionID, &n.Revision, &n.Title, &n.Category, &tags, &questions, &n.Body, &n.CreatedAt, &path, &hash, &n.Author, &n.Model, &n.PromptVersion)
 	if err != nil {
 		return n, err
 	}

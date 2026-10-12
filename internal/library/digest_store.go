@@ -155,6 +155,15 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 			return err
 		}
 	}
+	if s.KnowledgeEnabled {
+		did, e := result.LastInsertId()
+		if e != nil {
+			return e
+		}
+		if err = s.queueKnowledge(tx, j.ItemID, j.SnapshotID.Int64, did, j.Model); err != nil {
+			return err
+		}
+	}
 	if _, err = tx.Exec(`UPDATE jobs SET state='done',lease_until=0,error='' WHERE id=?`, j.ID); err != nil {
 		return err
 	}

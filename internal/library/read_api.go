@@ -249,6 +249,14 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "backlinks unavailable", 503)
 		return
 	}
+	if item.Selected.Valid {
+		knowledge, e := w.Store.Knowledge(id, item.Selected.Int64)
+		if e != nil {
+			http.Error(rw, "knowledge unavailable", 503)
+			return
+		}
+		payload["knowledge"] = knowledge
+	}
 	payload["connections"] = backlinks
 	jsonResponse(payload)
 }

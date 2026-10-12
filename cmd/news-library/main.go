@@ -71,6 +71,7 @@ func run() error {
 	if err = s.ConfigureRules(rules); err != nil {
 		return err
 	}
+	s.KnowledgeEnabled = c.Knowledge && !c.NoDigests
 	var generator *library.Ollama
 	if !c.NoDigests {
 		generator, err = library.NewOllama(c.OllamaURL, c.OllamaKey, c.DigestTimeout)
@@ -116,6 +117,13 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	knowledgeDone := make(chan struct{})
+	if s.KnowledgeEnabled && !c.NoWorker {
+		kw := &library.KnowledgeWorker{Store: s, Generator: generator, Timeout: c.DigestTimeout}
+		go func() { defer close(knowledgeDone); kw.Run(ctx) }()
+	} else {
+		close(knowledgeDone)
+	}
 	deliveryDone := make(chan struct{})
 	if c.Telegram.Enabled && !c.NoWorker {
 		sender, e := library.NewTelegram(c.Telegram.Token, c.TelegramTimeout)
@@ -159,6 +167,7 @@ func run() error {
 	<-cleanupDone
 	<-embeddingDone
 	<-deliveryDone
+	<-knowledgeDone
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}

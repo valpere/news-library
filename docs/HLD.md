@@ -499,15 +499,14 @@ Backlinks — запит members тільки останньої revision кож
 ревізії доступні явно. Український case-insensitive substring пошук працює
 за normalized `search_text`, а не ASCII-only SQLite lower. До100результатів.
 Vocabulary підказки збираються з item_tags та актуальних revision metadata;
-статті не отримують автоматичних нових тегів. HTTP UI створює/редагує,
+людські теги статей не змінюються, модельні метадані зберігаються окремо. HTTP UI створює/редагує,
 читає, шукає, експортує; спільні Host/Origin/CSRF/agent-mutation guards діють.
 `GET /api/read/connections[/{id}?version=…]` використовує чинний bearer guard,
 `/api/read/items/{id}` також повертає current backlinks. Views escape HTML.
 
 Backup schema9 додає всі connection_versions Markdown до primaryRefs;
 restore зберігає stable IDs, revisions, members і вихідні статті. Первинні
-файли зв’язкових не підлягають cache cleanup. Наступна ітерація може додати
-cloud-пропозиції зв’язків із provenance, але ручний прототип не викликає AI.
+файли зв’язкових не підлягають cache cleanup. Автоматичний конвеєр schema11 описаний нижче; ручний редактор не викликає AI.
 
 ## Пакетне прийняття посилань
 
@@ -586,3 +585,45 @@ Host/Origin/CSRF guards і забороною agent writes; вся форма в
 перевіряє також legacy rule decision до reset job, зберігаючи новий rejection
 без generation. Повтор використовує current config, не fetch; failure events
 не стираються. Submit не робить HTTP/model/embedding calls.
+
+
+## Автоматичне розуміння й зв’язки (schema v11)
+
+CompleteDigest атомарно додає knowledge_runs лише для поточного дозволеного
+snapshot, якщо NEWS_LIBRARY_KNOWLEDGE увімкнено. Окремий KnowledgeWorker
+працює поруч із digest worker, спільний cloud-only Ollama adapter. Таблиця
+knowledge_runs має unique(digest,prompt,model), token/lease/attempts/states/updated_at;
+claim скасовує stale/filtered work, до 3 temporary/crash recovery attempts.
+NoWorker/restored pause вимикає worker, NoDigests також вимикає analysis.
+Старт не сканує старі готові артефакти для масового backfill.
+
+Metadata JSON: одна category, 1–12 tags, 1–10 questions; словник чинних
+article/connection metadata + людські теги до 200 значень кожного виду.
+Inputs untrusted, cloudAlias guard, strict JSON decoder і bounds; context
+містить digest до 32kB + source excerpt до 12kB з явним coverage.
+article_knowledge immutable + source ownership triggers; Files.Put/fsync
+створює frontmatter+digest у primary digests перед DB publication. Це checkpoint
+для link stage, без overwrite item_tags або rating events. Ручний повтор
+failed/cancelled current run використовує точний run checkpoint (також після
+перемикання моделі), current metadata/status обирається за updated_at і зберігає failures.
+
+Candidate SQL ранжує shared human/model tags, category, FTS terms із tags/title/
+questions по всіх дозволених selected snapshots; <=8, без існуючих pair links.
+Текст кожного кандидата bounded 8kB, source/digest IDs frozen. Другий JSON
+від моделі містить <=3 зв’язки або порожній список, metadata/roles і exact
+evidence у Text обох контекстів. Validation не допускає невідомих/повторних
+ID або вигаданих quotes. Однакові title/category/body групуються в одну
+нотатку з кількома members. Публікація у спільній короткій транзакції ще раз
+перевіряє lease/current digest/filters, актуальність target sources та pair dedup.
+saveConnectionTx додає immutable revision з author=model/model/prompt; ручне
+редагування додає user revision і зберігає модельну історію. Backlinks derived.
+
+knowledge_failures immutable, class/message/date/optional raw reply file;
+лише retryable temporary auto-retry, permanent/unknown лишаються failed.
+Метадані/дайджест лишаються доступними після link failure; diagnostics у
+details, file loss показує warning. Backup primaryRefs schema11 додає metadata
+і knowledge failure files. Exports GET /items/{id}/knowledge/markdown?source=…;
+read API item/context повертає knowledge, без inference/writes. Картка polls
+analysis pending без перезапису введення. POST knowledge-retry захищено
+спільними Host/Origin/CSRF/agent guards. Пошук додає current metadata
+Unicode-normalized search_text і model tags, не підміняє людські теги.
