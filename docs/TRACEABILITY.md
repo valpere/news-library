@@ -130,3 +130,18 @@ human history, stale attempts/sources, missing files і migrated filter rejectio
 з partial progress. `scripts/smoke_digest_retry_batch_ui.py`: дві format failures
 → checked preview → enqueue обох → два готові дайджести зі збереженими текстами,
 лише loopback fake cloud без userDB/live calls.
+
+
+Автоматичні metadata/connections FR-04/05/07/08/10/11/12/14/19:
+`knowledge_test.go` — первісний pipeline, reused vocabulary, exact source refs,
+model author, backlinks обох статей, human/source immutability, question/tag
+search, duplicate avoidance, metadata checkpoint + permanent failure/no auto
+retry + restored backup/diagnostics, stale lease/source/evidence/unknown IDs,
+early rejected zero calls, read-only UI guard/MD export, restart recovery і
+bounded temporary attempts, thematic grouping/manual author revision, schema10
+migration without file rewrite/backfill, strict cloud JSON/local model rejection,
+exact checkpoint after model switch і primary metadata file-loss warning.
+Config default/env/flag tests у config_test.go.
+`scripts/smoke_knowledge_ui.py` — два URL з manual source → automatic digest/
+metadata/thematic note → backlinks/author/MD/search, тільки loopback fake cloud.
+Попередні digest-only browser fixtures явно вимикають knowledge для ізоляції.

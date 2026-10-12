@@ -42,8 +42,12 @@ type Web struct {
 	zone             *time.Location
 }
 type pageData struct {
-	DigestRetryNext, DigestRetryAfter int64
-	DigestRetryIncludeUnknown         bool
+	KnowledgeFailures                  []JobFailure
+	Knowledge                          *ArticleKnowledge
+	KnowledgeStatus                    *KnowledgeRun
+	KnowledgeEnabled, KnowledgePending bool
+	DigestRetryNext, DigestRetryAfter  int64
+	DigestRetryIncludeUnknown          bool
 
 	DigestRetryCandidates                 []DigestRetryCandidate
 	DigestRetryResults                    []DigestRetryResult
@@ -184,6 +188,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 }
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /items/{id}/knowledge/markdown", w.exportKnowledge)
 	mux.HandleFunc("GET /digest-retries", w.digestRetryBatchPage)
 	mux.HandleFunc("POST /digest-retries", w.digestRetryBatchSubmit)
 	mux.HandleFunc("GET /connections", w.connectionListPage)
@@ -450,7 +455,28 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	current := snap != nil && snap.ID == i.Selected.Int64
-	w.render(rw, "detail", pageData{DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
+	var knowledge *ArticleKnowledge
+	var knowledgeStatus *KnowledgeRun
+	var knowledgeFailures []JobFailure
+	if snap != nil {
+		knowledge, err = w.Store.Knowledge(id, snap.ID)
+		if err != nil {
+			http.Error(rw, "метадані недоступні", 503)
+			return
+		}
+		knowledgeFailures, err = w.Store.KnowledgeFailures(id, snap.ID)
+		if err != nil {
+			http.Error(rw, "історія аналізу недоступна", 503)
+			return
+		}
+		knowledgeStatus, err = w.Store.KnowledgeStatus(id, snap.ID)
+		if err != nil {
+			http.Error(rw, "стан аналізу недоступний", 503)
+			return
+		}
+	}
+	knowledgePending := w.Store.KnowledgeEnabled && !w.BackgroundPaused && knowledgeStatus != nil && (knowledgeStatus.State == "queued" || knowledgeStatus.State == "running" || knowledgeStatus.State == "retry_wait")
+	w.render(rw, "detail", pageData{KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))
@@ -502,6 +528,8 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 		} else {
 			err = w.Store.RegenerateDigest(id, sid)
 		}
+	case "knowledge-retry":
+		err = w.Store.RetryKnowledge(id)
 	case "digest-retry":
 		err = w.Store.RetryDigest(id)
 	case "retry":

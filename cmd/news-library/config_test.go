@@ -134,3 +134,27 @@ func TestYouTubeConfigPrecedence(t *testing.T) {
 		t.Fatal("invalid language codes accepted")
 	}
 }
+
+func TestKnowledgeConfigDefaultAndOverrides(t *testing.T) {
+	c, err := readConfig([]string{"-env-file", ""})
+	if err != nil || !c.Knowledge {
+		t.Fatal(c.Knowledge, err)
+	}
+	t.Setenv("NEWS_LIBRARY_KNOWLEDGE", "false")
+	c, err = readConfig([]string{"-env-file", ""})
+	if err != nil || c.Knowledge {
+		t.Fatal(c.Knowledge, err)
+	}
+	c, err = readConfig([]string{"-env-file", "", "-knowledge"})
+	if err != nil || !c.Knowledge {
+		t.Fatal(c.Knowledge, err)
+	}
+	t.Setenv("NEWS_LIBRARY_KNOWLEDGE", "bad-private-value")
+	c, err = readConfig([]string{"-env-file", "", "-knowledge=false"})
+	if err != nil || c.Knowledge {
+		t.Fatal(c.Knowledge, err)
+	}
+	if _, err = readConfig([]string{"-env-file", ""}); err == nil || strings.Contains(err.Error(), "bad-private-value") {
+		t.Fatal(err)
+	}
+}

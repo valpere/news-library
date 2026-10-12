@@ -249,6 +249,18 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "backlinks unavailable", 503)
 		return
 	}
+	if item.Selected.Valid {
+		knowledge, e := w.Store.Knowledge(id, item.Selected.Int64)
+		if e != nil {
+			http.Error(rw, "knowledge unavailable", 503)
+			return
+		}
+		if knowledge == nil {
+			payload["knowledge"] = nil
+		} else {
+			payload["knowledge"] = map[string]any{"id": knowledge.ID, "run_id": knowledge.RunID, "item_id": knowledge.ItemID, "snapshot_id": knowledge.SnapshotID, "digest_id": knowledge.DigestID, "category": knowledge.Category, "tags": knowledge.Tags, "questions": knowledge.Questions, "author": "model", "model": knowledge.Model, "prompt_version": knowledge.PromptVersion, "created_at": knowledge.CreatedAt, "file_error": knowledge.FileError}
+		}
+	}
 	payload["connections"] = backlinks
 	jsonResponse(payload)
 }

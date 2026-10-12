@@ -18,7 +18,7 @@ import (
 
 const transferMarker = ".transfer-in-progress"
 const restorePause = ".restore-paused"
-const CurrentSchema = 10
+const CurrentSchema = 11
 
 type BackupFile struct {
 	Path string `json:"path"`
@@ -84,6 +84,9 @@ func primaryRefs(db *sql.DB, schema int) (map[string]string, error) {
 	}
 	if schema >= 9 {
 		queries = append(queries, "SELECT markdown_path,hash FROM connection_versions")
+	}
+	if schema >= 11 {
+		queries = append(queries, "SELECT markdown_path,hash FROM article_knowledge", "SELECT response_path,hash FROM knowledge_failures WHERE response_path<>''")
 	}
 	if schema >= 10 {
 		queries = append(queries, "SELECT response_path,hash FROM job_failures WHERE response_path <> ''")

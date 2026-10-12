@@ -1,10 +1,10 @@
 // Poll the read-only card while text retrieval or digest generation is pending.
 // Preserve any user input or expanded controls instead of reloading over them.
 (() => {
-  const panel = document.getElementById("processing");
+  const panel = document.querySelector('#processing[data-pending="true"]') || document.querySelector('#knowledge[data-pending="true"]');
   if (!panel || panel.dataset.pending !== "true") return;
-  const message = document.getElementById("processing-message");
-  const refresh = document.getElementById("processing-refresh");
+  const message = document.getElementById(panel.id+"-message");
+  const refresh = document.getElementById(panel.id+"-refresh");
   let edited = false;
   document.addEventListener("input", () => { edited = true; });
   document.addEventListener("change", () => { edited = true; });
@@ -18,7 +18,7 @@
       const response = await fetch(location.href, {cache: "no-store"});
       if (!response.ok) throw new Error("status unavailable");
       const page = new DOMParser().parseFromString(await response.text(), "text/html");
-      const next = page.getElementById("processing");
+      const next = page.getElementById(panel.id);
       if (!next) throw new Error("card unavailable");
       if (next.dataset.pending === "false") {
         const focused = document.activeElement?.matches("input, textarea, select");
@@ -30,7 +30,7 @@
         }
         return;
       }
-      message.textContent = page.getElementById("processing-message").textContent;
+      message.textContent = page.getElementById(panel.id+"-message").textContent;
     } catch {
       message.textContent = "Не вдалося оновити стан. Посилання збережено; спробуйте оновити сторінку.";
       refresh.hidden = false;
