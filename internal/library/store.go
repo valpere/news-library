@@ -525,9 +525,6 @@ func (s *Store) rateShown(id, score int64, source, digest *int64, assessed *time
 	if score < 0 {
 		return errors.New("оцінка має бути невід’ємним цілим")
 	}
-	if _, err := s.Item(id); err != nil {
-		return err
-	}
 	var at any
 	if assessed != nil {
 		at = assessed.UTC().Format(time.RFC3339Nano)
@@ -540,8 +537,7 @@ func (s *Store) rateShown(id, score int64, source, digest *int64, assessed *time
 	if digest != nil {
 		did = *digest
 	}
-	_, err := s.DB.Exec("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason,scale) VALUES(?,?,?,?,?,?,?,?)", id, score, nowUTC(), at, sid, did, reason, scale)
-	return err
+	return s.update("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason,scale) SELECT id,?,?,?,?,?,?,? FROM active_items WHERE id=?", score, nowUTC(), at, sid, did, reason, scale, id)
 }
 func (s *Store) SetPlacement(id int64, value string) error {
 	if value != "inbox" && value != "library" && value != "deferred" {
