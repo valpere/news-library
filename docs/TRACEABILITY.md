@@ -17,13 +17,13 @@
 | FR-07 | UC-02, UC-03 | M1, M2 | AT-07 | passed M1/M2: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go), [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go) |
 | FR-08 | UC-07 | M2 | AT-08 | passed: [TestFeedbackAndRegenerationPreserveExactContext](../internal/library/feedback_test.go) |
 | FR-09 | UC-04 | M1 | AT-09 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
-| FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | partial M1: [TestLeaseRestartRetryAndIdempotency / TestCrashOnLastAttemptTerminates](../internal/library/store_test.go); digest recovery: [TestDigestQueueRecoveryAndRatingContext](../internal/library/digest_test.go); повне приймання M2 потребує окремої звірки |
+| FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | passed offline M1/M2: [lease/restart/idempotency](../internal/library/store_test.go), [digest restart/retry](../internal/library/digest_test.go), [chunk checkpoint reuse](../internal/library/chunk_digest_test.go), [human judgment across recovery](../internal/library/acceptance_test.go); [звірка AT-10](ACCEPTANCE_AUDIT.md) |
 | FR-11 | UC-05 | M1, M3 | AT-11 | passed M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
 | FR-12 | UC-09 | M3 | AT-12 | passed: [read authentication/denied mutations](../internal/library/semantic_test.go) |
 | FR-13 | UC-08 | M4 | AT-13 | passed offline: [preview/partial retry, unknown/no replay, Kyiv slots](../internal/library/delivery_test.go) |
 | FR-14 | UC-12 | M4 | AT-14 | passed: [live backup/restore primary/history/queue/checkpoints and corruption guards](../internal/library/backup_test.go), [CLI/paused activation](../cmd/news-library/archive_test.go) |
-| FR-15 | UC-03 | M1, M2 | AT-15 | partial M1: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go), [TestWebRejectsInvalidScoresAndForeignContext](../internal/library/web_test.go); passed digest links: [TestDigestQueueRecoveryAndRatingContext / TestDigestPrimaryUIAndExports](../internal/library/digest_test.go) |
-| FR-16 | UC-10 | M1, M2 | AT-16 | partial M1: [TestNeedsInputAndManualWinsRace](../internal/library/store_test.go), [TestYouTubeFixtures](../internal/library/source_test.go); digest failure/retry: [browser smoke](../scripts/smoke_digest_ui.py); passed long-source processing: [TestLongDigestResumesSavedPartsAndPreservesSource](../internal/library/chunk_digest_test.go) |
+| FR-15 | UC-03 | M1, M2 | AT-15 | passed offline M1/M2: [rating history/null/context](../internal/library/store_test.go), [source/digest ownership](../internal/library/digest_test.go), [scale/legacy dates](../internal/library/usefulness_test.go), [exact event across new snapshot](../internal/library/acceptance_test.go); [звірка AT-15](ACCEPTANCE_AUDIT.md) |
+| FR-16 | UC-10 | M1, M2 | AT-16 | passed offline M1/M2: [manual wins fetch race](../internal/library/store_test.go), [missing text/manual provenance/zero generator calls](../internal/library/acceptance_test.go), [long source persistence](../internal/library/chunk_digest_test.go); [звірка AT-16](ACCEPTANCE_AUDIT.md) |
 | FR-17 | UC-11 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
 | FR-18 | UC-05 | M1, M2, M3 | AT-18 | passed M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); passed M2 Confidence: [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
 | FR-19 | UC-09 | M3 | AT-19 | passed: [saved digest/excerpt, dated context, ownership/UTF-8 bounds](../internal/library/semantic_test.go) |
@@ -185,5 +185,6 @@ upstream failure. Live output зберігається локально в tmp, 
 TestUsefulnessFiltersDoNotReinterpretLegacyNumbers,
 TestChatUsefulnessExplicitLabelsAndAllUnread та TestWebUsefulnessAndReadAPIScale
 перевіряють версії шкали, збереження legacy/unknown dates, explicit provenance,
-словесні фільтри й незалежність прочитання. Повне приймання інших partial
-вимог цими тестами не підміняється.
+словесні фільтри й незалежність прочитання. Приймання FR-10/15/16 звірено окремо у
+[ACCEPTANCE_AUDIT.md](ACCEPTANCE_AUDIT.md); ці тести шкали самі по собі
+не підміняють перевірку всього recovery workflow.
