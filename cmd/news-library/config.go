@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,6 +15,10 @@ import (
 )
 
 type config struct {
+	OpenRouterEnabled       bool
+	OpenRouterKey           string
+	OpenRouterModels        []string
+	OpenRouterTimeout       time.Duration
 	Chat                    bool
 	ChatModel               string
 	ChatTimeout             time.Duration
@@ -67,6 +72,7 @@ func readConfig(args []string) (config, error) {
 	// Resolve supplied values before parsing defaults: an invalid lower-priority
 	// setting must not reject a valid command-line override.
 	flagNames := map[string]string{
+		"openrouter": "NEWS_LIBRARY_OPENROUTER_ENABLED", "openrouter-models": "NEWS_LIBRARY_OPENROUTER_MODELS", "openrouter-timeout": "NEWS_LIBRARY_OPENROUTER_TIMEOUT",
 		"knowledge": "NEWS_LIBRARY_KNOWLEDGE",
 		"chat":      "NEWS_LIBRARY_CHAT", "chat-model": "NEWS_LIBRARY_CHAT_MODEL", "chat-timeout": "NEWS_LIBRARY_CHAT_TIMEOUT",
 		"fetch-user-agent": "NEWS_LIBRARY_FETCH_USER_AGENT", "yt-dlp": "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
@@ -90,7 +96,7 @@ func readConfig(args []string) (config, error) {
 			continue
 		}
 		if !hasValue {
-			if name == "chat" || name == "knowledge" || name == "no-worker" || name == "no-digests" || name == "embeddings" || name == "telegram" {
+			if name == "openrouter" || name == "chat" || name == "knowledge" || name == "no-worker" || name == "no-digests" || name == "embeddings" || name == "telegram" {
 				value = "true"
 			} else if i+1 < len(args) {
 				i++
@@ -188,6 +194,19 @@ func readConfig(args []string) (config, error) {
 	if e != nil {
 		return c, e
 	}
+	c.OpenRouterEnabled, e = boolean("NEWS_LIBRARY_OPENROUTER_ENABLED", "false")
+	if e != nil {
+		return c, e
+	}
+	c.OpenRouterKey = get("OPENROUTER_API_KEY", "")
+	c.OpenRouterModels, e = library.ParseFreeModels(get("NEWS_LIBRARY_OPENROUTER_MODELS", "[]"))
+	if e != nil {
+		return c, e
+	}
+	c.OpenRouterTimeout, e = time.ParseDuration(get("NEWS_LIBRARY_OPENROUTER_TIMEOUT", "90s"))
+	if e != nil || c.OpenRouterTimeout <= 0 {
+		return c, errors.New("invalid OpenRouter timeout")
+	}
 	c.Knowledge, e = boolean("NEWS_LIBRARY_KNOWLEDGE", "true")
 	if e != nil {
 		return c, e
@@ -218,6 +237,11 @@ func readConfig(args []string) (config, error) {
 	c.ChunkMaxParts = int(parts)
 	flags := flag.NewFlagSet("news-library", flag.ContinueOnError)
 	flags.BoolVar(&c.Knowledge, "knowledge", c.Knowledge, "автоматичні метадані та нотатки-зв’язкові після дайджесту")
+	flags.BoolVar(&c.OpenRouterEnabled, "openrouter", c.OpenRouterEnabled, "enable explicit free-only digest fallback")
+	freeModelsJSON, _ := json.Marshal(c.OpenRouterModels)
+	freeModelsFlag := string(freeModelsJSON)
+	flags.StringVar(&freeModelsFlag, "openrouter-models", freeModelsFlag, "JSON array of concrete provider/model:free IDs")
+	flags.DurationVar(&c.OpenRouterTimeout, "openrouter-timeout", c.OpenRouterTimeout, "maximum OpenRouter HTTP request time")
 	flags.StringVar(&c.FetchUserAgent, "fetch-user-agent", c.FetchUserAgent, "User-Agent for source HTTP requests")
 	flags.StringVar(&c.YTDLP, "yt-dlp", c.YTDLP, "yt-dlp executable for YouTube metadata fallback; empty disables")
 	flags.StringVar(&c.YouTubeLanguages, "youtube-languages", c.YouTubeLanguages, "preferred subtitle languages, comma-separated")
@@ -285,6 +309,11 @@ func readConfig(args []string) (config, error) {
 	}
 	if strings.TrimSpace(c.FetchUserAgent) == "" || len(c.FetchUserAgent) > 512 || strings.ContainsAny(c.FetchUserAgent, "\r\n") {
 		return c, errors.New("invalid source User-Agent")
+	}
+	if c.OpenRouterEnabled {
+		if _, e := library.NewFreeOpenRouter(c.OpenRouterKey, c.OpenRouterModels, c.OpenRouterTimeout); e != nil {
+			return c, e
+		}
 	}
 	if c.FetchTimeout <= 0 || c.DigestTimeout <= 0 || c.Lease < time.Second || c.Backoff <= 0 || c.CacheTTL < 0 || c.Attempts < 1 || c.Attempts > 100 || c.MaxBytes < 1024 || c.MaxBytes > 64<<20 || c.InputLimit < 1024 || c.InputLimit > 4<<20 {
 		return c, errors.New("некоректні таймаути/ліміти конфігурації")

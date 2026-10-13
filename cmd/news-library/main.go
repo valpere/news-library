@@ -72,6 +72,7 @@ func run() error {
 		return err
 	}
 	s.KnowledgeEnabled = c.Knowledge && !c.NoDigests
+	var digestGenerator library.Generator
 	var generator *library.Ollama
 	if !c.NoDigests {
 		generator, err = library.NewOllama(c.OllamaURL, c.OllamaKey, c.DigestTimeout)
@@ -85,6 +86,15 @@ func run() error {
 		if err = s.EnableDigests(library.DigestConfig{Model: c.Model, PromptVersion: prompt, MaxInputBytes: c.InputLimit, Interests: c.Interests, ChunkLimit: c.InputLimit, ChunkMaxParts: c.ChunkMaxParts}); err != nil {
 			return err
 		}
+	}
+	digestGenerator = generator
+	if generator != nil && c.OpenRouterEnabled {
+		secondary, e := library.NewFreeOpenRouter(c.OpenRouterKey, c.OpenRouterModels, c.OpenRouterTimeout)
+		if e != nil {
+			return e
+		}
+		secondary.Store = s
+		digestGenerator = &library.DigestFallback{Primary: generator, Secondary: secondary, Store: s, PrimaryBudget: c.DigestTimeout / 2}
 	}
 	fetcher := library.NewFetcher(c.FetchTimeout, c.MaxBytes)
 	fetcher.UserAgent = c.FetchUserAgent
@@ -155,7 +165,7 @@ func run() error {
 	go func() { defer close(cleanupDone); cache.RunCleanup(ctx, c.CacheCleanupInterval) }()
 	done := make(chan struct{})
 	if !c.NoWorker {
-		worker := &library.Worker{Store: s, Source: fetcher, Generator: &library.ChunkGenerator{Store: s, Leaf: generator}, Timeout: c.FetchTimeout, DigestTimeout: c.DigestTimeout, Lease: c.Lease, Backoff: c.Backoff, MaxAttempts: c.Attempts}
+		worker := &library.Worker{Store: s, Source: fetcher, Generator: &library.ChunkGenerator{Store: s, Leaf: digestGenerator}, Timeout: c.FetchTimeout, DigestTimeout: c.DigestTimeout, Lease: c.Lease, Backoff: c.Backoff, MaxAttempts: c.Attempts}
 		go func() { defer close(done); worker.Run(ctx) }()
 	} else {
 		close(done)

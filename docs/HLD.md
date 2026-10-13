@@ -5,7 +5,7 @@
 реалізовані відповідно до [вимог](REQUIREMENTS.md). Сховище має міграції
 v1–v15, FTS5, транзакційну чергу та незмінні версії текстів і оцінок.
 Метадані зберігаються в базі, первинні тексти й дайджести — окремими файлами.
-Опціональний безкоштовний резерв OpenRouter залишається запланованим.
+Опціональний free-only резерв дайджестів OpenRouter реалізовано й типово вимкнено.
 Сервер — `cmd/news-library`, компоненти — `internal/library`, шаблони
 інтерфейсу — `pages.html` та `chat.html`. Деталі реалізованих етапів наведені нижче.
 
@@ -134,8 +134,8 @@ Rollback може лишити файл без посилання, але не �
   моделі виключені. Типова модель поточної конфігурації — `gemma4:cloud`;
   параметр налаштовуваний (див. [README](../README.md)). `gpt-oss:120b-cloud`
   був початковим кандидатом у пілотах; вони не довели його переваги в особистій користі.
-- **Резерв (заплановано):** OpenRouter тільки з явно дозволеними
-  безкоштовними ID. Адаптер ще не реалізований; його ввімкнення потребуватиме
+- **Резерв дайджестів:** OpenRouter тільки з явно дозволеними
+  безкоштовними ID. Адаптер реалізований; його ввімкнення потребує
   приватного ключа й налаштування. Збій основного шлюзу вже зараз зберігає
   URL, текст і причину відмови; повтор залежить від типу збою.
 - **Embeddings:** локальна `bge-m3`. Версія індексу враховує модель,
@@ -370,7 +370,7 @@ Web може вибирати source/digest IDs, показує історію �
 результат під час регенерації, використовує readonly polling із захистом
 unsent input. Confidence sorting/filtering SQL не змінює людських даних.
 Міграція v3→v4 додає metadata; не генерує прогнозів/історичних оцінок і не
-запускає правил. OpenRouter free ще planned; long-source chunking реалізоване нижче.
+запускає правил. OpenRouter free-only digest fallback реалізовано й типово вимкнено; long-source chunking реалізоване нижче.
 
 ## Schema v5: частини та очищення кешу
 
@@ -748,3 +748,39 @@ redirects також перевіряються, приватні мережі �
 `minions/source-recovery` типово лише читає план; мутації та cloud generation
 дозволяються окремими прапорцями. Обмежена черга містить лише явну вибірку;
 завершені етапи повторно не генеруються, звіт та тимчасові дані — у tmp.
+
+## Free-only резерв дайджестів
+
+`DigestFallback` обгортає первинний Ollama generator на рівні leaf-викликів
+`ChunkGenerator`. Спільні prompt/validation застосовуються до обох API.
+Перша спроба отримує обмежену частину загального deadline, залишаючи час
+резерву. `OpenRouter` використовує лише фіксований HTTPS API endpoint,
+відхиляє redirects, обмежує розмір відповідей та кількість явних моделей до 3.
+Конструктор не робить мережевих запитів; startup disabled не потребує ключа.
+
+Перед кожним резервним запитом перевіряється свіжий `/api/v1/models` каталог:
+обов’язкові prompt/completion та всі інші вказані ціни мають бути точним нулем.
+Точне десяткове порівняння не дозволяє округлити малу додатну ціну до нуля.
+POST має `provider.max_price` prompt/completion/request/image = 0,
+`require_parameters=true`, `allow_fallbacks=false`, `data_collection=deny`;
+передається один ID, без tools/plugins/автоматичних routers. Наступний явно
+дозволений free ID можливий лише після temporary збою; решта збоїв зупиняє
+спробу. Незмінні job_failures зберігають відмови primary і резервних спроб,
+а generated_artifacts/digest_checkpoints — actual model/provider успішної відповіді.
+Схема бази не змінюється. Чат і KnowledgeWorker продовжують користуватися Ollama.
+
+Параметри `.env`: `NEWS_LIBRARY_OPENROUTER_ENABLED=false`,
+`OPENROUTER_API_KEY`, `NEWS_LIBRARY_OPENROUTER_MODELS=[]` (JSON array),
+`NEWS_LIBRARY_OPENROUTER_TIMEOUT=90s`. Без явно ввімкненого резерву — нуль
+OpenRouter запитів. Налаштування не змінюють прийнятих результатів і checkpoint.
+Правила відсіву залишаються перед обома генераторами.
+
+Контракт API звірено з [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection),
+[model pricing](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties)
+та [chat response usage](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion).
+
+Для free-only конфігурації використовується workspace без BYOK-ключів;
+BYOK billing контролюється стороннім provider account, тому відповіді з
+`is_byok=true` чи невідомим BYOK status відхиляються. Це не механізм
+скасування сторонніх нарахувань після вже виконаного запиту.
+Політика BYOK — [офіційна документація](https://openrouter.ai/docs/guides/overview/auth/byok).
