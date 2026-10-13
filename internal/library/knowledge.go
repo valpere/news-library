@@ -83,7 +83,7 @@ func (s *Store) RetryKnowledge(item int64) error {
 	}
 	defer tx.Rollback()
 	var sid, did int64
-	err = tx.QueryRow(`SELECT i.selected_snapshot,d.id FROM items i JOIN generated_artifacts d ON d.snapshot_id=i.selected_snapshot WHERE i.id=? AND i.filter_state IN ('passed','overridden') ORDER BY d.id DESC LIMIT 1`, item).Scan(&sid, &did)
+	err = tx.QueryRow(`SELECT i.selected_snapshot,d.id FROM active_items i JOIN generated_artifacts d ON d.snapshot_id=i.selected_snapshot WHERE i.id=? AND i.filter_state IN ('passed','overridden') ORDER BY d.id DESC LIMIT 1`, item).Scan(&sid, &did)
 	if err != nil {
 		return errors.New("спершу потрібен готовий дайджест дозволеного матеріалу")
 	}
@@ -125,7 +125,7 @@ func (s *Store) claimKnowledge(timeout time.Duration) (*KnowledgeRun, error) {
 	}
 	defer tx.Rollback()
 	now := time.Now().UnixMilli()
-	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','running','retry_wait') AND NOT EXISTS(SELECT 1 FROM items i WHERE i.id=knowledge_runs.item_id AND i.selected_snapshot=knowledge_runs.snapshot_id AND i.filter_state IN ('passed','overridden') AND knowledge_runs.digest_id=(SELECT max(id) FROM generated_artifacts WHERE snapshot_id=i.selected_snapshot))`); err != nil {
+	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','running','retry_wait') AND NOT EXISTS(SELECT 1 FROM active_items i WHERE i.id=knowledge_runs.item_id AND i.selected_snapshot=knowledge_runs.snapshot_id AND i.filter_state IN ('passed','overridden') AND knowledge_runs.digest_id=(SELECT max(id) FROM generated_artifacts WHERE snapshot_id=i.selected_snapshot))`); err != nil {
 		return nil, err
 	}
 	if _, err = tx.Exec(`INSERT INTO knowledge_failures(run_id,kind,message,recorded_at) SELECT id,'unknown','Аналіз не завершено після перезапуску',? FROM knowledge_runs WHERE state='running' AND lease_until<=? AND attempts>=3`, nowUTC(), now); err != nil {
@@ -151,7 +151,7 @@ func (s *Store) claimKnowledge(timeout time.Duration) (*KnowledgeRun, error) {
 }
 func knowledgeLease(tx *sql.Tx, j KnowledgeRun) error {
 	var valid int
-	err := tx.QueryRow(`SELECT count(*) FROM knowledge_runs r JOIN items i ON i.id=r.item_id WHERE r.id=? AND r.token=? AND r.state='running' AND r.lease_until>? AND i.selected_snapshot=r.snapshot_id AND i.filter_state IN ('passed','overridden') AND r.digest_id=(SELECT max(id) FROM generated_artifacts WHERE snapshot_id=r.snapshot_id)`, j.ID, j.Token, time.Now().UnixMilli()).Scan(&valid)
+	err := tx.QueryRow(`SELECT count(*) FROM knowledge_runs r JOIN active_items i ON i.id=r.item_id WHERE r.id=? AND r.token=? AND r.state='running' AND r.lease_until>? AND i.selected_snapshot=r.snapshot_id AND i.filter_state IN ('passed','overridden') AND r.digest_id=(SELECT max(id) FROM generated_artifacts WHERE snapshot_id=r.snapshot_id)`, j.ID, j.Token, time.Now().UnixMilli()).Scan(&valid)
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func (s *Store) completeKnowledgeMetadata(j KnowledgeRun, k ArticleKnowledge, d 
 		return errors.New("analysis digest ownership mismatch")
 	}
 	var sourceURL, title, sourceHash string
-	if err = tx.QueryRow("SELECT i.original_url,v.title,v.hash FROM items i JOIN source_versions v ON v.id=? WHERE i.id=? AND v.item_id=i.id", j.SnapshotID, j.ItemID).Scan(&sourceURL, &title, &sourceHash); err != nil {
+	if err = tx.QueryRow("SELECT i.original_url,v.title,v.hash FROM active_items i JOIN source_versions v ON v.id=? WHERE i.id=? AND v.item_id=i.id", j.SnapshotID, j.ItemID).Scan(&sourceURL, &title, &sourceHash); err != nil {
 		return err
 	}
 	k.CreatedAt = nowUTC()

@@ -32,8 +32,8 @@ func (w *Web) chatPageData(r *http.Request) (pageData, error) {
 		target   *[]ChatFacet
 		category bool
 	}{
-		{`SELECT k.category,count(*) FROM article_knowledge k JOIN items i ON i.id=k.item_id WHERE ` + current + ` AND k.category<>'' GROUP BY k.category ORDER BY count(*) DESC,k.category LIMIT 200`, &data.Categories, true},
-		{`SELECT tag,count(DISTINCT item_id) FROM (SELECT item_id,tag FROM item_tags UNION SELECT k.item_id,j.value AS tag FROM article_knowledge k JOIN items i ON i.id=k.item_id,json_each(k.tags_json) j WHERE ` + current + `) GROUP BY tag ORDER BY count(DISTINCT item_id) DESC,tag LIMIT 200`, &data.ChatTags, false},
+		{`SELECT k.category,count(*) FROM article_knowledge k JOIN active_items i ON i.id=k.item_id WHERE ` + current + ` AND k.category<>'' GROUP BY k.category ORDER BY count(*) DESC,k.category LIMIT 200`, &data.Categories, true},
+		{`SELECT tag,count(DISTINCT item_id) FROM (SELECT item_id,tag FROM item_tags WHERE item_id IN (SELECT id FROM active_items) UNION SELECT k.item_id,j.value AS tag FROM article_knowledge k JOIN active_items i ON i.id=k.item_id,json_each(k.tags_json) j WHERE ` + current + `) GROUP BY tag ORDER BY count(DISTINCT item_id) DESC,tag LIMIT 200`, &data.ChatTags, false},
 	}
 	for _, q := range queries {
 		rows, e := w.Store.DB.Query(q.sql)

@@ -85,7 +85,7 @@ func (s *Semantic) Search(ctx context.Context, f Filters, mode string) (SearchRe
 		return fallback()
 	}
 	version := s.version(revision)
-	join := ` FROM embedding_chunks c JOIN embedding_runs e ON e.snapshot_id=c.snapshot_id AND e.version=c.version JOIN items i ON i.selected_snapshot=c.snapshot_id WHERE c.version=? AND e.state='done' AND i.filter_state IN ('passed','overridden')`
+	join := ` FROM embedding_chunks c JOIN embedding_runs e ON e.snapshot_id=c.snapshot_id AND e.version=c.version JOIN active_items i ON i.selected_snapshot=c.snapshot_id WHERE c.version=? AND e.state='done' AND i.filter_state IN ('passed','overridden')`
 	rows, err := s.Store.DB.QueryContext(ctx, "SELECT DISTINCT i.id"+join, version)
 	if err != nil {
 		return out, err

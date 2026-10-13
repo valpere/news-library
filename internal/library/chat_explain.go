@@ -36,10 +36,10 @@ func (w *Web) chatProcessingReply(explain bool) (ChatReply, error) {
 		sql string
 		to  *int
 	}{
-		{"SELECT count(*) FROM jobs WHERE stage='fetch' AND state IN ('queued','running','retry_wait')", &fetching},
-		{"SELECT count(*) FROM jobs WHERE stage='digest' AND state IN ('queued','running','retry_wait')", &digesting},
-		{"SELECT count(*) FROM items WHERE state='digest_failed'", &digestFailed},
-		{"SELECT count(*) FROM items WHERE selected_snapshot IS NULL", &withoutText},
+		{"SELECT count(*) FROM jobs WHERE item_id IN (SELECT id FROM active_items) AND stage='fetch' AND state IN ('queued','running','retry_wait')", &fetching},
+		{"SELECT count(*) FROM jobs WHERE item_id IN (SELECT id FROM active_items) AND stage='digest' AND state IN ('queued','running','retry_wait')", &digesting},
+		{"SELECT count(*) FROM active_items WHERE state='digest_failed'", &digestFailed},
+		{"SELECT count(*) FROM active_items WHERE selected_snapshot IS NULL", &withoutText},
 	} {
 		if err = w.Store.DB.QueryRow(q.sql).Scan(q.to); err != nil {
 			return ChatReply{}, err
