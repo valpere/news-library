@@ -797,7 +797,11 @@ snapshots. Повідомлення пояснює потребу тексту/f
 обов’язкові prompt/completion та всі інші вказані ціни мають бути точним нулем.
 Точне десяткове порівняння не дозволяє округлити малу додатну ціну до нуля.
 POST має `provider.max_price` prompt/completion/request/image = 0,
-`require_parameters=true`, `allow_fallbacks=false`, `data_collection=deny`;
+`require_parameters=true`, `allow_fallbacks=false`, `data_collection=deny` типово;
+явне `NEWS_LIBRARY_OPENROUTER_DATA_COLLECTION=allow` дозволяє providers, які
+можуть зберігати/використовувати дані для навчання, відповідно до вибору
+користувача. Account/workspace privacy restrictions застосовуються додатково;
+allow не дозволяє платні маршрути і не змінює privacy акаунта.
 передається один ID, без tools/plugins/автоматичних routers. Наступний явно
 дозволений free ID можливий лише після temporary збою; решта збоїв зупиняє
 спробу. Незмінні job_failures зберігають відмови primary і резервних спроб,

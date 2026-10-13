@@ -36,14 +36,25 @@ func ParseFreeModels(raw string) ([]string, error) {
 }
 
 type FreeOpenRouter struct {
-	key     string
-	models  []string
-	baseURL string
-	client  *http.Client
-	Store   *Store
+	key            string
+	models         []string
+	baseURL        string
+	client         *http.Client
+	Store          *Store
+	dataCollection string
 }
 
-func NewFreeOpenRouter(key string, models []string, timeout time.Duration) (*FreeOpenRouter, error) {
+func NewFreeOpenRouter(key string, models []string, timeout time.Duration, collection ...string) (*FreeOpenRouter, error) {
+	policy := "deny"
+	if len(collection) > 1 {
+		return nil, errors.New("one OpenRouter data policy required")
+	}
+	if len(collection) == 1 {
+		policy = collection[0]
+	}
+	if policy != "deny" && policy != "allow" {
+		return nil, errors.New("OpenRouter data collection must be deny or allow")
+	}
 	raw, _ := json.Marshal(models)
 	validated, err := ParseFreeModels(string(raw))
 	if err != nil {
@@ -52,7 +63,7 @@ func NewFreeOpenRouter(key string, models []string, timeout time.Duration) (*Fre
 	if strings.TrimSpace(key) == "" || strings.ContainsAny(key, "\r\n") || len(validated) == 0 || timeout <= 0 {
 		return nil, errors.New("enabled OpenRouter requires a private key, explicit free IDs and a positive timeout")
 	}
-	return &FreeOpenRouter{key: key, models: append([]string(nil), validated...), baseURL: "https://openrouter.ai/api/v1", client: &http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+	return &FreeOpenRouter{key: key, models: append([]string(nil), validated...), dataCollection: policy, baseURL: "https://openrouter.ai/api/v1", client: &http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func zeroPrice(raw json.RawMessage) bool {
 	if len(raw) == 0 {
@@ -150,7 +161,7 @@ func (or *FreeOpenRouter) Generate(ctx context.Context, j Job, snap Snapshot) (D
 		if err = or.checkPrices(ctx); err != nil {
 			return Digest{}, err
 		}
-		payload := map[string]any{"model": m, "messages": messages, "stream": false, "max_tokens": 4096, "temperature": 0.3, "provider": map[string]any{"max_price": map[string]int{"prompt": 0, "completion": 0, "request": 0, "image": 0}, "require_parameters": true, "allow_fallbacks": false, "data_collection": "deny"}}
+		payload := map[string]any{"model": m, "messages": messages, "stream": false, "max_tokens": 4096, "temperature": 0.3, "provider": map[string]any{"max_price": map[string]int{"prompt": 0, "completion": 0, "request": 0, "image": 0}, "require_parameters": true, "allow_fallbacks": false, "data_collection": or.dataCollection}}
 		if j.PromptVersion == DigestPredictionPromptVersion {
 			payload["response_format"] = map[string]string{"type": "json_object"}
 		}

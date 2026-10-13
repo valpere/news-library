@@ -15,16 +15,17 @@ import (
 )
 
 type config struct {
-	OpenRouterEnabled       bool
-	OpenRouterKey           string
-	OpenRouterModels        []string
-	OpenRouterTimeout       time.Duration
-	Chat                    bool
-	ChatModel               string
-	ChatTimeout             time.Duration
-	Knowledge               bool
-	YTDLP, YouTubeLanguages string
-	FetchUserAgent          string
+	OpenRouterEnabled        bool
+	OpenRouterKey            string
+	OpenRouterModels         []string
+	OpenRouterTimeout        time.Duration
+	OpenRouterDataCollection string
+	Chat                     bool
+	ChatModel                string
+	ChatTimeout              time.Duration
+	Knowledge                bool
+	YTDLP, YouTubeLanguages  string
+	FetchUserAgent           string
 
 	Telegram                                              library.TelegramConfig
 	TelegramTimeout                                       time.Duration
@@ -73,8 +74,9 @@ func readConfig(args []string) (config, error) {
 	// setting must not reject a valid command-line override.
 	flagNames := map[string]string{
 		"openrouter": "NEWS_LIBRARY_OPENROUTER_ENABLED", "openrouter-models": "NEWS_LIBRARY_OPENROUTER_MODELS", "openrouter-timeout": "NEWS_LIBRARY_OPENROUTER_TIMEOUT",
-		"knowledge": "NEWS_LIBRARY_KNOWLEDGE",
-		"chat":      "NEWS_LIBRARY_CHAT", "chat-model": "NEWS_LIBRARY_CHAT_MODEL", "chat-timeout": "NEWS_LIBRARY_CHAT_TIMEOUT",
+		"openrouter-data-collection": "NEWS_LIBRARY_OPENROUTER_DATA_COLLECTION",
+		"knowledge":                  "NEWS_LIBRARY_KNOWLEDGE",
+		"chat":                       "NEWS_LIBRARY_CHAT", "chat-model": "NEWS_LIBRARY_CHAT_MODEL", "chat-timeout": "NEWS_LIBRARY_CHAT_TIMEOUT",
 		"fetch-user-agent": "NEWS_LIBRARY_FETCH_USER_AGENT", "yt-dlp": "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
 		"telegram": "NEWS_LIBRARY_TELEGRAM_ENABLED", "telegram-chat": "NEWS_LIBRARY_TELEGRAM_CHAT_ID", "telegram-daily": "NEWS_LIBRARY_TELEGRAM_DAILY", "telegram-size": "NEWS_LIBRARY_TELEGRAM_SIZE",
 		"embeddings": "NEWS_LIBRARY_EMBEDDINGS", "embed-url": "NEWS_LIBRARY_EMBED_URL", "embed-timeout": "NEWS_LIBRARY_EMBED_TIMEOUT", "read-token": "NEWS_LIBRARY_READ_TOKEN",
@@ -199,6 +201,7 @@ func readConfig(args []string) (config, error) {
 		return c, e
 	}
 	c.OpenRouterKey = get("OPENROUTER_API_KEY", "")
+	c.OpenRouterDataCollection = get("NEWS_LIBRARY_OPENROUTER_DATA_COLLECTION", "deny")
 	c.OpenRouterModels, e = library.ParseFreeModels(get("NEWS_LIBRARY_OPENROUTER_MODELS", "[]"))
 	if e != nil {
 		return c, e
@@ -242,6 +245,7 @@ func readConfig(args []string) (config, error) {
 	freeModelsFlag := string(freeModelsJSON)
 	flags.StringVar(&freeModelsFlag, "openrouter-models", freeModelsFlag, "JSON array of concrete provider/model:free IDs")
 	flags.DurationVar(&c.OpenRouterTimeout, "openrouter-timeout", c.OpenRouterTimeout, "maximum OpenRouter HTTP request time")
+	flags.StringVar(&c.OpenRouterDataCollection, "openrouter-data-collection", c.OpenRouterDataCollection, "deny provider collection (default) or explicitly allow it")
 	flags.StringVar(&c.FetchUserAgent, "fetch-user-agent", c.FetchUserAgent, "User-Agent for source HTTP requests")
 	flags.StringVar(&c.YTDLP, "yt-dlp", c.YTDLP, "yt-dlp executable for YouTube metadata fallback; empty disables")
 	flags.StringVar(&c.YouTubeLanguages, "youtube-languages", c.YouTubeLanguages, "preferred subtitle languages, comma-separated")
@@ -310,8 +314,11 @@ func readConfig(args []string) (config, error) {
 	if strings.TrimSpace(c.FetchUserAgent) == "" || len(c.FetchUserAgent) > 512 || strings.ContainsAny(c.FetchUserAgent, "\r\n") {
 		return c, errors.New("invalid source User-Agent")
 	}
+	if c.OpenRouterDataCollection != "deny" && c.OpenRouterDataCollection != "allow" {
+		return c, errors.New("OpenRouter data collection must be deny or allow")
+	}
 	if c.OpenRouterEnabled {
-		if _, e := library.NewFreeOpenRouter(c.OpenRouterKey, c.OpenRouterModels, c.OpenRouterTimeout); e != nil {
+		if _, e := library.NewFreeOpenRouter(c.OpenRouterKey, c.OpenRouterModels, c.OpenRouterTimeout, c.OpenRouterDataCollection); e != nil {
 			return c, e
 		}
 	}

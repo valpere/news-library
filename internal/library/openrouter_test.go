@@ -364,3 +364,47 @@ func TestFreeFallbackChunkCheckpointsKeepActualRoute(t *testing.T) {
 		t.Fatal("per-call failures lost", failures, err)
 	}
 }
+
+func TestOpenRouterDataPolicyIsExplicitAndDoesNotWidenPrices(t *testing.T) {
+	for _, policy := range []string{"deny", "allow"} {
+		t.Run(policy, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
+				if q.Method == "GET" {
+					json.NewEncoder(w).Encode(freeFixtureCatalog(freeFixture))
+					return
+				}
+				var p map[string]any
+				if err := json.NewDecoder(q.Body).Decode(&p); err != nil {
+					t.Fatal(err)
+				}
+				provider := p["provider"].(map[string]any)
+				if provider["data_collection"] != policy || provider["allow_fallbacks"] != false {
+					t.Fatal(provider)
+				}
+				for _, price := range provider["max_price"].(map[string]any) {
+					if price != float64(0) {
+						t.Fatal("privacy policy widened cost", price)
+					}
+				}
+				json.NewEncoder(w).Encode(freeFixtureResponse(fixtureDigest))
+			}))
+			defer server.Close()
+			r, err := NewFreeOpenRouter("private-test-key", []string{freeFixture}, time.Second, policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.baseURL = server.URL
+			if _, err = r.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "Synthetic source"}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	for _, policy := range []string{"", "all", "true"} {
+		if _, err := NewFreeOpenRouter("private-test-key", []string{freeFixture}, time.Second, policy); err == nil {
+			t.Fatal("unknown policy accepted", policy)
+		}
+	}
+	if _, err := NewFreeOpenRouter("private-test-key", []string{freeFixture}, time.Second, "allow", "deny"); err == nil {
+		t.Fatal("multiple policies accepted")
+	}
+}

@@ -89,7 +89,7 @@ func run() error {
 	}
 	digestGenerator = generator
 	if generator != nil && c.OpenRouterEnabled {
-		secondary, e := library.NewFreeOpenRouter(c.OpenRouterKey, c.OpenRouterModels, c.OpenRouterTimeout)
+		secondary, e := library.NewFreeOpenRouter(c.OpenRouterKey, c.OpenRouterModels, c.OpenRouterTimeout, c.OpenRouterDataCollection)
 		if e != nil {
 			return e
 		}
