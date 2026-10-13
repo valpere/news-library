@@ -223,6 +223,9 @@ func (s *Semantic) Step(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	snap, err := s.Store.Snapshot(j.SnapshotID)
+	if err == nil {
+		err = ValidateSourceContent(snap)
+	}
 	var parts []string
 	var vector []float64
 	if err == nil {
@@ -252,7 +255,8 @@ func (s *Semantic) Step(ctx context.Context) (bool, error) {
 		return true, s.finish(*j, parts, vector)
 	}
 	state := "retry_wait"
-	if j.Attempts >= 3 {
+	var sourceErr *SourceError
+	if j.Attempts >= 3 || (errors.As(err, &sourceErr) && sourceErr.Kind == "source") {
 		state = "failed"
 	}
 	// Generic diagnostic avoids leaking provider data; primary state is untouched.

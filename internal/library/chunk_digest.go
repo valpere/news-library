@@ -41,6 +41,9 @@ type ChunkGenerator struct {
 }
 
 func (g *ChunkGenerator) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, error) {
+	if err := ValidateSourceContent(snap); err != nil {
+		return Digest{}, err
+	}
 	if j.ChunkLimit == 0 || len(snap.Text) <= j.InputLimit {
 		return g.Leaf.Generate(ctx, j, snap)
 	}

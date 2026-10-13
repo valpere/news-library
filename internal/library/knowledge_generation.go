@@ -376,6 +376,7 @@ func (s *Store) completeKnowledgeLinks(j KnowledgeRun, c KnowledgeContext, candi
 func quoteMarkdown(s string) string { return "> " + strings.ReplaceAll(s, "\n", "\n> ") }
 
 type KnowledgeWorker struct {
+	ItemID    int64 // Zero processes the ordinary shared queue.
 	Store     *Store
 	Generator KnowledgeGenerator
 	Timeout   time.Duration
@@ -385,7 +386,7 @@ func (w *KnowledgeWorker) Step(ctx context.Context) (bool, error) {
 	if !w.Store.KnowledgeEnabled || w.Generator == nil {
 		return false, nil
 	}
-	j, err := w.Store.claimKnowledge(w.Timeout)
+	j, err := w.Store.claimKnowledge(w.Timeout, w.ItemID)
 	if err != nil || j == nil {
 		return false, err
 	}
