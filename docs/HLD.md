@@ -9,6 +9,16 @@ v1–v15, FTS5, транзакційну чергу та незмінні вер
 Сервер — `cmd/news-library`, компоненти — `internal/library`, шаблони
 інтерфейсу — `pages.html` та `chat.html`. Деталі реалізованих етапів наведені нижче.
 
+Операційні skills і recurring helpers — у `minions/`; приватні звіти — у `tmp/`.
+Doctor/triage читають schema v15 через SQLite `mode=ro`/`query_only` без Store,
+міграцій чи workers. Поточний прогрес прив’язаний до selected source/digest,
+а historical run counts не є кількістю поточних проблем. Backup check делегує
+перевірку й isolated paused restore production CLI. Search evaluation використовує
+лише loopback authenticated read API GET з вимкненими redirects/proxies;
+semantic режими потребують local embeddings, FTS — ні. Сервіси, генерація,
+доставка й мутації бібліотеки цими посіпаками не запускаються. Контракти й
+команди наведені в [minions/README.md](../minions/README.md).
+
 ## Компоненти
 
 ```mermaid
