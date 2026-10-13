@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -319,6 +320,9 @@ func (w *Web) chatCards(refs []ChatReference) ([]ChatCard, error) {
 	cards := []ChatCard{}
 	for _, ref := range refs {
 		item, err := w.Store.Item(ref.ItemID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -468,6 +472,9 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 				added++
 			case "existing":
 				existing++
+			case "trashed":
+				existing++
+				issues = append(issues, row.URL+": "+row.Error)
 			default:
 				failed++
 				if len(issues) < 5 {

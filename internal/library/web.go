@@ -216,6 +216,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 }
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /trash", w.trashPage)
 	mux.HandleFunc("GET /knowledge-batch", w.knowledgeBatchPage)
 	mux.HandleFunc("POST /knowledge-batch", w.knowledgeBatchSubmit)
 	mux.HandleFunc("GET /items/{id}/knowledge/markdown", w.exportKnowledge)
@@ -521,6 +522,13 @@ func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))
 	if err != nil {
 		http.Error(rw, "URL не прийнято: "+err.Error(), 400)
+		return
+	}
+	if reason, e := w.Store.TrashReason(id); e != nil {
+		http.Error(rw, "Не вдалося перевірити помийку", 500)
+		return
+	} else if reason != "" {
+		http.Redirect(rw, r, "/trash", http.StatusSeeOther)
 		return
 	}
 	http.Redirect(rw, r, "/items/"+strconv.FormatInt(id, 10), http.StatusSeeOther)

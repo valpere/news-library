@@ -58,6 +58,9 @@ var schemaV13 string
 //go:embed schema_v14.sql
 var schemaV14 string
 
+//go:embed schema_v15.sql
+var schemaV15 string
+
 type Store struct {
 	KnowledgeEnabled bool
 	DB               *sql.DB
@@ -180,6 +183,9 @@ func Open(path string) (*Store, error) {
 		if err == nil && version < 14 {
 			_, err = tx.Exec(schemaV14)
 		}
+		if err == nil && version < 15 {
+			_, err = tx.Exec(schemaV15)
+		}
 		if err == nil {
 			err = tx.Commit()
 		} else {
@@ -294,7 +300,7 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 		}
 	}
 	var j Job
-	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot,j.stage,j.snapshot_id,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests,j.chunk_limit,j.chunk_max_parts FROM jobs j JOIN items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests, &j.ChunkLimit, &j.ChunkMaxParts)
+	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot,j.stage,j.snapshot_id,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests,j.chunk_limit,j.chunk_max_parts FROM jobs j JOIN active_items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests, &j.ChunkLimit, &j.ChunkMaxParts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}
@@ -435,6 +441,17 @@ func (s *Store) fail(j Job, message string, retry bool, maxAttempts int, now tim
 	if err != nil {
 		return err
 	}
+	if j.Stage == "fetch" && state == "failed" && (message == "джерело повернуло HTTP 404" || message == "джерело повернуло HTTP 410") {
+		u, parseErr := url.Parse(j.URL)
+		if parseErr != nil {
+			return parseErr
+		}
+		if _, youtube, _ := youtubeID(u); !youtube {
+			if err = trashMissingPage(tx, j.ItemID, message); err != nil {
+				return err
+			}
+		}
+	}
 	return tx.Commit()
 }
 func (s *Store) Retry(id int64) error {
@@ -444,7 +461,7 @@ func (s *Store) Retry(id int64) error {
 	}
 	defer tx.Rollback()
 	var filtered string
-	if err = tx.QueryRow("SELECT filter_state FROM items WHERE id=?", id).Scan(&filtered); err != nil {
+	if err = tx.QueryRow("SELECT filter_state FROM active_items WHERE id=?", id).Scan(&filtered); err != nil {
 		return err
 	}
 	if filtered == "rejected" {
@@ -474,7 +491,7 @@ func (s *Store) Manual(id int64, text string) error {
 	}
 	defer tx.Rollback()
 	var title string
-	if err = tx.QueryRow("SELECT title FROM items WHERE id=?", id).Scan(&title); err != nil {
+	if err = tx.QueryRow("SELECT title FROM active_items WHERE id=?", id).Scan(&title); err != nil {
 		return err
 	}
 	sid, err := s.insertSnapshot(tx, id, nil, Snapshot{Text: text, Title: title, Origin: "manual", Extractor: "manual-v1", Completeness: "unknown", Warning: "Повнота ручного тексту невідома"})
@@ -520,17 +537,16 @@ func (s *Store) rateShown(id, score int64, source, digest *int64, assessed *time
 	if digest != nil {
 		did = *digest
 	}
-	_, err := s.DB.Exec("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason,scale) VALUES(?,?,?,?,?,?,?,?)", id, score, nowUTC(), at, sid, did, reason, scale)
-	return err
+	return s.update("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason,scale) SELECT id,?,?,?,?,?,?,? FROM active_items WHERE id=?", score, nowUTC(), at, sid, did, reason, scale, id)
 }
 func (s *Store) SetPlacement(id int64, value string) error {
 	if value != "inbox" && value != "library" && value != "deferred" {
 		return errors.New("невідоме розміщення")
 	}
-	return s.update("UPDATE items SET placement=? WHERE id=?", value, id)
+	return s.update("UPDATE items SET placement=? WHERE id=? AND id IN (SELECT id FROM active_items)", value, id)
 }
 func (s *Store) SetRead(id int64, value bool) error {
-	return s.update("UPDATE items SET is_read=? WHERE id=?", value, id)
+	return s.update("UPDATE items SET is_read=? WHERE id=? AND id IN (SELECT id FROM active_items)", value, id)
 }
 func (s *Store) update(query string, args ...any) error {
 	r, e := s.DB.Exec(query, args...)
@@ -553,7 +569,7 @@ func (s *Store) SetTags(id int64, tags []string) error {
 	}
 	defer tx.Rollback()
 	var n int
-	if err = tx.QueryRow("SELECT count(*) FROM items WHERE id=?", id).Scan(&n); err != nil {
+	if err = tx.QueryRow("SELECT count(*) FROM active_items WHERE id=?", id).Scan(&n); err != nil {
 		return err
 	}
 	if n == 0 {
@@ -575,7 +591,7 @@ func (s *Store) SetTags(id int64, tags []string) error {
 }
 
 const confidenceExpr = `(SELECT p.probability FROM generated_artifacts a LEFT JOIN interest_predictions p ON p.digest_id=a.id WHERE a.snapshot_id=i.selected_snapshot ORDER BY a.id DESC LIMIT 1)`
-const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.placement,i.state,i.error,i.is_read,i.selected_snapshot,(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),coalesce((SELECT scale FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),''),(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM items i`
+const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.placement,i.state,i.error,i.is_read,i.selected_snapshot,(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),coalesce((SELECT scale FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),''),(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var i Item

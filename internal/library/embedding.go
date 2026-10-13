@@ -119,7 +119,7 @@ func (s *Semantic) version(revision string) string {
 }
 func (s *Semantic) schedule(revision string) error {
 	_, err := s.Store.DB.Exec(`INSERT INTO embedding_runs(snapshot_id,version,model_revision,chunk_bytes,dimensions,created_at)
- SELECT i.selected_snapshot,?,?,?,?,? FROM items i WHERE i.selected_snapshot IS NOT NULL AND i.filter_state IN ('passed','overridden')
+ SELECT i.selected_snapshot,?,?,?,?,? FROM active_items i WHERE i.selected_snapshot IS NOT NULL AND i.filter_state IN ('passed','overridden')
  AND EXISTS(SELECT 1 FROM filter_decisions d WHERE d.item_id=i.id AND d.snapshot_id=i.selected_snapshot AND d.result IN ('passed','overridden'))
  ON CONFLICT DO NOTHING`, s.version(revision), revision, s.ChunkBytes, s.Dimensions, nowUTC())
 	return err
@@ -142,7 +142,7 @@ func (s *Semantic) claim(revision string) (*embeddingRun, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','retry_wait') AND NOT EXISTS(SELECT 1 FROM items i WHERE i.selected_snapshot=embedding_runs.snapshot_id AND i.filter_state IN ('passed','overridden'))`)
+	_, err = tx.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','retry_wait') AND NOT EXISTS(SELECT 1 FROM active_items i WHERE i.selected_snapshot=embedding_runs.snapshot_id AND i.filter_state IN ('passed','overridden'))`)
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +332,7 @@ func (s *Store) RebuildEmbeddings() error {
 	return tx.Commit()
 }
 func (s *Store) EmbeddingStatus() string {
-	rows, err := s.DB.Query(`SELECT e.state,count(*) FROM embedding_runs e JOIN items i ON i.selected_snapshot=e.snapshot_id GROUP BY e.state ORDER BY e.state`)
+	rows, err := s.DB.Query(`SELECT e.state,count(*) FROM embedding_runs e JOIN active_items i ON i.selected_snapshot=e.snapshot_id GROUP BY e.state ORDER BY e.state`)
 	if err != nil {
 		return "Стан індексації недоступний"
 	}

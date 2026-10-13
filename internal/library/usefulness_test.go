@@ -18,7 +18,7 @@ func TestUsefulnessScaleAndLegacyMigration(t *testing.T) {
 	if err := s.Rate(old, 95, nil, nil, "old judgment"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DB.Exec("ALTER TABLE rating_events DROP COLUMN scale; PRAGMA user_version=13"); err != nil {
+	if _, err := s.DB.Exec("DROP VIEW active_items; DROP TABLE trash_entries; ALTER TABLE rating_events DROP COLUMN scale; PRAGMA user_version=13"); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(s.Files.Root, "library.sqlite")

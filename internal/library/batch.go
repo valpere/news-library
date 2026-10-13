@@ -49,6 +49,12 @@ func (s *Store) AddURLs(raw string) ([]BatchURLResult, error) {
 			} else {
 				result.ItemID = id
 				result.Status = "existing"
+				if reason, e := s.TrashReason(id); e != nil {
+					return results, e
+				} else if reason != "" {
+					result.Status = "trashed"
+					result.Error = "URL уже в помийці: " + reason
+				}
 				if created {
 					result.Status = "added"
 				}
@@ -73,7 +79,7 @@ func (w *Web) addBatch(rw http.ResponseWriter, r *http.Request) {
 			switch result.Status {
 			case "added":
 				data.BatchAdded++
-			case "existing":
+			case "existing", "trashed":
 				data.BatchExisting++
 			default:
 				data.BatchFailed++
