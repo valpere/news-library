@@ -27,22 +27,27 @@ type KnowledgeRun struct {
 	Attempts, LinkedCount                           int
 }
 type KnowledgeContext struct {
+	EvidenceVersion              string
 	ItemID, SnapshotID, DigestID int64
 	Title, URL, Text, Coverage   string
 	Category                     string
 	Tags, Questions              []string
+	Evidence                     []KnowledgeEvidence
 }
 type KnowledgeLink struct {
-	ItemID          int64    `json:"item_id"`
-	Title           string   `json:"title"`
-	Body            string   `json:"body"`
-	Category        string   `json:"category"`
-	Tags            []string `json:"tags"`
-	Questions       []string `json:"questions"`
-	CurrentRole     string   `json:"current_role"`
-	OtherRole       string   `json:"other_role"`
-	CurrentEvidence string   `json:"current_evidence"`
-	OtherEvidence   string   `json:"other_evidence"`
+	EvidenceVersion   string   `json:"evidence_version,omitempty"`
+	ItemID            int64    `json:"item_id"`
+	Title             string   `json:"title"`
+	Body              string   `json:"body"`
+	Category          string   `json:"category"`
+	Tags              []string `json:"tags"`
+	Questions         []string `json:"questions"`
+	CurrentRole       string   `json:"current_role"`
+	OtherRole         string   `json:"other_role"`
+	CurrentEvidence   string   `json:"current_evidence"`
+	CurrentEvidenceID *int     `json:"current_evidence_id,omitempty"`
+	OtherEvidence     string   `json:"other_evidence"`
+	OtherEvidenceID   *int     `json:"other_evidence_id,omitempty"`
 }
 
 func validateKnowledge(k *ArticleKnowledge) error {
