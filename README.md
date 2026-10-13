@@ -258,6 +258,17 @@ CI збирає прилад із зафіксованого коміту. Те�
 
 Повторювані агентські дії — у `minions/`, тимчасові файли — у `tmp/`:
 
+Read-only аудит поточних джерел, дайджестів і зв’язкових:
+`python3 minions/corpus_audit.py --output tmp/corpus-audit`.
+Команда читає наявну SQLite schema v15 через `mode=ro`, перевіряє hashes
+версій текстів, дайджестів, метаданих і зв’язкових та ownership посилань, створює приватні `report.json` і
+`report.md` у новому каталозі `tmp/`. База, оцінки й файли бібліотеки не
+змінюються; сайт і моделі не запускаються. Короткий текст, великий дайджест,
+однакові назви зв’язкових і старі snapshot references — сигнали для перегляду,
+а не автоматичні висновки про якість чи особисту корисність. Аудит не
+підтверджує повноту оригіналу або семантичну правильність зв’язку; checkpoints
+і diagnostic replies перевіряються окремим `backup verify`.
+
 ```sh
 python3 minions/project_check.py                 # make check + public HEAD docs/spec
 python3 minions/project_check.py --public-only   # лише committed public docs/spec

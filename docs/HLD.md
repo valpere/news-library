@@ -508,6 +508,13 @@ Frontmatter використовує JSON scalars/lists (сумісний YAML),
 та provenance; не є механізмом автоматичного імпорту/відновлення DB.
 
 Backlinks — запит members тільки останньої revision кожної нотатки.
+Окремий offline `minions/corpus_audit.py` читає schema v15 через SQLite
+`mode=ro`/`query_only` у read transaction, перевіряє hashes версій текстів,
+дайджестів, метаданих і зв’язкових (не checkpoints/diagnostic replies),
+ownership source/digest/metadata/members та збирає сигнали для ручного
+перегляду поточних статей і останніх revision зв’язкових. Старі references
+не переписує, symlink/path escape не читає, звіти пише лише в новий каталог
+`tmp/`. Сигнали не є оцінками корисності або доказом семантичної якості.
 Старі snapshot IDs не змінюються після нового тексту статті. Історичні
 ревізії доступні явно. Український case-insensitive substring пошук працює
 за normalized `search_text`, а не ASCII-only SQLite lower. До100результатів.
