@@ -95,8 +95,25 @@ func (g *KnowledgeRecoveryGenerator) Links(ctx context.Context, model string, c 
 		err = validateKnowledgeLinksResponse(c, candidates, r)
 	}
 	if err == nil {
-		g.Replayed++
-		return *r.Links, nil
+		if len(*r.Links) == 0 {
+			g.Replayed++
+			return *r.Links, nil
+		}
+		// A rejected proposal contains no trusted support-check result.
+		// Explicit cloud fallback may verify it without generating a new proposal.
+		if verifier, ok := g.Fallback.(interface {
+			verifyKnowledgeLinks(context.Context, string, KnowledgeContext, []KnowledgeContext, []KnowledgeLink, string) error
+		}); ok {
+			g.Generated++
+			if err = verifier.verifyKnowledgeLinks(ctx, model, c, candidates, *r.Links, raw); err != nil {
+				return nil, err
+			}
+			g.Replayed++
+			return *r.Links, nil
+		}
+		if g.Fallback == nil {
+			return nil, &SourceError{Kind: "format", Message: "Збережена пропозиція зв’язків потребує явної хмарної перевірки змісту"}
+		}
 	}
 	if g.Fallback != nil {
 		g.Generated++

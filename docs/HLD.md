@@ -628,11 +628,25 @@ failed/cancelled current run використовує точний run checkpoin
 перемикання моделі), current metadata/status обирається за updated_at і зберігає failures.
 
 Candidate SQL ранжує shared human/model tags, category, FTS terms із tags/title/
-questions по всіх дозволених selected snapshots; <=8, без існуючих pair links.
+questions по всіх дозволених selected snapshots; <=3, без існуючих pair links.
 Текст кожного кандидата bounded 8kB, source/digest IDs frozen. Другий JSON
 від моделі містить <=3 зв’язки або порожній список, metadata/roles і exact
 evidence у Text обох контекстів. Validation не допускає невідомих/повторних
 ID або вигаданих quotes. Однакові title/category/body групуються в одну
+нотатку лише після окремого `connection-support-v1` запиту до того самого
+cloud adapter: усі твердження title/body/roles/questions мають підтримуватися
+відповідними bounded контекстами. Strict відповідь має verdict supported
+для кожного запропонованого item_id та непорожнє пояснення; missing/duplicate/
+unknown IDs, unsupported/uncertain, invalid JSON відхиляють увесь набір
+як format failure до publication. Proposal і verification replies входять
+у diagnostic при відмові. Якщо разом вони перевищують чинний ліміт 2 MiB,
+зберігається original rejected verification reply без обрізання.
+Порожній links не робить додаткового запиту.
+Загальний timeout лишається обмеженим, новий prompt — article-connections-v2;
+старі jobs не переобробляються автоматично, старі непорожні rejected links
+не є доказом model verification і потребують явного cloud повтору.
+Перевірка тим самим сімейством моделі не гарантує семантичної правильності.
+Однакові title/category/body групуються в одну
 нотатку з кількома members. Публікація у спільній короткій транзакції ще раз
 перевіряє lease/current digest/filters, актуальність target sources та pair dedup.
 saveConnectionTx додає immutable revision з author=model/model/prompt; ручне
@@ -706,8 +720,9 @@ Knowledge recovery: strict decoder допускає JSON links із повною
 групою category/tags/questions без застосування цієї групи до checkpoint.
 KnowledgeRecoveryGenerator перевіряє saved diagnostic поточного exact
 run/model/prompt/snapshot/digest проти поточного context/candidate refs.
-Валідний replay використовує звичайний worker/lease/immutable revisions;
-невалідний потребує explicit cloud fallback або залишається failed.
+Metadata/empty-links replay використовує звичайний worker/lease/immutable
+revisions; непорожня валідна пропозиція потребує explicit cloud support check,
+невалідна — explicit cloud regeneration або залишається failed.
 minions/knowledge-recovery default read-only, -apply окремий mutation opt-in,
 -run-cloud окремий opt-in, persistent batch token та bounded batch.
 
@@ -715,8 +730,9 @@ minions/knowledge-recovery default read-only, -apply окремий mutation opt
 context (до128, до512 bytes кожен, UTF-8). Модель може повернути IDs замість
 переписування цитат. IDs розв’язуються у точні підрядки до тієї самої
 валідації evidence; невідомі IDs чи конфлікт ID/цитати відхиляються.
-Старий формат прямих цитат збережено. Семантичний контракт analysis-v1
-і existing checkpoint/run identity не змінюються.
+Старий формат прямих цитат збережено. Existing checkpoint/run identity
+не переписується; нові runs використовують article-connections-v2 з support
+verification. Старі v1 pending runs потребують явного запуску поточної версії.
 
 Candidates обмежено трьома найкращими за існуючим relevance rank: це
 узгоджує input із максимумом трьох links і зменшує зайву генерацію.
@@ -755,6 +771,18 @@ redirects також перевіряються, приватні мережі �
 `minions/source-recovery` типово лише читає план; мутації та cloud generation
 дозволяються окремими прапорцями. Обмежена черга містить лише явну вибірку;
 завершені етапи повторно не генеруються, звіт та тимчасові дані — у tmp.
+
+Footer-only guard розпізнає один copyright рядок із роком/діапазоном років
+та власником, optional All rights reserved. Snapshot зберігається до
+перевірки в processSnapshot; правила відсіву мають пріоритет, після них guard
+ставить needs_input і не створює digest job. Complete fetch зберігає typed
+source failure для цього snapshot у тій самій fenced транзакції; manual
+snapshot також зберігається. HTML decode не губить footer як помилку fetch,
+generation/chunking/knowledgeContext/embedding повторюють guard для старих
+snapshots. Повідомлення пояснює потребу тексту/fresh fetch, не нового дайджесту.
+Якщо selected snapshot уже існує, новий footer зберігається в історію без
+його заміни. Проблемні footer/challenge кандидати пропускаються при доборі
+зв’язків, щоб не блокувати обробку іншої змістовної статті.
 
 ## Free-only резерв дайджестів
 
