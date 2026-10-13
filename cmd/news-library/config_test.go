@@ -201,3 +201,29 @@ func TestSourceUserAgentConfiguration(t *testing.T) {
 		t.Fatal("header injection accepted")
 	}
 }
+
+func TestOpenRouterExplicitConfigurationAndFlagPrecedence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte("OPENROUTER_API_KEY=private-fixture\nNEWS_LIBRARY_OPENROUTER_MODELS=[]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := readConfig([]string{"-env-file", path})
+	if err != nil || c.OpenRouterEnabled || len(c.OpenRouterModels) != 0 {
+		t.Fatal(c.OpenRouterEnabled, err)
+	}
+	if _, err = readConfig([]string{"-env-file", path, "-openrouter"}); err == nil {
+		t.Fatal("enabled without explicit model selection")
+	}
+	c, err = readConfig([]string{"-env-file", path, "-openrouter", "-openrouter-models", `["fixture/alpha:free"]`})
+	if err != nil || !c.OpenRouterEnabled || len(c.OpenRouterModels) != 1 || c.OpenRouterModels[0] != "fixture/alpha:free" {
+		t.Fatal(c.OpenRouterEnabled, err)
+	}
+	if _, err = readConfig([]string{"-env-file", path, "-openrouter-models", `["fixture/paid"]`}); err == nil || strings.Contains(err.Error(), "private-fixture") {
+		t.Fatal("bad model or secret disclosure", err)
+	}
+	t.Setenv("NEWS_LIBRARY_OPENROUTER_MODELS", "invalid")
+	c, err = readConfig([]string{"-env-file", path, "-openrouter=false", "-openrouter-models", "[]"})
+	if err != nil || c.OpenRouterEnabled {
+		t.Fatal("flags did not override invalid lower priority config", err)
+	}
+}

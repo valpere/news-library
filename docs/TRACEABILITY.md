@@ -188,3 +188,13 @@ TestChatUsefulnessExplicitLabelsAndAllUnread та TestWebUsefulnessAndReadAPISca
 словесні фільтри й незалежність прочитання. Приймання FR-10/15/16 звірено окремо у
 [ACCEPTANCE_AUDIT.md](ACCEPTANCE_AUDIT.md); ці тести шкали самі по собі
 не підміняють перевірку всього recovery workflow.
+
+
+Free-only резерв дайджестів: [openrouter_test.go](../internal/library/openrouter_test.go)
+перевіряє concrete allowlist, точний нуль цін до POST, price caps, model/cost/BYOK
+response guards, bounded body/redirects, primary success і rule reject без
+OpenRouter calls, temporary-only переходи й deadline/cancel, profile prediction,
+незмінні human ratings, failure history та actual route у chunk checkpoints.
+[config_test.go](../cmd/news-library/config_test.go) перевіряє explicit enable,
+model/key requirements і precedence. Live OpenRouter delivery не запускалася;
+чат, зв’язки та standalone recovery scripts мають окремий Ollama маршрут.
