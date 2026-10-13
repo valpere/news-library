@@ -227,3 +227,28 @@ func TestOpenRouterExplicitConfigurationAndFlagPrecedence(t *testing.T) {
 		t.Fatal("flags did not override invalid lower priority config", err)
 	}
 }
+
+func TestOpenRouterDataCollectionPrecedence(t *testing.T) {
+	t.Setenv("NEWS_LIBRARY_OPENROUTER_DATA_COLLECTION", "")
+	os.Unsetenv("NEWS_LIBRARY_OPENROUTER_DATA_COLLECTION")
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte("NEWS_LIBRARY_OPENROUTER_DATA_COLLECTION=allow\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := readConfig([]string{"-env-file", path})
+	if err != nil || c.OpenRouterDataCollection != "allow" {
+		t.Fatal(c.OpenRouterDataCollection, err)
+	}
+	c, err = readConfig([]string{"-env-file", path, "-openrouter-data-collection", "deny"})
+	if err != nil || c.OpenRouterDataCollection != "deny" {
+		t.Fatal(c.OpenRouterDataCollection, err)
+	}
+	t.Setenv("NEWS_LIBRARY_OPENROUTER_DATA_COLLECTION", "invalid")
+	if _, err = readConfig([]string{"-env-file", path}); err == nil {
+		t.Fatal("invalid collection policy accepted")
+	}
+	c, err = readConfig([]string{"-env-file", path, "-openrouter-data-collection", "allow"})
+	if err != nil || c.OpenRouterDataCollection != "allow" {
+		t.Fatal(c.OpenRouterDataCollection, err)
+	}
+}

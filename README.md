@@ -586,5 +586,25 @@ sort=rating залишено для числової сумісності. UI п
 ціна, платна модель, redirects або неправильний дайджест зупиняють спробу.
 Модель/provider та відмови зберігаються в історії. Чат, аналіз зв’язків і
 окремі скрипти відновлення користуються своїм Ollama маршрутом.
-Живі виклики резерву не входять до `make check`; інтеграція зараз перевірена
-лише імітацією API. Налаштування не перегенеровує вже прийняті матеріали.
+Живі виклики резерву не входять до `make check`; один ізольований live test
+пройшов із synthetic source і simulated primary outage. Налаштування не
+перегенеровує вже прийняті матеріали.
+
+Типово `NEWS_LIBRARY_OPENROUTER_DATA_COLLECTION=deny` виключає providers,
+які можуть збирати дані. Якщо користувач дозволив їх використання, явне
+`allow` погоджує цей запит із вибором в account/workspace Privacy. Це може
+дозволити зберігання/навчання; privacy акаунта залишається додатковим фільтром.
+Ціни й перевірка non-BYOK не послаблюються.
+
+Для повторних перевірок: `go run ./minions/openrouter-key-check` читає лише
+safe поля key info/quota/catalog, без виведення ключа. Ізольована генерація:
+`go run ./minions/openrouter-smoke -run-cloud -no-byok -model provider/model:free`.
+Прапорець `-data-collection allow` задається лише відповідно до вибору
+користувача. [Докладніше](minions/openrouter-smoke/README.md).
+
+Відкритий Chromium CDP читає [browser-cdp](minions/skills/browser-cdp/SKILL.md):
+`python3 minions/cdp_inspect.py --url https://openrouter.ai/settings/privacy`.
+Потрібен той самий optional Python Playwright, що для browser smoke.
+Посіпака вибирає лише потрібну вкладку, не читає input values/cookies/storage,
+не змінює налаштувань і не закриває браузер. `--output tmp/new-report.json`
+зберігає приватний звіт; `--wait-for` очікує потрібний control після hydration.
