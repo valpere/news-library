@@ -389,7 +389,11 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 	if err = tx.QueryRow("SELECT coalesce((SELECT origin FROM source_versions WHERE id=selected_snapshot),''),selected_snapshot FROM items WHERE id=?", j.ItemID).Scan(&origin, &selected); err != nil {
 		return err
 	}
-	if origin != "manual" || selected == j.SelectedAtClaim {
+	jobState, jobMessage := "done", ""
+	contentErr := ValidateSourceContent(snap)
+	// Keep a prior selected source when a fresh response contains only a notice.
+	// The new snapshot and source failure still remain in immutable history.
+	if (contentErr == nil || !selected.Valid) && (origin != "manual" || selected == j.SelectedAtClaim) {
 		if _, err = tx.Exec("UPDATE items SET selected_snapshot=?,title=?,state='ready',error='' WHERE id=?", sid, snap.Title, j.ItemID); err != nil {
 			return err
 		}
@@ -400,7 +404,13 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 			return err
 		}
 	}
-	if _, err = tx.Exec("UPDATE jobs SET state='done',lease_until=0,error='' WHERE id=?", j.ID); err != nil {
+	if contentErr != nil {
+		jobState, jobMessage = "failed", contentErr.Error()
+		if err = s.recordFailure(tx, j, FailureFromError(contentErr)); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec("UPDATE jobs SET state=?,lease_until=0,error=? WHERE id=?", jobState, jobMessage, j.ID); err != nil {
 		return err
 	}
 	return tx.Commit()

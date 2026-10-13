@@ -22,7 +22,7 @@ func (g *rejectedCombinedFixture) Links(ctx context.Context, model string, c Kno
 	raw, _ := json.Marshal(map[string]any{"links": links, "category": c.Category, "tags": c.Tags, "questions": c.Questions})
 	return nil, &SourceError{Kind: "format", Message: "некоректний JSON аналізу", Diagnostic: "```json\n" + string(raw) + "\n```"}
 }
-func TestKnowledgeRecoveryReplaysExactValidatedResponse(t *testing.T) {
+func TestKnowledgeRecoveryRequiresCloudForNonemptyProposal(t *testing.T) {
 	s := backupStore(t)
 	enableDigests(t, s)
 	s.KnowledgeEnabled = true
@@ -40,18 +40,18 @@ func TestKnowledgeRecoveryReplaysExactValidatedResponse(t *testing.T) {
 	originalRun := status.ID
 	before, _ := s.Knowledge(id, item.Selected.Int64)
 	audit, err := s.AuditKnowledgeRecovery()
-	if err != nil || len(audit) != 1 || !audit[0].Replayable {
+	if err != nil || len(audit) != 1 || audit[0].Replayable {
 		t.Fatal(audit, err)
 	}
 	if err := s.RetryKnowledge(id); err != nil {
 		t.Fatal(err)
 	}
-	replay := &KnowledgeRecoveryGenerator{Store: s}
+	replay := &KnowledgeRecoveryGenerator{Store: s, Fallback: &fixtureKnowledgeGenerator{}}
 	w.Generator = replay
 	knowledgeStep(t, w)
 	after, _ := s.Knowledge(id, item.Selected.Int64)
 	status, _ = s.KnowledgeStatus(id, item.Selected.Int64)
-	if status.ID != originalRun || status.State != "done" || before.ID != after.ID || before.Markdown != after.Markdown || replay.Replayed != 1 || replay.Generated != 0 {
+	if status.ID != originalRun || status.State != "done" || before.ID != after.ID || before.Markdown != after.Markdown || replay.Replayed != 0 || replay.Generated != 1 {
 		t.Fatal(status, before, after, replay)
 	}
 	failures, err := s.KnowledgeFailures(id, item.Selected.Int64)
@@ -134,6 +134,10 @@ func TestKnowledgeCloudSuppliesItsKnownEvidenceVersion(t *testing.T) {
 		}
 		if !strings.Contains(payload.Messages[1].Content, KnowledgeEvidenceVersion) {
 			t.Error("input lacks evidence version")
+		}
+		if strings.Contains(payload.Messages[0].Content, "Окрема перевірка connection-support-v1") {
+			json.NewEncoder(rw).Encode(map[string]any{"done": true, "message": map[string]string{"content": `{"version":"connection-support-v1","decisions":[{"item_id":2,"verdict":"supported","reason":"Both contexts support the relation"}]}`}})
+			return
 		}
 		json.NewEncoder(rw).Encode(map[string]any{"done": true, "message": map[string]string{"content": `{"links":[{"item_id":2,"title":"Topic","body":"Relation","category":"Valid","tags":["tag"],"questions":["Why?"],"current_role":"Current","other_role":"Other","current_evidence_id":1,"other_evidence_id":1}]}`}})
 	}))

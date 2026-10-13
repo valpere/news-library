@@ -13,7 +13,7 @@ root = Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
 markdown = "## Про що матеріал\nСтислий огляд бібліотеки.\n## Ключові тези\n- Збереження тексту.\n## Деталі\nСтійка черга відновлюється.\n## Практичне застосування\nПошук прочитаного.\n## Факти / цитати\nОдин сервіс."
 class Gateway(BaseHTTPRequestHandler):
-    calls = {'digest': 0, 'metadata': 0, 'links': 0}
+    calls = {'digest': 0, 'metadata': 0, 'links': 0, 'support': 0}
     def log_message(self, *args):
         pass
     def respond(self, value):
@@ -33,6 +33,10 @@ class Gateway(BaseHTTPRequestHandler):
         if 'Визнач категорію' in instruction:
             Gateway.calls['metadata'] += 1
             content = json.dumps({'category':'Зберігання даних','tags':['sqlite','backup'],'questions':['Як відновити чергу без втрат?']})
+        elif 'Окрема перевірка connection-support-v1' in instruction:
+            Gateway.calls['support'] += 1
+            data = json.loads(payload['messages'][1]['content'])
+            content = json.dumps({'version':'connection-support-v1','decisions':[{'item_id':link['item_id'],'verdict':'supported','reason':'Both provided contexts describe persistent queue recovery.'} for link in data['links']]})
         elif 'Перевір кандидатів' in instruction:
             Gateway.calls['links'] += 1
             data = json.loads(payload['messages'][1]['content'])
@@ -69,7 +73,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='news-library-knowledge-s
                 if index == 0:
                     page.locator('select[name=score]').select_option('2')
                     page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
-            assert Gateway.calls == {'digest':2,'metadata':2,'links':1},Gateway.calls
+            assert Gateway.calls == {'digest':2,'metadata':2,'links':1,'support':1},Gateway.calls
             for item_id in ids:
                 page.goto(f'{origin}/items/{item_id}')
                 page.locator('#connection-backlinks summary').click()

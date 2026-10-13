@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 )
 
-const KnowledgePromptVersion = "article-connections-v1"
+const KnowledgePromptVersion = "article-connections-v2"
 
 type ArticleKnowledge struct {
 	FileError                                 string `json:"file_error,omitempty"`

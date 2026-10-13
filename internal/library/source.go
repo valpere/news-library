@@ -22,6 +22,7 @@ import (
 
 type SourceError struct {
 	Challenge        bool
+	FooterOnly       bool
 	Kind, Diagnostic string
 
 	Message string
@@ -262,7 +263,12 @@ func decodeArticle(data []byte, final *url.URL, kind string, partial bool, meta 
 		return Snapshot{}, &SourceError{Message: "непідтримуваний формат джерела: потрібен HTML або text/plain"}
 	}
 	if err := ValidateSourceContent(snap); err != nil {
-		return Snapshot{}, err
+		var se *SourceError
+		if errors.As(err, &se) && se.Challenge {
+			return Snapshot{}, err
+		}
+		// Keep extracted footer text. Store marks it needs_input before AI.
+		snap.Warning = err.Error()
 	}
 	snap.RetrievedAt = meta.FetchedAt
 	if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" || meta.CacheStatus == "REVALIDATED" {

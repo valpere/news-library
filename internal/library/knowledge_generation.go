@@ -96,6 +96,7 @@ func (o *Ollama) Links(ctx context.Context, model string, c KnowledgeContext, ca
 	}
 	raw := ""
 	err := o.knowledgeJSON(ctx, model, `Перевір кандидатів на змістовний зв'язок зі статтею. Спільний тег сам по собі недостатній. Створи до 3 коротких текстів-зв'язкових: спільний механізм, застосування, доповнення чи підтверджена розбіжність. Для кількох кандидатів з тією самою спільною темою використовуй однакові title і body: вони об’єднаються в одну зв’язкову з кількома статтями. Не потрібен зв'язок з кожним кандидатом; якщо спільного змісту немає, links: []. Кожен item_id може бути лише один раз у links: якщо є кілька тем для того самого кандидата, обери одну найсильнішу. У КОЖНОГО link потрібна непорожня category, 1–12 tags і 1–10 questions про спільний зміст; порожній questions: [] неприйнятний. Не додавай link, якщо не можеш сформулювати конкретне питання до спільного змісту.
+Кожне твердження про нову статтю має підтримуватися article, про кандидата — саме його контекстом. Не приписуй анонсу метод із іншої статті. Спільна тема не означає однаковий метод/результат; збережи відмінності й припущення. Цитати не виправдовують непідтверджених тверджень у body/roles/questions.
 Схема: {"links":[{"item_id":123,"title":"...","body":"короткий Markdown, 2–5 речень про спільне і межі","category":"...","tags":["..."],"questions":["..."],"current_role":"роль нової статті","other_role":"роль кандидата","evidence_version":"exact-context-lines-v1","current_evidence_id":1,"other_evidence_id":1,"current_evidence":"","other_evidence":""}]}. item_id тільки з кандидатів. Для підтвердження вибери current_evidence_id із article.Evidence та other_evidence_id із Evidence саме цього кандидата. Поверни числові id, а current_evidence/other_evidence можеш залишити порожніми: програма підставить точний текст. Не переписуй, не перекладай і не складай цитати. Якщо відповідних фрагментів немає, не додавай зв’язку. Не переписуй статті, не вигадуй зв'язків.`, map[string]any{"article": c, "candidates": candidates}, &response, &raw)
 	if err == nil {
 		// This live request supplied the versioned evidence table. Do not rely
@@ -115,6 +116,9 @@ func (o *Ollama) Links(ctx context.Context, model string, c KnowledgeContext, ca
 	if err != nil {
 		return nil, err
 	}
+	if err = o.verifyKnowledgeLinks(ctx, model, c, candidates, *response.Links, raw); err != nil {
+		return nil, err
+	}
 	return *response.Links, nil
 }
 func boundedKnowledgeText(text string, limit int) string {
@@ -131,6 +135,9 @@ func (s *Store) knowledgeContext(item, snapshot, digest int64) (KnowledgeContext
 	snap, err := s.Snapshot(snapshot)
 	if err != nil {
 		return KnowledgeContext{}, &SourceError{Kind: "source", Message: "Збережений текст для аналізу недоступний"}
+	}
+	if err = ValidateSourceContent(snap); err != nil {
+		return KnowledgeContext{}, err
 	}
 	c := KnowledgeContext{ItemID: item, SnapshotID: snapshot, DigestID: digest, Title: snap.Title, Text: boundedKnowledgeText(snap.Text, 12000), Coverage: "source excerpt; " + snap.Completeness}
 	if err = s.DB.QueryRow("SELECT original_url FROM items WHERE id=?", item).Scan(&c.URL); err != nil {
@@ -207,6 +214,10 @@ func (s *Store) knowledgeCandidates(c KnowledgeContext) ([]KnowledgeContext, err
 	for _, id := range ids {
 		other, e := s.knowledgeContext(id[0], id[1], id[2])
 		if e != nil {
+			var se *SourceError
+			if errors.As(e, &se) && (se.FooterOnly || se.Challenge) {
+				continue // A bad historical candidate must not block a valid article.
+			}
 			return nil, e
 		}
 		other.Text = boundedKnowledgeText(other.Text, 8000)
@@ -256,9 +267,6 @@ func validateKnowledgeLinks(c KnowledgeContext, candidates []KnowledgeContext, l
 	}
 	if len(links) > 3 {
 		return errors.New("забагато автоматичних зв'язків")
-	}
-	if err := resolveKnowledgeEvidence(c, candidates, links); err != nil {
-		return err
 	}
 	byID := map[int64]KnowledgeContext{}
 	for _, other := range candidates {

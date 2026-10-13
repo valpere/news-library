@@ -180,6 +180,10 @@ func (s *Store) processSnapshot(tx *sql.Tx, itemID, sid int64, snap Snapshot, ov
 	if err != nil || rejected {
 		return err
 	}
+	if contentErr := ValidateSourceContent(snap); contentErr != nil {
+		_, err = tx.Exec("UPDATE items SET state='needs_input',error=? WHERE id=? AND selected_snapshot=?", contentErr.Error(), itemID, sid)
+		return err
+	}
 	return s.queueDigest(tx, itemID, sid)
 }
 func (s *Store) FilterDecisions(itemID int64) ([]FilterDecision, error) {
