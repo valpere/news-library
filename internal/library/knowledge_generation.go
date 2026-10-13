@@ -42,13 +42,20 @@ func (o *Ollama) knowledgeJSON(ctx context.Context, model, instruction string, i
 	}
 	raw := strings.TrimSpace(response.Message.Content)
 	*rawReply = raw
-	decoder := json.NewDecoder(strings.NewReader(unwrapKnowledgeJSON(raw)))
-	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(out); err != nil {
+	if err = decodeKnowledgeReply(raw, out); err != nil {
 		return &SourceError{Kind: "format", Message: "некоректний JSON аналізу", Diagnostic: raw}
 	}
-	if err = decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
-		return &SourceError{Kind: "format", Message: "зайвий вміст у відповіді аналізу", Diagnostic: raw}
+	return nil
+}
+
+func decodeKnowledgeReply(raw string, out any) error {
+	decoder := json.NewDecoder(strings.NewReader(unwrapKnowledgeJSON(raw)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		return errors.New("зайвий вміст у відповіді аналізу")
 	}
 	return nil
 }
@@ -79,17 +86,29 @@ func (o *Ollama) Metadata(ctx context.Context, model string, c KnowledgeContext,
 	return k, err
 }
 func (o *Ollama) Links(ctx context.Context, model string, c KnowledgeContext, candidates []KnowledgeContext) ([]KnowledgeLink, error) {
-	var response struct {
-		Links *[]KnowledgeLink `json:"links"`
+	var response knowledgeLinksResponse
+	candidates = append([]KnowledgeContext(nil), candidates...)
+	c.EvidenceVersion = KnowledgeEvidenceVersion
+	c.Evidence = knowledgeEvidence(c.Text)
+	for i := range candidates {
+		candidates[i].EvidenceVersion = KnowledgeEvidenceVersion
+		candidates[i].Evidence = knowledgeEvidence(candidates[i].Text)
 	}
 	raw := ""
-	err := o.knowledgeJSON(ctx, model, `Перевір кандидатів на змістовний зв'язок зі статтею. Спільний тег сам по собі недостатній. Створи до 3 коротких текстів-зв'язкових: спільний механізм, застосування, доповнення чи підтверджена розбіжність. Для кількох кандидатів з тією самою спільною темою використовуй однакові title і body: вони об’єднаються в одну зв’язкову з кількома статтями. Не потрібен зв'язок з кожним кандидатом; якщо спільного змісту немає, links: [].
-Схема: {"links":[{"item_id":123,"title":"...","body":"короткий Markdown, 2–5 речень про спільне і межі","category":"...","tags":["..."],"questions":["..."],"current_role":"роль нової статті","other_role":"роль кандидата","current_evidence":"точний непорожній фрагмент Text нової статті","other_evidence":"точний непорожній фрагмент Text кандидата"}]}. item_id тільки з кандидатів, evidence — дослівні фрагменти без виправлень. Не переписуй статті, не вигадуй зв'язків.`, map[string]any{"article": c, "candidates": candidates}, &response, &raw)
+	err := o.knowledgeJSON(ctx, model, `Перевір кандидатів на змістовний зв'язок зі статтею. Спільний тег сам по собі недостатній. Створи до 3 коротких текстів-зв'язкових: спільний механізм, застосування, доповнення чи підтверджена розбіжність. Для кількох кандидатів з тією самою спільною темою використовуй однакові title і body: вони об’єднаються в одну зв’язкову з кількома статтями. Не потрібен зв'язок з кожним кандидатом; якщо спільного змісту немає, links: []. Кожен item_id може бути лише один раз у links: якщо є кілька тем для того самого кандидата, обери одну найсильнішу. У КОЖНОГО link потрібна непорожня category, 1–12 tags і 1–10 questions про спільний зміст; порожній questions: [] неприйнятний. Не додавай link, якщо не можеш сформулювати конкретне питання до спільного змісту.
+Схема: {"links":[{"item_id":123,"title":"...","body":"короткий Markdown, 2–5 речень про спільне і межі","category":"...","tags":["..."],"questions":["..."],"current_role":"роль нової статті","other_role":"роль кандидата","evidence_version":"exact-context-lines-v1","current_evidence_id":1,"other_evidence_id":1,"current_evidence":"","other_evidence":""}]}. item_id тільки з кандидатів. Для підтвердження вибери current_evidence_id із article.Evidence та other_evidence_id із Evidence саме цього кандидата. Поверни числові id, а current_evidence/other_evidence можеш залишити порожніми: програма підставить точний текст. Не переписуй, не перекладай і не складай цитати. Якщо відповідних фрагментів немає, не додавай зв’язку. Не переписуй статті, не вигадуй зв'язків.`, map[string]any{"article": c, "candidates": candidates}, &response, &raw)
 	if err == nil {
-		if response.Links == nil {
-			return nil, &SourceError{Kind: "format", Message: "відсутній список links у відповіді аналізу", Diagnostic: raw}
+		// This live request supplied the versioned evidence table. Do not rely
+		// on the model echoing a protocol constant; reject explicit conflicts.
+		if response.Links != nil {
+			for i := range *response.Links {
+				l := &(*response.Links)[i]
+				if l.EvidenceVersion == "" && (l.CurrentEvidenceID != nil || l.OtherEvidenceID != nil) {
+					l.EvidenceVersion = c.EvidenceVersion
+				}
+			}
 		}
-		if e := validateKnowledgeLinks(c, candidates, *response.Links); e != nil {
+		if e := validateKnowledgeLinksResponse(c, candidates, response); e != nil {
 			err = &SourceError{Kind: "format", Message: e.Error(), Diagnostic: raw}
 		}
 	}
@@ -165,7 +184,7 @@ func (s *Store) knowledgeCandidates(c KnowledgeContext) ([]KnowledgeContext, err
  CASE WHEN i.id IN (SELECT rowid FROM item_fts WHERE item_fts MATCH ?) THEN 2 ELSE 0 END AS relevance
  FROM items i WHERE i.id<>? AND i.selected_snapshot IS NOT NULL AND i.filter_state IN ('passed','overridden')
  AND NOT EXISTS(SELECT 1 FROM connection_versions v JOIN connection_members a ON a.version_id=v.id JOIN connection_members b ON b.version_id=v.id WHERE a.item_id=? AND b.item_id=i.id AND v.revision=(SELECT max(revision) FROM connection_versions WHERE note_id=v.note_id))
- AND relevance>0 ORDER BY relevance DESC,i.id DESC LIMIT 8`, jsonString(c.Tags), c.Category, jsonString(c.Tags), terms, c.ItemID, c.ItemID)
+ AND relevance>0 ORDER BY relevance DESC,i.id DESC LIMIT 3`, jsonString(c.Tags), c.Category, jsonString(c.Tags), terms, c.ItemID, c.ItemID)
 	if err != nil {
 		return nil, err
 	}
@@ -232,8 +251,14 @@ func (s *Store) knowledgeVocabulary() (map[string][]string, error) {
 	return v, nil
 }
 func validateKnowledgeLinks(c KnowledgeContext, candidates []KnowledgeContext, links []KnowledgeLink) error {
+	if err := resolveKnowledgeEvidence(c, candidates, links); err != nil {
+		return err
+	}
 	if len(links) > 3 {
 		return errors.New("забагато автоматичних зв'язків")
+	}
+	if err := resolveKnowledgeEvidence(c, candidates, links); err != nil {
+		return err
 	}
 	byID := map[int64]KnowledgeContext{}
 	for _, other := range candidates {

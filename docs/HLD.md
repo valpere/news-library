@@ -693,3 +693,30 @@ Usefulness filter/sort працюють лише з останньою оцін�
 числовий rating criterion лишається технічною сумісністю. Чат має окреме
 usefulness field і перевіряє явне користувацьке походження назви рівня.
 Непрочитане більше не обмежується placement=inbox.
+
+
+Knowledge recovery: strict decoder допускає JSON links із повною валідною
+групою category/tags/questions без застосування цієї групи до checkpoint.
+KnowledgeRecoveryGenerator перевіряє saved diagnostic поточного exact
+run/model/prompt/snapshot/digest проти поточного context/candidate refs.
+Валідний replay використовує звичайний worker/lease/immutable revisions;
+невалідний потребує explicit cloud fallback або залишається failed.
+minions/knowledge-recovery default read-only, -apply окремий mutation opt-in,
+-run-cloud окремий opt-in, persistent batch token та bounded batch.
+
+Для links cloud input містить нумеровані дослівні фрагменти exact bounded
+context (до128, до512 bytes кожен, UTF-8). Модель може повернути IDs замість
+переписування цитат. IDs розв’язуються у точні підрядки до тієї самої
+валідації evidence; невідомі IDs чи конфлікт ID/цитати відхиляються.
+Старий формат прямих цитат збережено. Семантичний контракт analysis-v1
+і existing checkpoint/run identity не змінюються.
+
+Candidates обмежено трьома найкращими за існуючим relevance rank: це
+узгоджує input із максимумом трьох links і зменшує зайву генерацію.
+Для нового cloud request відому версію evidence table проставляє програма,
+якщо модель її не повторила; явний конфлікт версій відхиляється.
+Replay не вгадує відсутню версію numbered evidence у старому diagnostic.
+
+Links instruction окремо вимагає у кожного link непорожні tags/questions
+і унікальний candidate item_id. Порожні metadata чи повторний кандидат
+залишаються format failure, не обрізаються та не заповнюються програмою.

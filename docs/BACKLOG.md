@@ -206,3 +206,9 @@ backup новий каталог із розкладеними файлами т
 Погоджена шкала estimative usefulness: сім словесних рівнів, версії
 оцінок без переосмислення legacy numbers, окремий пошук/сортування,
 простий UI без save/defer дій. Непрочитане охоплює всі старі placement.
+
+
+Дообробка старих format failures: явний recovery helper перевіряє saved
+responses, повторно використовує metadata checkpoints та history; exact
+numbered evidence прибирає потребу моделі переписувати цитати. Routine checks
+офлайн; реальні пакети дозволені лише явним дорученням користувача.
