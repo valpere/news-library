@@ -183,3 +183,21 @@ func TestChatConfigPrecedenceAndModelFallback(t *testing.T) {
 		t.Fatal("invalid timeout")
 	}
 }
+
+func TestSourceUserAgentConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte("NEWS_LIBRARY_FETCH_USER_AGENT=fixture-agent\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := readConfig([]string{"-env-file", path})
+	if err != nil || c.FetchUserAgent != "fixture-agent" {
+		t.Fatal(c.FetchUserAgent, err)
+	}
+	c, err = readConfig([]string{"-env-file", path, "-fetch-user-agent", "override-agent"})
+	if err != nil || c.FetchUserAgent != "override-agent" {
+		t.Fatal(c.FetchUserAgent, err)
+	}
+	if _, err = readConfig([]string{"-env-file", path, "-fetch-user-agent", "bad\r\nheader"}); err == nil {
+		t.Fatal("header injection accepted")
+	}
+}

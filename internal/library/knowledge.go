@@ -118,23 +118,27 @@ func (s *Store) KnowledgeStatus(item, snapshot int64) (*KnowledgeRun, error) {
 	}
 	return &j, err
 }
-func (s *Store) claimKnowledge(timeout time.Duration) (*KnowledgeRun, error) {
+func (s *Store) claimKnowledge(timeout time.Duration, target ...int64) (*KnowledgeRun, error) {
+	var itemID int64
+	if len(target) > 0 {
+		itemID = target[0]
+	}
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 	now := time.Now().UnixMilli()
-	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','running','retry_wait') AND NOT EXISTS(SELECT 1 FROM active_items i WHERE i.id=knowledge_runs.item_id AND i.selected_snapshot=knowledge_runs.snapshot_id AND i.filter_state IN ('passed','overridden') AND knowledge_runs.digest_id=(SELECT max(id) FROM generated_artifacts WHERE snapshot_id=i.selected_snapshot))`); err != nil {
+	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','running','retry_wait') AND (?=0 OR item_id=?) AND NOT EXISTS(SELECT 1 FROM active_items i WHERE i.id=knowledge_runs.item_id AND i.selected_snapshot=knowledge_runs.snapshot_id AND i.filter_state IN ('passed','overridden') AND knowledge_runs.digest_id=(SELECT max(id) FROM generated_artifacts WHERE snapshot_id=i.selected_snapshot))`, itemID, itemID); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(`INSERT INTO knowledge_failures(run_id,kind,message,recorded_at) SELECT id,'unknown','Аналіз не завершено після перезапуску',? FROM knowledge_runs WHERE state='running' AND lease_until<=? AND attempts>=3`, nowUTC(), now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO knowledge_failures(run_id,kind,message,recorded_at) SELECT id,'unknown','Аналіз не завершено після перезапуску',? FROM knowledge_runs WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, nowUTC(), now, itemID, itemID); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='failed',kind='unknown',error='Аналіз не завершено після перезапуску',lease_until=0 WHERE state='running' AND lease_until<=? AND attempts>=3`, now); err != nil {
+	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='failed',kind='unknown',error='Аналіз не завершено після перезапуску',lease_until=0 WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, now, itemID, itemID); err != nil {
 		return nil, err
 	}
-	j, err := scanKnowledgeRun(tx.QueryRow(knowledgeRunSelect+` WHERE (state IN ('queued','retry_wait') AND next_attempt<=?) OR (state='running' AND lease_until<=? AND attempts<3) ORDER BY id LIMIT 1`, now, now))
+	j, err := scanKnowledgeRun(tx.QueryRow(knowledgeRunSelect+` WHERE ((state IN ('queued','retry_wait') AND next_attempt<=?) OR (state='running' AND lease_until<=? AND attempts<3)) AND (?=0 OR item_id=?) ORDER BY id LIMIT 1`, now, now, itemID, itemID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}

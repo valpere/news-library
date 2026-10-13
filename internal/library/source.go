@@ -21,6 +21,7 @@ import (
 )
 
 type SourceError struct {
+	Challenge        bool
 	Kind, Diagnostic string
 
 	Message string
@@ -29,7 +30,12 @@ type SourceError struct {
 
 func (e *SourceError) Error() string { return e.Message }
 
+const DefaultSourceUserAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0"
+
 type Fetcher struct {
+	CURL             string
+	browserResolver  func(context.Context, string) ([]byte, *url.URL, string, bool, error)
+	UserAgent        string
 	YTDLP            string
 	YouTubeLanguages []string
 	metadataResolver func(context.Context, string) (youtubeMetadata, error)
@@ -48,7 +54,7 @@ func NewFetcher(timeout time.Duration, maxBytes int64) *Fetcher {
 		_, err := CanonicalURL(req.URL.String())
 		return err
 	}}
-	return &Fetcher{client: client, MaxBytes: maxBytes, YTDLP: "yt-dlp", YouTubeLanguages: []string{"uk", "en"}}
+	return &Fetcher{CURL: "curl", UserAgent: DefaultSourceUserAgent, client: client, MaxBytes: maxBytes, YTDLP: "yt-dlp", YouTubeLanguages: []string{"uk", "en"}}
 }
 
 var deniedNetworks = []netip.Prefix{
@@ -105,7 +111,11 @@ func (f *Fetcher) getNetwork(ctx context.Context, raw string, meta *NetworkMeta)
 	if err != nil {
 		return nil, nil, "", false, err
 	}
-	req.Header.Set("User-Agent", "news-library/0.1 (personal text archive)")
+	agent := f.UserAgent
+	if agent == "" {
+		agent = DefaultSourceUserAgent
+	}
+	req.Header.Set("User-Agent", agent)
 	client := *f.client
 	applyValidators := func(r *http.Request) {
 		r.Header.Del("If-None-Match")
@@ -211,6 +221,25 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	snap, err := decodeArticle(data, final, kind, partial, meta)
+	var se *SourceError
+	if errors.As(err, &se) && se.Challenge && (f.CURL != "" || f.browserResolver != nil) {
+		resolver := f.browserResolver
+		if resolver == nil {
+			resolver = f.browserGet
+		}
+		data, final, kind, partial, err = resolver(ctx, raw)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		snap, err = decodeArticle(data, final, kind, partial, &NetworkMeta{FetchedAt: nowUTC()})
+		if err == nil {
+			snap.Extractor += "+curl-v1"
+		}
+	}
+	return snap, err
+}
+func decodeArticle(data []byte, final *url.URL, kind string, partial bool, meta *NetworkMeta) (Snapshot, error) {
 	snap := Snapshot{Origin: "fetch", Extractor: "readability-v2.1.3", Completeness: "unknown", Warning: "Виділений текст HTML; повноту оригіналу не підтверджено"}
 	if strings.Contains(kind, "text/plain") {
 		snap.Text = string(data)
@@ -231,6 +260,9 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 		snap.Title = article.Title()
 	} else {
 		return Snapshot{}, &SourceError{Message: "непідтримуваний формат джерела: потрібен HTML або text/plain"}
+	}
+	if err := ValidateSourceContent(snap); err != nil {
+		return Snapshot{}, err
 	}
 	snap.RetrievedAt = meta.FetchedAt
 	if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" || meta.CacheStatus == "REVALIDATED" {

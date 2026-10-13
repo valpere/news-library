@@ -19,6 +19,7 @@ type config struct {
 	ChatTimeout             time.Duration
 	Knowledge               bool
 	YTDLP, YouTubeLanguages string
+	FetchUserAgent          string
 
 	Telegram                                              library.TelegramConfig
 	TelegramTimeout                                       time.Duration
@@ -68,7 +69,7 @@ func readConfig(args []string) (config, error) {
 	flagNames := map[string]string{
 		"knowledge": "NEWS_LIBRARY_KNOWLEDGE",
 		"chat":      "NEWS_LIBRARY_CHAT", "chat-model": "NEWS_LIBRARY_CHAT_MODEL", "chat-timeout": "NEWS_LIBRARY_CHAT_TIMEOUT",
-		"yt-dlp": "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
+		"fetch-user-agent": "NEWS_LIBRARY_FETCH_USER_AGENT", "yt-dlp": "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
 		"telegram": "NEWS_LIBRARY_TELEGRAM_ENABLED", "telegram-chat": "NEWS_LIBRARY_TELEGRAM_CHAT_ID", "telegram-daily": "NEWS_LIBRARY_TELEGRAM_DAILY", "telegram-size": "NEWS_LIBRARY_TELEGRAM_SIZE",
 		"embeddings": "NEWS_LIBRARY_EMBEDDINGS", "embed-url": "NEWS_LIBRARY_EMBED_URL", "embed-timeout": "NEWS_LIBRARY_EMBED_TIMEOUT", "read-token": "NEWS_LIBRARY_READ_TOKEN",
 		"chunk-max-parts": "NEWS_LIBRARY_CHUNK_MAX_PARTS", "cache-max-bytes": "NEWS_LIBRARY_CACHE_MAX_BYTES", "cache-retention": "NEWS_LIBRARY_CACHE_RETENTION", "cache-cleanup-interval": "NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL",
@@ -133,7 +134,7 @@ func readConfig(args []string) (config, error) {
 		}
 		return v, nil
 	}
-	c := config{YTDLP: get("NEWS_LIBRARY_YT_DLP", "yt-dlp"), YouTubeLanguages: get("NEWS_LIBRARY_YOUTUBE_LANGUAGES", "uk,en"), EmbedURL: get("NEWS_LIBRARY_EMBED_URL", "http://localhost:11434/api/embed"), ReadToken: get("NEWS_LIBRARY_READ_TOKEN", ""), Interests: get("NEWS_LIBRARY_INTERESTS", ""), FilterRules: get("NEWS_LIBRARY_FILTER_RULES", "[]"), Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
+	c := config{FetchUserAgent: get("NEWS_LIBRARY_FETCH_USER_AGENT", library.DefaultSourceUserAgent), YTDLP: get("NEWS_LIBRARY_YT_DLP", "yt-dlp"), YouTubeLanguages: get("NEWS_LIBRARY_YOUTUBE_LANGUAGES", "uk,en"), EmbedURL: get("NEWS_LIBRARY_EMBED_URL", "http://localhost:11434/api/embed"), ReadToken: get("NEWS_LIBRARY_READ_TOKEN", ""), Interests: get("NEWS_LIBRARY_INTERESTS", ""), FilterRules: get("NEWS_LIBRARY_FILTER_RULES", "[]"), Data: get("NEWS_LIBRARY_DATA", "data"), Bind: get("NEWS_LIBRARY_BIND", "127.0.0.1:8787"), Model: get("OLLAMA_MODEL", "gemma4:cloud"), OllamaURL: get("OLLAMA_API_URL", "http://localhost:11434/api/chat"), OllamaKey: get("OLLAMA_API_KEY", "")}
 	c.ChatModel = get("NEWS_LIBRARY_CHAT_MODEL", c.Model)
 	if strings.TrimSpace(c.ChatModel) == "" {
 		c.ChatModel = c.Model
@@ -217,6 +218,7 @@ func readConfig(args []string) (config, error) {
 	c.ChunkMaxParts = int(parts)
 	flags := flag.NewFlagSet("news-library", flag.ContinueOnError)
 	flags.BoolVar(&c.Knowledge, "knowledge", c.Knowledge, "автоматичні метадані та нотатки-зв’язкові після дайджесту")
+	flags.StringVar(&c.FetchUserAgent, "fetch-user-agent", c.FetchUserAgent, "User-Agent for source HTTP requests")
 	flags.StringVar(&c.YTDLP, "yt-dlp", c.YTDLP, "yt-dlp executable for YouTube metadata fallback; empty disables")
 	flags.StringVar(&c.YouTubeLanguages, "youtube-languages", c.YouTubeLanguages, "preferred subtitle languages, comma-separated")
 	flags.BoolVar(&c.Telegram.Enabled, "telegram", c.Telegram.Enabled, "увімкнути Telegram доставку")
@@ -280,6 +282,9 @@ func readConfig(args []string) (config, error) {
 	}
 	if c.ChatTimeout <= 0 || c.ChatTimeout > 5*time.Minute {
 		return c, errors.New("chat-timeout має бути більше нуля й не більше 5m")
+	}
+	if strings.TrimSpace(c.FetchUserAgent) == "" || len(c.FetchUserAgent) > 512 || strings.ContainsAny(c.FetchUserAgent, "\r\n") {
+		return c, errors.New("invalid source User-Agent")
 	}
 	if c.FetchTimeout <= 0 || c.DigestTimeout <= 0 || c.Lease < time.Second || c.Backoff <= 0 || c.CacheTTL < 0 || c.Attempts < 1 || c.Attempts > 100 || c.MaxBytes < 1024 || c.MaxBytes > 64<<20 || c.InputLimit < 1024 || c.InputLimit > 4<<20 {
 		return c, errors.New("некоректні таймаути/ліміти конфігурації")
