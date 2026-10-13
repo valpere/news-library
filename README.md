@@ -258,6 +258,14 @@ CI збирає прилад із зафіксованого коміту. Те�
 
 Повторювані агентські дії — у `minions/`, тимчасові файли — у `tmp/`:
 
+Для «що не працює?» — `python3 minions/library_doctor.py --output tmp/doctor-01`;
+для розбору актуальних збоїв — `python3 minions/failure_triage.py --output tmp/triage-01`.
+Вони лише читають конфігурацію й поточні етапи; старі відмови після успішного
+завершення не стають приводом для нового повтору. `backup_check.py` перевіряє
+існуючу копію та робить пробний paused restore в `tmp/`; `search_eval.py`
+вимірює результати й затримки через read API вже запущеного сайту.
+Команди, формат контрольних запитів і доступні skills — у [minions/README.md](minions/README.md).
+
 Read-only аудит поточних джерел, дайджестів і зв’язкових:
 `python3 minions/corpus_audit.py --output tmp/corpus-audit`.
 Команда читає наявну SQLite schema v15 через `mode=ro`, перевіряє hashes
