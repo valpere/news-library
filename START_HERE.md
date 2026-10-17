@@ -40,7 +40,9 @@ Upstream `https://github.com/valpere/news-library` отримано на ком�
 1. [REQUIREMENTS.md](docs/REQUIREMENTS.md) — сценарії й приймання.
 2. [HLD.md](docs/HLD.md) — компоненти, дані, відмови, доступ.
 3. [BACKLOG.md](docs/BACKLOG.md) — порядок реалізації.
-4. Discovery та сирі пілоти збережено локально, поза публічним checkout.
+4. [EVALUATION.md](docs/EVALUATION.md) — дані, методика й підсумки пілотів;
+   [RESEARCH_NOTES.md](docs/RESEARCH_NOTES.md) — обґрунтування й неприйняті ідеї.
+   Сирі пілоти та особисті оцінки лишаються локально, поза публічним checkout.
 5. Перед підготовкою PR — [рев'ю та захист main](docs/REVIEW.md).
 6. Для приймання й перевірки специфікації — [TRACEABILITY.md](docs/TRACEABILITY.md).
 
