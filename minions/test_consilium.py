@@ -88,6 +88,14 @@ class CouncilTest(unittest.TestCase):
         self.assertEqual(council.unexpected_changes('kilo', ['.kilo/plans', 'docs/HLD.md']), ['docs/HLD.md'])
         self.assertEqual(council.unexpected_changes('opencode', ['.kilo/plans']), ['.kilo/plans'])
 
+    def test_model_override_replaces_only_the_model_argument(self):
+        model, command = council.with_model(council.AGENTS['opencode'], 'opencode/other-free')
+        self.assertEqual(model, 'opencode/other-free')
+        self.assertEqual(command[command.index('--model') + 1], 'opencode/other-free')
+        self.assertEqual(len(command), len(council.AGENTS['opencode'][1]))
+        with self.assertRaises(ValueError):
+            council.with_model(council.AGENTS['agy'], 'x')
+
     def test_coverage_and_reference_validation(self):
         with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as d:
             path=Path(d); (path/'README.md').write_text('first\nsecond\n')

@@ -187,6 +187,15 @@ def diagnose(raw):
     return detail, bool(detail and TRANSIENT.search(detail))
 
 
+def with_model(agent, model):
+    """Same CLI command with another --model value (opencode/kilo only)."""
+    command = list(agent[1])
+    if '--model' not in command or command[0] not in ('opencode', 'kilo'):
+        raise ValueError('model override is supported for opencode/kilo only')
+    command[command.index('--model') + 1] = model
+    return model, command
+
+
 def unexpected_changes(name, changed):
     """Kilo's plan mode records its plans under .kilo/plans; that is bookkeeping, not an edit."""
     if name == 'kilo':
@@ -287,10 +296,13 @@ def main():
     parser.add_argument('--ref', default='HEAD')
     parser.add_argument('--agents', default='opencode,kilo,agy,kiro-cli')
     parser.add_argument('--timeout', type=int, default=600)
+    parser.add_argument('--opencode-model', help='provider/model for the opencode reviewer (default: configured free model)')
     parser.add_argument('--retries', type=int, default=1, choices=range(4), help='extra attempts after a transient provider error (not timeouts)')
     parser.add_argument('--document', action='append')
     args = parser.parse_args()
     agents = args.agents.split(',')
+    if args.opencode_model:
+        AGENTS['opencode'] = with_model(AGENTS['opencode'], args.opencode_model)
     if len(set(agents)) != len(agents) or any(a not in AGENTS for a in agents) or not 30 <= args.timeout <= 1800:
         parser.error('choose listed non-Codex agents and timeout 30..1800')
     sha = git('rev-parse', '--verify', '--end-of-options', args.ref + '^{commit}').decode().strip()
