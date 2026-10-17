@@ -10,11 +10,11 @@ news-library та відповідність реалізації. Codex вик�
 ```sh
 python3 minions/consilium/run.py --dry-run
 python3 minions/consilium/run.py --run-agents
-python3 minions/consilium/run.py --run-agents --agents agy,kiro-cli --timeout 600
+python3 minions/consilium/run.py --run-agents --agents agy,opencode --timeout 600
 ```
 
-Типовий склад: OpenCode (Nemotron free), Kilo (free router), Antigravity
-(Gemini), Kiro (власна налаштована cloud-модель). Потрібні встановлені
+Типовий склад: OpenCode (Nemotron free; модель змінюється `--opencode-model`) і Antigravity
+(Gemini). Kilo та Kiro вилучено: нестабільні (таймаути, `Internal error`). Потрібні встановлені
 й авторизовані CLI. Використовуються їхні наявні підключення; скрипт не
 налаштовує облікові записи чи резервні провайдери. `--run-agents` є явним
 дозволом запустити зовнішніх рецензентів. Рутинні перевірки їх не викликають.
@@ -44,8 +44,7 @@ CLI та сімейство моделі — різні речі: роутер �
 
 Read-only/plan режими й окремі знімки захищають робочий checkout від
 звичайних дій агента; це не повна ізоляція файлової системи ОС.
-До запуску Kilo готується його службовий `.kilo/.gitignore`; вихідні
-документи й код не змінюються. Подальші зміни знімка позначаються як порушення, такий звіт не рахується завершеним.
+Вихідні документи й код не змінюються. Подальші зміни знімка позначаються як порушення, такий звіт не рахується завершеним.
 Скрипт не читає `.env`, runtime дані чи приватний корпус для завдання.
 Сирі звіти залишаються локальними; консиліум нічого не публікує й не зливає.
 
@@ -54,7 +53,7 @@ Read-only/plan режими й окремі знімки захищають ро
 `olm-minimax-m3` — лише Ollama cloud-моделі (`*:cloud`) через Claude Code CLI на локальному
 Ollama (`ANTHROPIC_BASE_URL=http://localhost:11434`), інструменти Read/Grep/Glob, без обходу дозволів.
 Код знімка вони перевіряють самі. Рівень 1: `--agents olm-deepseek-v4-pro,olm-gemma4,olm-glm-5.3,olm-kimi-k2.7,olm-minimax-m3`;
-рівень 2 (інші сімейства): `agy,kiro-cli,opencode,kilo`. `qwen3.5:cloud` вилучено з Ollama (2026-09-25).
+рівень 2 (інші сімейства): `agy,opencode`. `qwen3.5:cloud` вилучено з Ollama (2026-09-25).
 Тимчасові збої провайдера (5xx/429/overloaded/`Internal error`) повторюються
 `--retries N` разів (типово 1; логи невдалої спроби лишаються в `<агент>.attemptN/`).
 Таймаут не повторюється: причину й кількість подій видно в `result.json`/`summary.md`.

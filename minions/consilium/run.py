@@ -19,9 +19,7 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 AGENTS = {
     'opencode': ('opencode/nemotron-3-ultra-free', ['opencode', 'run', '--pure', '--agent', 'plan', '--format', 'json', '--model', 'opencode/nemotron-3-ultra-free']),
-    'kilo': ('kilo/kilo-auto/free', ['kilo', 'run', '--pure', '--agent', 'plan', '--format', 'json', '--model', 'kilo/kilo-auto/free']),
     'agy': ('Gemini 3.8 Flash (Low)', ['agy', '--print', '--mode', 'plan', '--sandbox', '--model', 'Gemini 3.8 Flash (Low)', '--output-format', 'json']),
-    'kiro-cli': ('CLI default (unknown)', ['kiro-cli', 'chat', '--no-interactive', '--agent-engine', 'v2', '--trust-tools=fs_read', '--output-format', 'stream-json']),
 }
 AGENTS['claude'] = ('sonnet (CLI alias)', ['claude', '--print', '--permission-mode', 'plan', '--tools', 'Read,Grep,Glob', '--allowedTools', 'Read,Grep,Glob', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--model', 'sonnet', '--output-format', 'json', '--no-session-persistence'])
 # Ollama cloud models reviewed through the Claude Code CLI pointed at the local Ollama endpoint
@@ -117,12 +115,9 @@ def objects(text):
 
 
 def report_text(agent, raw):
-    if agent in ('opencode', 'kilo'):
+    if agent == 'opencode':
         texts = [v.get('part', {}).get('text', '') for v in objects(raw) if v.get('type') == 'text']
         return '\n'.join(texts)
-    if agent == 'kiro-cli':
-        texts = [v.get('data', {}).get('finalText', '') for v in objects(raw) if v.get('type') == 'runFinished']
-        return texts[-1] if texts else ''
     envelopes = [v.get('response', v.get('result')) for v in objects(raw) if isinstance(v.get('response', v.get('result')), str)]
     return envelopes[-1] if envelopes else raw
 
@@ -227,25 +222,16 @@ def diagnose(raw):
             continue
         if event.get('type') == 'error':
             detail = message(event.get('error'))
-        elif event.get('type') == 'runError':
-            detail = message(event.get('data'))
     return detail, bool(detail and TRANSIENT.search(detail))
 
 
 def with_model(agent, model):
-    """Same CLI command with another --model value (opencode/kilo only)."""
+    """Same CLI command with another --model value (opencode only)."""
     command = list(agent[1])
-    if '--model' not in command or command[0] not in ('opencode', 'kilo'):
-        raise ValueError('model override is supported for opencode/kilo only')
+    if '--model' not in command or command[0] != 'opencode':
+        raise ValueError('model override is supported for opencode only')
     command[command.index('--model') + 1] = model
     return model, command
-
-
-def unexpected_changes(name, changed):
-    """Kilo's plan mode records its plans under .kilo/plans; that is bookkeeping, not an edit."""
-    if name == 'kilo':
-        return [p for p in changed if p != '.kilo/plans' and not p.startswith('.kilo/plans/')]
-    return list(changed)
 
 
 def retry(run, retries, sleep=time.sleep, delay=30):
@@ -271,18 +257,13 @@ def run_once(name, archive, prompt, documents, directory, timeout):
     snapshot = directory / 'src'
     extract_snapshot(archive, snapshot)
     subprocess.run(['git', 'init', '--quiet', '--template=', str(snapshot)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    if name == 'kilo':
-        bootstrap = snapshot / '.kilo' / '.gitignore'
-        if not bootstrap.exists():
-            bootstrap.parent.mkdir(exist_ok=True)
-            bootstrap.write_text('node_modules\npackage.json\npackage-lock.json\npnpm-lock.yaml\nbun.lock\nyarn.lock\n.gitignore\nagent-manager.json')
     if (snapshot / 'review-task.md').exists():
         raise ValueError('reserved review-task.md path already committed')
     (snapshot / 'review-task.md').write_text(prompt)
     before = fingerprints(snapshot)
     model, command = AGENTS[name]
     instruction = 'Read ' + str(snapshot / 'review-task.md') + ' IN FULL (in chunks if needed), then independently produce the JSON review requested there. Read-only: no edits, shell, network, git or subagents.'
-    if name in ('opencode', 'kilo'):
+    if name == 'opencode':
         command = command + ['--dir', str(snapshot)]
     command = ([arg for arg in command if arg != '--print'] + ['--print=' + instruction]) if name == 'agy' else command + [instruction]
     result = {'agent': name, 'configured_model': model, 'actual_model': 'unknown', 'argv': command, 'status': 'failed', 'duration_seconds': 0}
@@ -306,7 +287,7 @@ def run_once(name, archive, prompt, documents, directory, timeout):
         if result['exit_code'] != 0:
             raise ValueError('reviewer exited unsuccessfully')
         after = fingerprints(snapshot)
-        changed = unexpected_changes(name, sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p)))
+        changed = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
         if changed:
             result['snapshot_changed_files'] = changed
             raise ValueError('reviewer changed snapshot; review not accepted')
@@ -341,7 +322,7 @@ def main():
     mode.add_argument('--dry-run', action='store_true')
     mode.add_argument('--run-agents', action='store_true')
     parser.add_argument('--ref', default='HEAD')
-    parser.add_argument('--agents', default='opencode,kilo,agy,kiro-cli')
+    parser.add_argument('--agents', default='opencode,agy')
     parser.add_argument('--timeout', type=int, default=600)
     parser.add_argument('--opencode-model', help='provider/model for the opencode reviewer (default: configured free model)')
     parser.add_argument('--retries', type=int, default=1, choices=range(4), help='extra attempts after a transient provider error (not timeouts)')
