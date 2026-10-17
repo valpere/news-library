@@ -83,6 +83,11 @@ class CouncilTest(unittest.TestCase):
         done = council.retry(lambda a: calls.append(a) or {'status': 'complete'}, retries=2, sleep=lambda s: None)
         self.assertEqual((calls, done['attempts']), ([0], 1))
 
+    def test_kilo_plan_bookkeeping_is_not_a_snapshot_violation(self):
+        self.assertEqual(council.unexpected_changes('kilo', ['.kilo/plans', '.kilo/plans/x.md']), [])
+        self.assertEqual(council.unexpected_changes('kilo', ['.kilo/plans', 'docs/HLD.md']), ['docs/HLD.md'])
+        self.assertEqual(council.unexpected_changes('opencode', ['.kilo/plans']), ['.kilo/plans'])
+
     def test_coverage_and_reference_validation(self):
         with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as d:
             path=Path(d); (path/'README.md').write_text('first\nsecond\n')

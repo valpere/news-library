@@ -187,6 +187,13 @@ def diagnose(raw):
     return detail, bool(detail and TRANSIENT.search(detail))
 
 
+def unexpected_changes(name, changed):
+    """Kilo's plan mode records its plans under .kilo/plans; that is bookkeeping, not an edit."""
+    if name == 'kilo':
+        return [p for p in changed if p != '.kilo/plans' and not p.startswith('.kilo/plans/')]
+    return list(changed)
+
+
 def retry(run, retries, sleep=time.sleep, delay=30):
     """Repeat run(attempt) while it fails with a transient provider error; never retries timeouts."""
     for attempt in range(retries + 1):
@@ -244,8 +251,9 @@ def run_once(name, archive, prompt, documents, directory, timeout):
         if result['exit_code'] != 0:
             raise ValueError('reviewer exited unsuccessfully')
         after = fingerprints(snapshot)
-        if before != after:
-            result['snapshot_changed_files'] = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
+        changed = unexpected_changes(name, sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p)))
+        if changed:
+            result['snapshot_changed_files'] = changed
             raise ValueError('reviewer changed snapshot; review not accepted')
         raw = (directory / 'stdout.log').read_text()
         report = validate_report(report_text(name, raw), documents, snapshot)
