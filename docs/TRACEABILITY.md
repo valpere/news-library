@@ -42,8 +42,8 @@ REQUIREMENTS.md. Нуль розпізнаних вимог, втрачений 
 повноту цієї таблиці, ID сценаріїв і запланованого приймання. Семантичну
 правильність зв'язків перевіряє рев'ю; скрипт її не встановлює.
 
-Перевага надається `.build/tumanomir`, інакше використовується бінарник
-з PATH; можна явно задати `TUMANOMIR=/absolute/path/to/tumanomir`.
+Порядок вибору бінарника: `TUMANOMIR=/absolute/path/to/tumanomir`, якщо задано;
+інакше `.build/tumanomir`; інакше `tumanomir` з PATH.
 CI збирає прилад із коміту `b8dfe2efb03fefb5a42da76cd29f2b44b2f1bdda`.
 Зміни приладу переглядати окремо; встановлення залежностей може вимагати
 мережі, сам `check` працює офлайн. Історичні discovery/експерименти не
@@ -196,6 +196,13 @@ TestChatUsefulnessExplicitLabelsAndAllUnread та TestWebUsefulnessAndReadAPISca
 словесні фільтри й незалежність прочитання. Приймання FR-10/15/16 звірено окремо у
 [ACCEPTANCE_AUDIT.md](ACCEPTANCE_AUDIT.md); ці тести шкали самі по собі
 не підміняють перевірку всього recovery workflow.
+
+Додаткове приймання поза FR-таблицею: помийка недоступних сторінок (UC-16, схема v15) —
+[trash_test.go](../internal/library/trash_test.go): TestTrashMissingPageIsSeparateAndDeduplicated,
+TestTrashPreservesRecoverableAndSavedSources, TestTrashMigrationAndBackup, TestTrashSurvivesBackupRestore;
+перенесення файлів — [repack_test.go](../internal/library/repack_test.go); відновлення знань —
+[knowledge_recovery_test.go](../internal/library/knowledge_recovery_test.go). UC-16 пов'язано з FR-03
+лише за вимогою «немає тексту — немає вигаданого результату»; сама поведінка помийки приймається цими тестами.
 
 
 Free-only резерв дайджестів: [openrouter_test.go](../internal/library/openrouter_test.go)
