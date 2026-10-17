@@ -46,3 +46,5 @@ __pycache__/
 /.build/
 tmp/
 /snapshots/
+.agents
+session-log.md
