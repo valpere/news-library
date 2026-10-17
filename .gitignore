@@ -48,3 +48,4 @@ tmp/
 /snapshots/
 .agents
 session-log.md
+experiments/
