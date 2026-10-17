@@ -42,6 +42,10 @@ Skills are under `minions/skills/`, with local discovery links in `.agents/skill
 cloud digest smoke and browser-CDP skills remain available. Temporary evidence
 is never part of the public project archive.
 
+Explicit site control (only when the user asks): `python3 minions/site_ctl.py status|start|stop`
+(`start --resume-restored` for restored data); pid and log in `tmp/site/`,
+graceful SIGTERM stop only, no library data access.
+
 Read-only URL list audit (no import/fetch, uses the application canonicalizer):
 `go run ./minions/url-list-check -file '/path/to/url-list'` prints counts,
 invalid/duplicate line numbers and whether the list fits one batch. It does
