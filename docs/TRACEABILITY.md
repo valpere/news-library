@@ -8,10 +8,10 @@
 
 | Вимога | Сценарії | Етап | Приймання | Статус |
 |---|---|---|---|---|
-| FR-01 | UC-01 | M1 | AT-01 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
-| FR-02 | UC-01 | M1 | AT-02 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
-| FR-03 | UC-01, UC-02 | M1 | AT-03 | passed: [TestWorkerFailureAndStoredText](../internal/library/source_test.go) |
-| FR-04 | UC-02, UC-03 | M1, M2 | AT-04 | passed source + digest provenance: [TestArticleFixtures / TestYouTubeFixtures](../internal/library/source_test.go), [TestDigestQueueRecoveryAndRatingContext](../internal/library/digest_test.go) |
+| FR-01 | UC-01, UC-13 | M1 | AT-01 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
+| FR-02 | UC-01, UC-13 | M1 | AT-02 | passed: [TestIngestConcurrentRestart](../internal/library/store_test.go) |
+| FR-03 | UC-01, UC-02, UC-16 | M1 | AT-03 | passed: [TestWorkerFailureAndStoredText](../internal/library/source_test.go) |
+| FR-04 | UC-02, UC-03, UC-14 | M1, M2 | AT-04 | passed source + digest provenance: [TestArticleFixtures / TestYouTubeFixtures](../internal/library/source_test.go), [TestDigestQueueRecoveryAndRatingContext](../internal/library/digest_test.go) |
 | FR-05 | UC-06 | M2 | AT-05 | passed: [TestURLRejectZeroModelCallsAndExplicitOverride / TestSourceRejectKeepsTextSearchAndHumanHistory](../internal/library/filter_test.go) |
 | FR-06 | UC-05, UC-06 | M2 | AT-06 | passed: [TestSourceRejectKeepsTextSearchAndHumanHistory](../internal/library/filter_test.go), [M2 browser smoke](../scripts/smoke_m2_ui.py) |
 | FR-07 | UC-02, UC-03 | M1, M2 | AT-07 | passed M1/M2: [TestRatingHistoryAndIndependentActions](../internal/library/store_test.go), [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go) |
@@ -19,13 +19,13 @@
 | FR-09 | UC-04 | M1 | AT-09 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
 | FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | passed offline M1/M2: [lease/restart/idempotency](../internal/library/store_test.go), [digest restart/retry](../internal/library/digest_test.go), [chunk checkpoint reuse](../internal/library/chunk_digest_test.go), [human judgment across recovery](../internal/library/acceptance_test.go); [звірка AT-10](ACCEPTANCE_AUDIT.md) |
 | FR-11 | UC-05 | M1, M3 | AT-11 | passed M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
-| FR-12 | UC-09 | M3 | AT-12 | passed: [read authentication/denied mutations](../internal/library/semantic_test.go) |
+| FR-12 | UC-09, UC-14 | M3 | AT-12 | passed: [read authentication/denied mutations](../internal/library/semantic_test.go) |
 | FR-13 | UC-08 | M4 | AT-13 | passed offline: [preview/partial retry, unknown/no replay, Kyiv slots](../internal/library/delivery_test.go) |
 | FR-14 | UC-12 | M4 | AT-14 | passed: [live backup/restore primary/history/queue/checkpoints and corruption guards](../internal/library/backup_test.go), [CLI/paused activation](../cmd/news-library/archive_test.go) |
 | FR-15 | UC-03 | M1, M2 | AT-15 | passed offline M1/M2: [rating history/null/context](../internal/library/store_test.go), [source/digest ownership](../internal/library/digest_test.go), [scale/legacy dates](../internal/library/usefulness_test.go), [exact event across new snapshot](../internal/library/acceptance_test.go); [звірка AT-15](ACCEPTANCE_AUDIT.md) |
 | FR-16 | UC-10 | M1, M2 | AT-16 | passed offline M1/M2: [manual wins fetch race](../internal/library/store_test.go), [missing text/manual provenance/zero generator calls](../internal/library/acceptance_test.go), [long source persistence](../internal/library/chunk_digest_test.go); [звірка AT-16](ACCEPTANCE_AUDIT.md) |
-| FR-17 | UC-11 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
-| FR-18 | UC-05 | M1, M2, M3 | AT-18 | passed M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); passed M2 Confidence: [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
+| FR-17 | UC-11, UC-15 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
+| FR-18 | UC-05, UC-15 | M1, M2, M3 | AT-18 | passed M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); passed M2 Confidence: [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
 | FR-19 | UC-09 | M3 | AT-19 | passed: [saved digest/excerpt, dated context, ownership/UTF-8 bounds](../internal/library/semantic_test.go) |
 | FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries / TestWebLocalhostWithoutCSRF / TestWebCSRFPolicyByOrigin](../internal/library/web_test.go) |
 
