@@ -68,6 +68,8 @@ def extract_snapshot(archive, destination):
     with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
         for member in bundle.getmembers():
             path = Path(member.name)
+            if member.issym() and not (Path(member.linkname).is_absolute() or '..' in Path(member.linkname).parts):
+                continue  # in-tree relative symlink (CLAUDE.md -> AGENTS.md): never materialized
             if path.is_absolute() or '..' in path.parts or member.issym() or member.islnk():
                 raise ValueError('unsafe/symlink member in committed snapshot: ' + member.name)
             if member.isfile():
@@ -235,7 +237,7 @@ def main():
     if len(set(agents)) != len(agents) or any(a not in AGENTS for a in agents) or not 30 <= args.timeout <= 1800:
         parser.error('choose listed non-Codex agents and timeout 30..1800')
     sha = git('rev-parse', '--verify', '--end-of-options', args.ref + '^{commit}').decode().strip()
-    files = git('ls-tree', '-r', '--name-only', sha).decode().splitlines()
+    files = [line.split('\t', 1)[1] for line in git('ls-tree', '-r', sha).decode().splitlines() if not line.startswith('120000 ')]
     documents = args.document or [f for f in files if f.endswith('.md') and not f.startswith('.github/')]
     if not documents or len(set(documents)) != len(documents) or any(f not in files or not f.endswith('.md') for f in documents):
         parser.error('documents must be distinct committed Markdown files')

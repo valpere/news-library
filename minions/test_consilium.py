@@ -41,6 +41,21 @@ class CouncilTest(unittest.TestCase):
             (Path(d)/'snapshot'/'link').symlink_to('/outside')
             self.assertNotEqual(before,council.fingerprints(Path(d)/'snapshot'))
 
+    def test_snapshot_skips_relative_in_tree_symlink_but_rejects_escapes(self):
+        def with_link(target):
+            buffer = io.BytesIO()
+            with tarfile.open(fileobj=buffer, mode='w') as t:
+                entry = tarfile.TarInfo('CLAUDE.md'); entry.type = tarfile.SYMTYPE; entry.linkname = target
+                t.addfile(entry)
+            return buffer.getvalue()
+        with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as d:
+            council.extract_snapshot(with_link('AGENTS.md'), Path(d)/'snapshot')
+            self.assertFalse((Path(d)/'snapshot'/'CLAUDE.md').exists())
+        for target in ['/etc/passwd', '../outside']:
+            with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as d:
+                with self.assertRaises(ValueError):
+                    council.extract_snapshot(with_link(target), Path(d)/'snapshot')
+
     def test_coverage_and_reference_validation(self):
         with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as d:
             path=Path(d); (path/'README.md').write_text('first\nsecond\n')
