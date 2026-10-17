@@ -9,8 +9,9 @@ retain dated rating history. Unknown historical rating dates stay unknown.
 
 Read `START_HERE.md`, then `docs/REQUIREMENTS.md`, `docs/HLD.md`, and
 `docs/BACKLOG.md`. These documents describe the current implementation contract.
-The `docs/news-library-*` files preserve discovery and experimental context;
-some older proposals were superseded. Do not treat proposals as user decisions.
+`docs/EVALUATION.md` and `docs/RESEARCH_NOTES.md` preserve evaluation data, pilot
+results and unadopted ideas; they do not override the contract. Do not treat
+proposals as user decisions.
 
 ## Project Structure
 
