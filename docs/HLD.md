@@ -59,7 +59,7 @@ flowchart LR
    завершити цей маршрут без генерації та embeddings.
 4. Для решти отримати дайджест і прогноз інтересу. Результат прив'язати
    до snapshot і версії запиту; він не змінює власну оцінку користувача.
-5. На відповідному етапі розвитку індексувати chunks через `bge-m3`.
+5. Індексувати chunks через `bge-m3` (M3, реалізовано; див. розділ про пошук за змістом).
    Помилка embeddings не перешкоджає FTS, збереженню та перегляду.
 6. Telegram використовує збережені результати; не переоцінює матеріали
    заново лише для доставки.
@@ -437,7 +437,7 @@ streaming scan vectors у SQLite без сторонньої vector extension. R
 по item ranks поєднує lexical і semantic результати. Equal ranks → item ID;
 explicit rating/confidence/date sort зберігає SQL порядок і NULL last.
 Автоматичне сортування vector/hybrid — relevance; FTS зберігає date default.
-Snippet читається з hash-verified source, максимум800 bytes на UTF-8 boundary,
+Snippet читається з hash-verified source, максимум 800 bytes на UTF-8 boundary,
 із exact snapshot/offsets. UI semantic results bounded100; API limit1..100.
 Coverage/warning явні, неіндексовані/відсіяні доступні у FTS. Model/inventory
 failure або відсутній current index → FTS fallback із діагностикою. FTS і
@@ -451,7 +451,7 @@ no-store. Mutation із Authorization відхиляється до handlers. Se
 використовувати лише local query embedding; ніколи generation/index writes.
 Item включає source та saved digest/model provenance і dated rating history,
 unknown date → null. Fragment перевіряє ownership/UTF-8 boundaries/16KiB.
-Context бере saved digest або source excerpt, обмежує його4000 bytes і
+Context бере saved digest або source excerpt, обмежує його 4000 bytes і
 повертає current explicit rating event, placement/tags, source completeness,
 truncation і text_kind: offsets digest не видаються за source offsets.
 Жоден read endpoint не змінює read/placement/ratings і не ставить jobs.
@@ -531,7 +531,7 @@ ownership source/digest/metadata/members та збирає сигнали для
 `tmp/`. Сигнали не є оцінками корисності або доказом семантичної якості.
 Старі snapshot IDs не змінюються після нового тексту статті. Історичні
 ревізії доступні явно. Український case-insensitive substring пошук працює
-за normalized `search_text`, а не ASCII-only SQLite lower. До100результатів.
+за normalized `search_text`, а не ASCII-only SQLite lower. До 100 результатів.
 Vocabulary підказки збираються з item_tags та актуальних revision metadata;
 людські теги статей не змінюються, модельні метадані зберігаються окремо. HTTP UI створює/редагує,
 читає, шукає, експортує; спільні Host/CSRF (для нелокального origin)/agent-mutation guards діють.
@@ -693,7 +693,7 @@ active для item, filtered/no ready digest не потрапляють до р
 items першими; explicit allowed retries reset exact existing run, не creates
 новий model/config run, тому metadata checkpoint лишається. Source/digest
 і checkpoint file/hash перевіряються перед enqueue; file failures дають
-per-item skip без блокування наступних (макс500 перевірок, queued<=limit).
+per-item skip без блокування наступних (макс 500 перевірок, queued<=limit).
 Unexpected DB failure rolls back batch; enqueue/reset і receipt commit
 атомарні, без network/inference у submit. Worker виконує звичайний pipeline
 з lease/current source/digest guard і failure history. Receipt переживає
@@ -741,7 +741,7 @@ minions/knowledge-recovery default read-only, -apply окремий mutation opt
 -run-cloud окремий opt-in, persistent batch token та bounded batch.
 
 Для links cloud input містить нумеровані дослівні фрагменти exact bounded
-context (до128, до512 bytes кожен, UTF-8). Модель може повернути IDs замість
+context (до 128, до 512 bytes кожен, UTF-8). Модель може повернути IDs замість
 переписування цитат. IDs розв’язуються у точні підрядки до тієї самої
 валідації evidence; невідомі IDs чи конфлікт ID/цитати відхиляються.
 Старий формат прямих цитат збережено. Existing checkpoint/run identity

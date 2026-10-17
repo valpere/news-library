@@ -24,8 +24,8 @@
 читають записи через окремий інтерфейс; оцінювати й змінювати їх не можуть.
 
 Перший робочий результат — сайт із додаванням URL, збереженням доступного
-тексту, дайджестом, власними оцінками та FTS-пошуком. Наступні етапи
-першої версії — пошук за змістом, агентське читання, Telegram.
+тексту, дайджестом, власними оцінками та FTS-пошуком. Пошук за змістом,
+агентське читання і Telegram-доставку також реалізовано (M3–M4, див. [BACKLOG](BACKLOG.md)).
 Автоматичний збір новин, адаптація пошукових запитів, навчання моделей
 і перенесення на VPS залишаються наступними розширеннями.
 
@@ -342,7 +342,7 @@ digest до того самого chat. Source/digest IDs, text і recipient/bot
 самостійно: digest, original URL, own rating/placement і completeness; bounded
 message позначає скорочення. Send не ставить read і не змінює usefulness.
 
-User погодив daily09:00 Europe/Kyiv, до5 матеріалів. Реальна доставка default
+User погодив daily 09:00 Europe/Kyiv, до 5 матеріалів. Реальна доставка default
 вимкнена до private bot token/numeric chat ID та explicit enable. Manual send
 тільки після preview; агентські credentials не дають права write/send. Daily
 slot один на local date; due window 5 хв, пропущені/empty випуски фіксуються
