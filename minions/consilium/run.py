@@ -167,7 +167,45 @@ def validate_report(text, documents, snapshot):
     return report
 
 
-def run_agent(name, archive, prompt, documents, directory, timeout):
+TRANSIENT = re.compile(r'\b(429|500|502|503|504)\b|overload|rate.?limit|temporar|internal error|unavailable', re.I)
+
+
+def diagnose(raw):
+    """Last provider error message from a CLI's JSON event stream and whether a retry may help."""
+    detail = ''
+    for line in raw.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get('type') == 'error':
+            detail = str((event.get('error') or {}).get('data', {}).get('message', ''))
+        elif event.get('type') == 'runError':
+            detail = str((event.get('data') or {}).get('message', ''))
+    return detail, bool(detail and TRANSIENT.search(detail))
+
+
+def retry(run, retries, sleep=time.sleep, delay=30):
+    """Repeat run(attempt) while it fails with a transient provider error; never retries timeouts."""
+    for attempt in range(retries + 1):
+        result = run(attempt)
+        result['attempts'] = attempt + 1
+        if result['status'] == 'complete' or not result.get('transient') or attempt == retries:
+            return result
+        sleep(delay * (attempt + 1))
+
+
+def run_agent(name, archive, prompt, documents, directory, timeout, retries=0):
+    def once(attempt):
+        if attempt:  # keep the failed attempt's logs next to the fresh one
+            directory.rename(directory.with_name(f'{directory.name}.attempt{attempt}'))
+        return run_once(name, archive, prompt, documents, directory, timeout)
+    return retry(once, retries)
+
+
+def run_once(name, archive, prompt, documents, directory, timeout):
     directory.mkdir()
     snapshot = directory / 'src'
     extract_snapshot(archive, snapshot)
@@ -218,6 +256,16 @@ def run_agent(name, archive, prompt, documents, directory, timeout):
         result['missing_documents'] = sorted(set(documents) - set(report['reviewed_files']))
     except (ValueError, OSError) as error:
         result['error'] = str(error)
+        try:
+            raw = (directory / 'stdout.log').read_text()
+        except OSError:
+            raw = ''
+        detail, transient = diagnose(raw)
+        if detail:
+            result['error_detail'] = detail
+        result['transient'] = transient and result['error'] == 'reviewer exited unsuccessfully'
+        if result['error'] == 'reviewer timeout':
+            result['events'] = sum(1 for line in raw.splitlines() if line.strip())
     result['duration_seconds'] = round(time.monotonic() - start, 2)
     write_json(directory / 'result.json', result)
     return result
@@ -231,6 +279,7 @@ def main():
     parser.add_argument('--ref', default='HEAD')
     parser.add_argument('--agents', default='opencode,kilo,agy,kiro-cli')
     parser.add_argument('--timeout', type=int, default=600)
+    parser.add_argument('--retries', type=int, default=1, choices=range(4), help='extra attempts after a transient provider error (not timeouts)')
     parser.add_argument('--document', action='append')
     args = parser.parse_args()
     agents = args.agents.split(',')
@@ -260,7 +309,7 @@ def main():
         return 0
     results = []
     with ThreadPoolExecutor(max_workers=len(agents)) as pool:
-        pending = {pool.submit(run_agent, name, archive, prompt, documents, output / name, args.timeout): name for name in agents}
+        pending = {pool.submit(run_agent, name, archive, prompt, documents, output / name, args.timeout, args.retries): name for name in agents}
         for future in as_completed(pending):
             try:
                 result = future.result()
@@ -268,7 +317,7 @@ def main():
                 result = {'agent': pending[future], 'status': 'failed', 'error': str(error)}
                 write_json(output / pending[future] / 'result.json', result)
             results.append(result)
-            print(result['agent'] + ': ' + result['status'] + (' — ' + result['error'] if 'error' in result else ''), flush=True)
+            print(result['agent'] + ': ' + result['status'] + (' — ' + result['error'] + (' (' + result['error_detail'] + ')' if 'error_detail' in result else '') if 'error' in result else ''), flush=True)
     results.sort(key=lambda r: agents.index(r['agent']))
     complete = all(r['status'] == 'complete' for r in results)
     write_json(output / 'summary.json', {'commit': sha, 'complete': complete, 'reviewers': results})
@@ -287,6 +336,13 @@ def main():
                 lines.extend(['', f"- **{finding['severity']}** `{finding['file']}:{finding['line']}` — {finding['impact']} {finding['suggested_fix']}"])
             if report['limitations']:
                 lines.extend(['', 'Обмеження: ' + '; '.join(report['limitations'])])
+    failed = [r for r in results if r['status'] != 'complete' and 'error' in r]
+    if failed:
+        lines.extend(['', '## Причини незавершення', ''])
+        for r in failed:
+            lines.append(f"- {r['agent']}: {r['error']}" + (f" — {r['error_detail']}" if 'error_detail' in r else '')
+                         + (f" (спроб: {r['attempts']})" if r.get('attempts', 1) > 1 else '')
+                         + (f" ({r['events']} подій до таймауту)" if 'events' in r else ''))
     lines.extend(['', 'Повний консиліум.' if complete else 'Консиліум неповний: невдалі/неповні відповіді не є схваленням.',
                   'Висновки рецензентів потребують перевірки; кількість голосів не встановлює істину.'])
     (output / 'summary.md').write_text('\n'.join(lines) + '\n')
