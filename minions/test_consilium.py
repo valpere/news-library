@@ -56,6 +56,33 @@ class CouncilTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     council.extract_snapshot(with_link(target), Path(d)/'snapshot')
 
+    def test_diagnose_classifies_transient_provider_errors(self):
+        overloaded = json.dumps({'type': 'error', 'error': {'name': 'UnknownError', 'data': {'message': 'Streaming response failed: [503] Upstream error from Nvidia: Service temporarily overloaded'}}})
+        detail, transient = council.diagnose('step noise\n' + overloaded + '\n')
+        self.assertTrue(transient)
+        self.assertIn('503', detail)
+        kiro = json.dumps({'type': 'runError', 'data': {'stage': 'prompt', 'message': 'Internal error'}})
+        self.assertTrue(council.diagnose(kiro)[1])
+        auth = json.dumps({'type': 'error', 'error': {'data': {'message': 'Invalid API key'}}})
+        self.assertEqual(council.diagnose(auth), ('Invalid API key', False))
+        self.assertEqual(council.diagnose('{"type":"text"}\nnot json'), ('', False))
+
+    def test_retry_only_transient_failures_up_to_limit(self):
+        calls = []
+        def run(attempt):
+            calls.append(attempt)
+            return {'status': 'failed', 'transient': attempt < 2}
+        result = council.retry(run, retries=2, sleep=lambda s: None)
+        self.assertEqual(calls, [0, 1, 2])
+        self.assertEqual(result['attempts'], 3)
+        calls.clear()
+        result = council.retry(lambda a: calls.append(a) or {'status': 'failed', 'transient': False}, retries=2, sleep=lambda s: None)
+        self.assertEqual(calls, [0])
+        self.assertEqual(result['attempts'], 1)
+        calls.clear()
+        done = council.retry(lambda a: calls.append(a) or {'status': 'complete'}, retries=2, sleep=lambda s: None)
+        self.assertEqual((calls, done['attempts']), ([0], 1))
+
     def test_coverage_and_reference_validation(self):
         with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as d:
             path=Path(d); (path/'README.md').write_text('first\nsecond\n')
