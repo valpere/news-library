@@ -47,7 +47,7 @@ Explicit site control (only when the user asks): `python3 minions/site_ctl.py st
 graceful SIGTERM stop only, no library data access.
 
 Data snapshots (rollback copies, gitignored `snapshots/`, never `tmp/`):
-`python3 minions/snapshots.py list|keep|unkeep|prune NAME... [--apply]`. Pruning is
+`python3 minions/snapshots.py create PURPOSE|list|keep|unkeep|prune NAME... [--apply]`. Create uses SQLite backup + hardlinks of immutable files. Pruning is
 explicit, dry-run by default, refuses `.keep`-protected snapshots; live `data/` is never touched.
 
 Read-only URL list audit (no import/fetch, uses the application canonicalizer):

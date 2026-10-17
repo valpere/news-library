@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import unittest
 
+import sqlite3
 import snapshots
 
 
@@ -37,6 +38,39 @@ class Snapshots(unittest.TestCase):
     def test_symlink_not_a_snapshot(self):
         (self.base / 'link').symlink_to(self.base / 'a')
         self.assertNotIn('link', snapshots.names(self.base))
+
+    def make_data(self):
+        data = self.base / 'live'
+        (data / 'texts' / '00').mkdir(parents=True)
+        (data / 'texts' / '00' / 't.txt').write_text('text')
+        con = sqlite3.connect(data / 'library.sqlite')
+        con.execute('PRAGMA user_version=15')
+        con.execute('CREATE TABLE t(x)')
+        con.commit()
+        con.close()
+        return data
+
+    def test_create_copies_db_and_hardlinks_files(self):
+        data = self.make_data()
+        name = snapshots.create('before-test', data, self.base)
+        snap = self.base / name
+        self.assertEqual(snapshots.schema(snap), 15)
+        self.assertEqual((snap / 'texts/00/t.txt').stat().st_ino, (data / 'texts/00/t.txt').stat().st_ino)
+        self.assertTrue((snap / 'snapshot.json').exists())
+        self.assertIn(name, snapshots.names(self.base))
+
+    def test_create_rejects_bad_purpose_and_missing_db(self):
+        with self.assertRaises(ValueError):
+            snapshots.create('../x', self.make_data(), self.base)
+        with self.assertRaises(ValueError):
+            snapshots.create('ok', self.base / 'a', self.base)
+
+    def test_candidates_respect_keep_last_age_and_keep(self):
+        import time
+        now = time.time() + 40 * 86400
+        snapshots.set_keep('a', True, self.base)
+        self.assertEqual(snapshots.candidates(self.base, 30, 0, now), ['b'])
+        self.assertEqual(snapshots.candidates(self.base, 30, 5, now), [])
 
 
 if __name__ == '__main__':
