@@ -345,7 +345,7 @@ message позначає скорочення. Send не ставить read і 
 User погодив daily09:00 Europe/Kyiv, до5 матеріалів. Реальна доставка default
 вимкнена до private bot token/numeric chat ID та explicit enable. Manual send
 тільки після preview; агентські credentials не дають права write/send. Daily
-slot один на local date; due window5min, пропущені/empty випуски фіксуються
+slot один на local date; due window 5 хв, пропущені/empty випуски фіксуються
 як missed, без late catchup. Один worker послідовно пише sending до network,
 підтверджений message ID — до переходу до наступної частини. Definite API
 rejection → failed, timeout/malformed/невідомий transport outcome → unknown;
