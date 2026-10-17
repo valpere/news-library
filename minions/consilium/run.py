@@ -127,6 +127,30 @@ def report_text(agent, raw):
     return envelopes[-1] if envelopes else raw
 
 
+def locate(finding, documents, snapshot):
+    """Normalize a finding's file/line against the snapshot; ValueError if it cannot be placed."""
+    reference = Path(finding['file'])
+    if '..' in reference.parts:
+        raise ValueError('finding points outside snapshot')
+    if reference.is_absolute():
+        resolved = reference.resolve()
+        if not resolved.is_relative_to(snapshot.resolve()):
+            raise ValueError('finding points outside snapshot')
+        finding['original_reference'] = finding['file']
+        finding['file'] = str(resolved.relative_to(snapshot.resolve()))
+        reference = Path(finding['file'])
+    if len(reference.parts) == 1 and not (snapshot / reference).exists():
+        matches = [f for f in documents if Path(f).name == reference.name]
+        if len(matches) == 1:
+            finding['original_reference'] = finding['file']
+            finding['file'] = matches[0]
+    target = (snapshot / finding['file']).resolve()
+    if not target.is_relative_to(snapshot.resolve()) or not target.is_file():
+        raise ValueError('finding points outside snapshot')
+    if type(finding.get('line')) is not int or not 1 <= finding['line'] <= len(target.read_text().splitlines()):
+        raise ValueError('invalid finding line')
+
+
 def validate_report(text, documents, snapshot):
     # CLI finalText may concatenate an intermediate draft and a final fenced answer.
     # Only an unambiguous terminal JSON block may supersede preceding prose.
@@ -146,38 +170,40 @@ def validate_report(text, documents, snapshot):
             raise ValueError('invalid ' + key)
     if any(not isinstance(v, str) for key in ('reviewed_files', 'limitations') for v in report[key]):
         raise ValueError('invalid coverage/limitations')
-    if any(v not in documents for v in report['reviewed_files']):
-        raise ValueError('unknown reviewed document')
+    # Extra files (e.g. run.py, which the task asks to assess) are fine when they exist in the
+    # snapshot; names that do not exist are dropped and recorded, never counted as coverage.
+    root = snapshot.resolve()
+    def readable(name):
+        target = (snapshot / name).resolve()
+        return target.is_relative_to(root) and target.is_file()
+    ignored = [v for v in report['reviewed_files'] if v not in documents and not readable(v)]
+    if ignored:
+        report['reviewed_files'] = [v for v in report['reviewed_files'] if v not in ignored]
+        report['ignored_reviewed_files'] = ignored
+    accepted, rejected = [], []
     for finding in report['findings']:
         if not isinstance(finding, dict) or finding.get('severity') not in ('critical', 'major', 'minor'):
             raise ValueError('invalid finding severity')
         for key in ('file', 'trigger', 'impact', 'evidence', 'suggested_fix'):
             if not isinstance(finding.get(key), str) or not finding[key].strip():
                 raise ValueError('invalid finding ' + key)
-        reference = Path(finding['file'])
-        if '..' in reference.parts:
-            raise ValueError('finding points outside snapshot')
-        if reference.is_absolute():
-            resolved = reference.resolve()
-            if not resolved.is_relative_to(snapshot.resolve()):
-                raise ValueError('finding points outside snapshot')
-            finding['original_reference'] = finding['file']
-            finding['file'] = str(resolved.relative_to(snapshot.resolve()))
-            reference = Path(finding['file'])
-        if len(reference.parts) == 1 and not (snapshot / reference).exists():
-            matches = [f for f in documents if Path(f).name == reference.name]
-            if len(matches) == 1:
-                finding['original_reference'] = finding['file']
-                finding['file'] = matches[0]
-        target = (snapshot / finding['file']).resolve()
-        if not target.is_relative_to(snapshot.resolve()) or not target.is_file():
-            raise ValueError('finding points outside snapshot')
-        if type(finding.get('line')) is not int or not 1 <= finding['line'] <= len(target.read_text().splitlines()):
-            raise ValueError('invalid finding line')
+        try:
+            locate(finding, documents, snapshot)
+        except ValueError as error:
+            rejected.append({**finding, 'reason': str(error)})
+            continue
+        accepted.append(finding)
+    report['findings'] = accepted
+    if rejected:
+        report['rejected_findings'] = rejected
     return report
 
 
 TRANSIENT = re.compile(r'\b(429|500|502|503|504)\b|overload|rate.?limit|temporar|internal error|unavailable', re.I)
+
+
+def covers(report, documents):
+    return set(documents) <= set(report['reviewed_files'])
 
 
 def message(value):
@@ -289,8 +315,9 @@ def run_once(name, archive, prompt, documents, directory, timeout):
         write_json(directory / 'review.json', report)
         result['finding_count'] = len(report['findings'])
         result['scores'] = report['scores']
-        result['status'] = 'complete' if set(report['reviewed_files']) == set(documents) else 'incomplete_coverage'
+        result['status'] = 'complete' if covers(report, documents) else 'incomplete_coverage'
         result['missing_documents'] = sorted(set(documents) - set(report['reviewed_files']))
+        result['rejected_findings'] = len(report.get('rejected_findings', []))
     except (ValueError, OSError) as error:
         result['error'] = str(error)
         try:
@@ -372,6 +399,10 @@ def main():
         if (output / name / 'review.json').exists():
             report = json.loads((output / name / 'review.json').read_text())
             lines.extend(['', '## ' + name, '', report['summary'], '', f'Повний звіт: [{name}/review.json]({name}/review.json).'])
+            if report.get('rejected_findings'):
+                lines.extend(['', f"Відхилено знахідок із некоректним місцем: {len(report['rejected_findings'])} (див. review.json → rejected_findings)."])
+            if report.get('ignored_reviewed_files'):
+                lines.extend(['', 'Не враховано неіснуючі reviewed_files: ' + ', '.join(report['ignored_reviewed_files']) + '.'])
             for finding in report['findings']:
                 lines.extend(['', f"- **{finding['severity']}** `{finding['file']}:{finding['line']}` — {finding['impact']} {finding['suggested_fix']}"])
             if report['limitations']:

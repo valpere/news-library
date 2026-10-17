@@ -132,10 +132,26 @@ class CouncilTest(unittest.TestCase):
             finding={'severity':'major','file':'../outside','line':1,
                      'trigger':'x','impact':'x','evidence':'x','suggested_fix':'x'}
             report['findings']=[finding]
-            with self.assertRaises(ValueError): council.validate_report(json.dumps(report),['README.md'],path)
+            checked = council.validate_report(json.dumps(report),['README.md'],path)
+            self.assertEqual(checked['findings'], [])
+            self.assertEqual(checked['rejected_findings'][0]['reason'], 'finding points outside snapshot')
             finding['file']='README.md';finding['line']=3
-            with self.assertRaises(ValueError): council.validate_report(json.dumps(report),['README.md'],path)
+            checked = council.validate_report(json.dumps(report),['README.md'],path)
+            self.assertEqual((checked['findings'], checked['rejected_findings'][0]['reason']), ([], 'invalid finding line'))
+            finding['line']=2
+            self.assertEqual(council.validate_report(json.dumps(report),['README.md'],path)['findings'], [finding])
             with self.assertRaises(ValueError): council.validate_report('', ['README.md'],path)
+
+    def test_extra_reviewed_files_are_kept_only_when_they_exist_in_the_snapshot(self):
+        with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as d:
+            path=Path(d); (path/'README.md').write_text('a\n'); (path/'run.py').write_text('x\n')
+            report={'summary':'ok','scores':dict.fromkeys(council.CRITERIA,3),
+                    'reviewed_files':['README.md','run.py','ghost.md'],'findings':[],'limitations':[]}
+            checked = council.validate_report(json.dumps(report),['README.md'],path)
+            self.assertEqual(checked['reviewed_files'], ['README.md', 'run.py'])
+            self.assertEqual(checked['ignored_reviewed_files'], ['ghost.md'])
+            self.assertTrue(council.covers(checked, ['README.md']))
+            self.assertFalse(council.covers({'reviewed_files': ['run.py']}, ['README.md']))
 
     def test_codex_cannot_be_selected_and_live_opt_in_required(self):
         for args in [[], ['--run-agents','--agents','codex']]:
