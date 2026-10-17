@@ -46,6 +46,10 @@ Explicit site control (only when the user asks): `python3 minions/site_ctl.py st
 (`start --resume-restored` for restored data); pid and log in `tmp/site/`,
 graceful SIGTERM stop only, no library data access.
 
+Data snapshots (rollback copies, gitignored `snapshots/`, never `tmp/`):
+`python3 minions/snapshots.py list|keep|unkeep|prune NAME... [--apply]`. Pruning is
+explicit, dry-run by default, refuses `.keep`-protected snapshots; live `data/` is never touched.
+
 Read-only URL list audit (no import/fetch, uses the application canonicalizer):
 `go run ./minions/url-list-check -file '/path/to/url-list'` prints counts,
 invalid/duplicate line numbers and whether the list fits one batch. It does
