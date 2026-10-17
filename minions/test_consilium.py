@@ -67,6 +67,13 @@ class CouncilTest(unittest.TestCase):
         self.assertEqual(council.diagnose(auth), ('Invalid API key', False))
         self.assertEqual(council.diagnose('{"type":"text"}\nnot json'), ('', False))
 
+    def test_diagnose_tolerates_unexpected_event_shapes(self):
+        for event in ({'type': 'error', 'error': 'plain string'}, {'type': 'error', 'error': {'data': 'text'}},
+                      {'type': 'error'}, {'type': 'runError', 'data': 'x'}, ['not', 'a', 'dict']):
+            detail, transient = council.diagnose(json.dumps(event))
+            self.assertIsInstance(detail, str)
+        self.assertEqual(council.diagnose(json.dumps({'type': 'error', 'error': {'data': 'overloaded 503'}})), ('overloaded 503', True))
+
     def test_retry_only_transient_failures_up_to_limit(self):
         calls = []
         def run(attempt):

@@ -170,6 +170,15 @@ def validate_report(text, documents, snapshot):
 TRANSIENT = re.compile(r'\b(429|500|502|503|504)\b|overload|rate.?limit|temporar|internal error|unavailable', re.I)
 
 
+def message(value):
+    """Error text from a provider event whose shape varies: str, {message}, {data: str|{message}}."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return message(value.get('message') or value.get('data'))
+    return ''
+
+
 def diagnose(raw):
     """Last provider error message from a CLI's JSON event stream and whether a retry may help."""
     detail = ''
@@ -181,9 +190,9 @@ def diagnose(raw):
         if not isinstance(event, dict):
             continue
         if event.get('type') == 'error':
-            detail = str((event.get('error') or {}).get('data', {}).get('message', ''))
+            detail = message(event.get('error'))
         elif event.get('type') == 'runError':
-            detail = str((event.get('data') or {}).get('message', ''))
+            detail = message(event.get('data'))
     return detail, bool(detail and TRANSIENT.search(detail))
 
 
