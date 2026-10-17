@@ -45,3 +45,6 @@ __pycache__/
 !.env.example
 /.build/
 tmp/
+.agents
+session-log.md
+/snapshots/

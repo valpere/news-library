@@ -70,5 +70,7 @@ Agent access is read-only. Never modify source Obsidian/LLM Wiki collections.
 
 Do not invent commit conventions: upstream currently has only its initial
 commit. Describe concrete changes and validation in commits or pull requests.
+Full-data rollback copies live in gitignored `snapshots/` (see `minions/snapshots.py`);
+live `data/` and snapshots are never modified or deleted without the user's explicit instruction.
 Keep secrets and runtime data out of source control. Do not publish or push
 local preparation changes without user instructions.
