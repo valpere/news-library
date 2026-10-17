@@ -206,10 +206,14 @@ fetch не переписує вибрану новішу ручну версі�
 ### FUN-NL-RATING
 
 @schema RatingEvent: id int64 (монотонний порядок запису), item_id int64,
-score int64, recorded_at UTC timestamp, assessed_at nullable UTC timestamp,
+score int64, scale enum(legacy_numeric, estimative_usefulness_v1),
+recorded_at UTC timestamp, assessed_at nullable UTC timestamp,
 source_version_id nullable int64, digest_id nullable int64, reason string.
 
-@constraint score >= 0; відсутність оцінки — відсутність події, не score=0.
+@constraint score >= 0; для scale=estimative_usefulness_v1 score лише 0..6 (CHECK у
+schema_v14), для legacy_numeric — будь-яке невід'ємне ціле. Нові події мають
+scale=estimative_usefulness_v1; старі числа не переосмислюються (score 4 з legacy_numeric
+не стає «Висока»). Відсутність оцінки — відсутність події, не score=0.
 Оцінка стосується матеріалу загалом; посилання на показані артефакти фіксують
 контекст, а не доказ прочитання. Непорожні посилання мають належати item_id;
 якщо задані і текст, і дайджест, дайджест має походити саме від цього snapshot.
@@ -222,8 +226,8 @@ source_version_id nullable int64, digest_id nullable int64, reason string.
 Імпорт не підміняє нове рішення старим: політику імпорту уточнити перед
 реалізацією; масовий імпорт не входить у M1.
 
-@constraint Оцінка 3 допустима; від'ємне, дробове, переповнене значення
-відхиляється без нової події. Модель пише тільки generated_artifacts та пов’язані interest_predictions;
+@constraint Для legacy_numeric оцінка 3 допустима; від'ємне, дробове, переповнене значення
+або рівень поза 0..6 для нової шкали відхиляється без нової події. Модель пише тільки generated_artifacts та пов’язані interest_predictions;
 відгук на дайджест — тільки digest_feedback.
 
 ### FUN-NL-LIBRARY

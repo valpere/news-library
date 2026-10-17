@@ -1,0 +1,163 @@
+{
+  "created_at": "2026-10-09T11:42:31.613286+00:00",
+  "scope": "Non-hidden regular files; symlink directories not followed. Text hashes cover md/txt/html/htm only; no OCR, model calls, or external requests.",
+  "groups": {
+    "obsidian_clippings": {
+      "files": 406,
+      "extensions": {
+        ".md": 206,
+        ".html": 200
+      },
+      "bytes": 2640002,
+      "text_files": 406
+    },
+    "obsidian_other": {
+      "files": 107,
+      "extensions": {
+        ".md": 94,
+        ".jpeg": 2,
+        ".png": 2,
+        ".html": 1,
+        ".pdf": 4,
+        ".txt": 1,
+        ".jpg": 3
+      },
+      "bytes": 13271125,
+      "text_files": 96
+    },
+    "wiki_inbox": {
+      "files": 1,
+      "extensions": {
+        ".pdf": 1
+      },
+      "bytes": 53418,
+      "text_files": 0
+    },
+    "wiki_skipped": {
+      "files": 163,
+      "extensions": {
+        ".md": 141,
+        ".go": 2,
+        ".xml": 6,
+        ".owl": 1,
+        ".drl": 1,
+        ".yaml": 2,
+        ".ttl": 1,
+        ".json": 2,
+        ".clp": 1,
+        ".ts": 3,
+        ".sm": 1,
+        ".puml": 1,
+        ".docx": 1
+      },
+      "bytes": 2112772,
+      "text_files": 141
+    },
+    "wiki_sources": {
+      "files": 725,
+      "extensions": {
+        ".md": 243,
+        ".pdf": 43,
+        ".fb2": 1,
+        ".html": 33,
+        ".jpg": 73,
+        ".png": 109,
+        ".jpeg": 18,
+        ".gif": 14,
+        ".webp": 19,
+        ".txt": 19,
+        ".adoc": 8,
+        ".odp": 1,
+        ".json": 1,
+        ".sh": 1,
+        ".yaml": 5,
+        "(no extension)": 3,
+        ".url": 2,
+        ".diff": 1,
+        ".css": 34,
+        ".odt": 4,
+        ".xml": 1,
+        ".md-": 1,
+        ".odt-": 1,
+        ".png~": 1,
+        ".js": 87,
+        ".go": 1,
+        ".mod": 1
+      },
+      "bytes": 431045811,
+      "text_files": 295
+    },
+    "wiki_pages": {
+      "files": 104,
+      "extensions": {
+        ".md": 103,
+        ".sh": 1
+      },
+      "bytes": 678580,
+      "text_files": 103
+    }
+  },
+  "exact_nonempty_text_duplicate_groups": 5,
+  "duplicate_extra_copies": 6,
+  "duplicate_groups": [
+    [
+      {
+        "group": "wiki_sources",
+        "path": "/home/val/doc/llm-wiki/sources/ai_llm/cases/cases.md"
+      },
+      {
+        "group": "wiki_sources",
+        "path": "/home/val/doc/llm-wiki/sources/ai_llm/cases/chatgpt.md"
+      }
+    ],
+    [
+      {
+        "group": "wiki_sources",
+        "path": "/home/val/doc/llm-wiki/sources/ai_llm/cases/src/local-deepseek-1-0.md"
+      },
+      {
+        "group": "wiki_sources",
+        "path": "/home/val/doc/llm-wiki/sources/ai_llm/cases/src/ollama-1-0.md"
+      }
+    ],
+    [
+      {
+        "group": "wiki_sources",
+        "path": "/home/val/doc/llm-wiki/sources/ai_llm/cases/src/local-deepseek-0-0.md"
+      },
+      {
+        "group": "wiki_sources",
+        "path": "/home/val/doc/llm-wiki/sources/ai_llm/cases/src/ollama-0-0.md"
+      }
+    ],
+    [
+      {
+        "group": "wiki_sources",
+        "path": "/home/val/doc/llm-wiki/sources/ai_llm/article/examples/bak/ai-content-wizard-rievoliutsiinii-pidkhid-do-kontientu_files/f.txt"
+      },
+      {
+        "group": "wiki_sources",
+        "path": "/home/val/doc/llm-wiki/sources/ai_llm/article/examples/bak/shi-u-diyi-yak-stvoryty-zakhoplyve-video_files/f.txt"
+      },
+      {
+        "group": "wiki_sources",
+        "path": "/home/val/doc/llm-wiki/sources/ai_llm/article/examples/bak/iak-prosuvati-biznies-v-intiernieti-iuridichni-ta-miedichni-kieisi_files/f.txt"
+      }
+    ],
+    [
+      {
+        "group": "wiki_pages",
+        "path": "/home/val/doc/llm-wiki/wiki/_meta/dreaming/reports/2026-W26.md"
+      },
+      {
+        "group": "wiki_pages",
+        "path": "/home/val/doc/llm-wiki/wiki/_meta/dreaming/reports/2026-W35.md"
+      }
+    ]
+  ],
+  "notes": [
+    "Folder state is not a user interest label outside the explicitly explained Clippings groups.",
+    "Obsidian Vault/llm-wiki symlink is excluded to prevent double traversal.",
+    "Wiki pages include index and internal notes; counts are files, not distinct articles."
+  ]
+}
