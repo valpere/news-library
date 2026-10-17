@@ -24,6 +24,16 @@ AGENTS = {
     'kiro-cli': ('CLI default (unknown)', ['kiro-cli', 'chat', '--no-interactive', '--agent-engine', 'v2', '--trust-tools=fs_read', '--output-format', 'stream-json']),
 }
 AGENTS['claude'] = ('sonnet (CLI alias)', ['claude', '--print', '--permission-mode', 'plan', '--tools', 'Read,Grep,Glob', '--allowedTools', 'Read,Grep,Glob', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--model', 'sonnet', '--output-format', 'json', '--no-session-persistence'])
+# Ollama cloud models reviewed through the Claude Code CLI pointed at the local Ollama endpoint
+# (same read-only tool set as 'claude'; no permission bypass). Requires a running Ollama.
+OLLAMA_ENV = {'ANTHROPIC_BASE_URL': 'http://localhost:11434', 'ANTHROPIC_AUTH_TOKEN': 'ollama', 'ANTHROPIC_API_KEY': ''}
+AGENT_ENV = {}
+for _alias, _model in (('deepseek-v4-pro', 'deepseek-v4-pro:cloud'), ('gemma4', 'gemma4:cloud'), ('glm-5.3', 'glm-5.3:cloud'),
+                       ('kimi-k2.7', 'kimi-k2.7-code:cloud'), ('minimax-m3', 'minimax-m3:cloud'), ('glm-5.3-flash', 'glm-5.3-flash:cloud')):
+    _command = list(AGENTS['claude'][1])
+    _command[_command.index('--model') + 1] = _model
+    AGENTS['olm-' + _alias] = (_model, _command)
+    AGENT_ENV['olm-' + _alias] = OLLAMA_ENV
 CRITERIA = ('correctness', 'clarity', 'consistency', 'usability')
 TASK = '''Ти незалежний рецензент документації особистої бібліотеки news-library.
 Оціни ВСІ зазначені документи, перевіряючи твердження за кодом знімка.
@@ -255,7 +265,8 @@ def run_once(name, archive, prompt, documents, directory, timeout):
         if not shutil.which(command[0]):
             raise ValueError('CLI unavailable')
         with (directory / 'stdout.log').open('w') as stdout, (directory / 'stderr.log').open('w') as stderr:
-            process = subprocess.Popen(command, cwd=snapshot, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, start_new_session=True)
+            process = subprocess.Popen(command, cwd=snapshot, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, start_new_session=True,
+                                       env={**os.environ, **AGENT_ENV.get(name, {})})
             try:
                 result['exit_code'] = process.wait(timeout=timeout)
             except subprocess.TimeoutExpired:

@@ -50,6 +50,11 @@ Read-only/plan режими й окремі знімки захищають ро
 Сирі звіти залишаються локальними; консиліум нічого не публікує й не зливає.
 
 `--opencode-model provider/model` підміняє модель opencode-рецензента (напр. коли безкоштовний провайдер перевантажений).
+Рецензенти `olm-deepseek-v4-pro`, `olm-gemma4`, `olm-glm-5.3`, `olm-glm-5.3-flash`, `olm-kimi-k2.7`,
+`olm-minimax-m3` — лише Ollama cloud-моделі (`*:cloud`) через Claude Code CLI на локальному
+Ollama (`ANTHROPIC_BASE_URL=http://localhost:11434`), інструменти Read/Grep/Glob, без обходу дозволів.
+Код знімка вони перевіряють самі. Рівень 1: `--agents olm-deepseek-v4-pro,olm-gemma4,olm-glm-5.3,olm-kimi-k2.7,olm-minimax-m3`;
+рівень 2 (інші сімейства): `agy,kiro-cli,opencode,kilo`. `qwen3.5:cloud` вилучено з Ollama (2026-09-25).
 Тимчасові збої провайдера (5xx/429/overloaded/`Internal error`) повторюються
 `--retries N` разів (типово 1; логи невдалої спроби лишаються в `<агент>.attemptN/`).
 Таймаут не повторюється: причину й кількість подій видно в `result.json`/`summary.md`.

@@ -103,6 +103,19 @@ class CouncilTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             council.with_model(council.AGENTS['agy'], 'x')
 
+    def test_ollama_cloud_reviewers_are_read_only_claude_cli_on_local_endpoint(self):
+        names = [n for n in council.AGENTS if n.startswith('olm-')]
+        self.assertGreaterEqual(len(names), 5)
+        for name in names:
+            model, command = council.AGENTS[name]
+            self.assertTrue(model.endswith(':cloud'))
+            self.assertEqual(command[command.index('--model') + 1], model)
+            self.assertEqual(command[command.index('--tools') + 1], 'Read,Grep,Glob')
+            self.assertNotIn('--dangerously-skip-permissions', command)
+            env = council.AGENT_ENV[name]
+            self.assertEqual(env['ANTHROPIC_BASE_URL'], 'http://localhost:11434')
+            self.assertEqual(env['ANTHROPIC_API_KEY'], '')
+
     def test_coverage_and_reference_validation(self):
         with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as d:
             path=Path(d); (path/'README.md').write_text('first\nsecond\n')
