@@ -66,12 +66,11 @@ func TestSemanticSynonymFiltersHybridAndOfflineFTS(t *testing.T) {
 	s.Manual(other, "weather forecast")
 	s.Rate(other, 0, nil, nil, "")
 	drainIndex(t, semantic)
-	before := f.calls
 	zero, e := semantic.Search(context.Background(), Filters{Query: "weather", Rating: "0"}, "vector")
 	if e != nil || len(zero.Items) != 1 || zero.Items[0].ID != other || !zero.Items[0].Score.Valid || zero.Items[0].Score.Int64 != 0 {
 		t.Fatal("zero rating filter", zero, e)
 	}
-	before = f.calls
+	before := f.calls
 	got, err := semantic.Search(context.Background(), Filters{Query: "persistent storage", Placement: "deferred", Tags: []string{"systems"}, Rating: "unrated"}, "vector")
 	if err != nil || len(got.Items) != 1 || got.Items[0].ID != id || got.Items[0].MatchSnapshot == 0 || !strings.Contains(got.Items[0].MatchSnippet, "database") {
 		t.Fatal(got, err)

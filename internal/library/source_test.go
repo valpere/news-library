@@ -20,7 +20,7 @@ func TestArticleFixtures(t *testing.T) {
 			w.Header().Set("Content-Type", "text/html")
 			fmt.Fprint(w, `<html><head><title>Fixture news</title></head><body><nav>ignore</nav><article><h1>Knowledge</h1><p>`+strings.Repeat("Useful information about Go libraries and persistent storage. ", 30)+`</p><script>alert('bad')</script></article></body></html>`)
 		case "/redirect":
-			http.Redirect(w, r, "/article", 302)
+			http.Redirect(w, r, "/article", http.StatusFound)
 		case "/plain":
 			w.Header().Set("Content-Type", "text/plain")
 			fmt.Fprint(w, strings.Repeat("knowledge ", 500))
@@ -170,7 +170,9 @@ func TestFetchNetworkBoundaries(t *testing.T) {
 	}
 	// Initial public hostname is routed to a fixture only inside this test;
 	// every subsequent dial still applies production address validation.
-	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "http://127.0.0.1/private", 302) }))
+	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://127.0.0.1/private", http.StatusFound)
+	}))
 	defer fixture.Close()
 	transport := f.client.Transport.(*http.Transport)
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -195,7 +197,7 @@ func TestFetchNetworkBoundaries(t *testing.T) {
 func TestWorkerFailureAndStoredText(t *testing.T) {
 	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/fail" {
-			http.Error(w, "unavailable", 503)
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain")

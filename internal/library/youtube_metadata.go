@@ -129,12 +129,12 @@ func startMetadataProxy(ctx context.Context) (string, func(), error) {
 		if r.Method == http.MethodConnect {
 			host, port, e := net.SplitHostPort(r.Host)
 			if e != nil || host == "" || (port != "443" && port != "80") {
-				http.Error(w, "invalid target", 403)
+				http.Error(w, "invalid target", http.StatusForbidden)
 				return
 			}
 			upstream, e := safeDial(ctx, "tcp", r.Host)
 			if e != nil {
-				http.Error(w, "target unavailable", 403)
+				http.Error(w, "target unavailable", http.StatusForbidden)
 				return
 			}
 			if !track(upstream) {
@@ -169,16 +169,16 @@ func startMetadataProxy(ctx context.Context) (string, func(), error) {
 			return
 		}
 		if r.Method != "GET" || r.URL.Scheme != "http" || r.URL.Host == "" {
-			http.Error(w, "unsupported request", 403)
+			http.Error(w, "unsupported request", http.StatusForbidden)
 			return
 		}
 		if _, e := CanonicalURL(r.URL.String()); e != nil {
-			http.Error(w, "invalid URL", 403)
+			http.Error(w, "invalid URL", http.StatusForbidden)
 			return
 		}
 		port := r.URL.Port()
 		if port != "" && port != "80" {
-			http.Error(w, "invalid port", 403)
+			http.Error(w, "invalid port", http.StatusForbidden)
 			return
 		}
 		req := r.Clone(ctx)
@@ -187,7 +187,7 @@ func startMetadataProxy(ctx context.Context) (string, func(), error) {
 		req.Header.Del("Proxy-Connection")
 		resp, e := transport.RoundTrip(req)
 		if e != nil {
-			http.Error(w, "target unavailable", 403)
+			http.Error(w, "target unavailable", http.StatusForbidden)
 			return
 		}
 		defer resp.Body.Close()

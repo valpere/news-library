@@ -36,7 +36,7 @@ func (w *Web) connectionListPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	notes, err := w.Store.Connections(query, item, 0)
 	if err != nil {
-		http.Error(rw, "нотатки недоступні", 503)
+		http.Error(rw, "нотатки недоступні", http.StatusServiceUnavailable)
 		return
 	}
 	w.render(rw, "connections", pageData{Connections: notes, ConnectionQuery: query})
@@ -69,12 +69,12 @@ func (w *Web) connectionPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	history, err := w.Store.Connections("", 0, id)
 	if err != nil {
-		http.Error(rw, "історія недоступна", 503)
+		http.Error(rw, "історія недоступна", http.StatusServiceUnavailable)
 		return
 	}
 	var body bytes.Buffer
 	if err = mdhtml.New().Render(&body, []byte(note.Body), parser.New().Parse([]byte(note.Body))); err != nil {
-		http.Error(rw, "зміст недоступний", 503)
+		http.Error(rw, "зміст недоступний", http.StatusServiceUnavailable)
 		return
 	}
 	w.render(rw, "connection", pageData{Connection: &note, Connections: history, ConnectionHTML: template.HTML(body.String())})
@@ -195,7 +195,7 @@ func (w *Web) saveConnection(rw http.ResponseWriter, r *http.Request) {
 func (w *Web) renderConnectionForm(rw http.ResponseWriter, r *http.Request, n ConnectionNote, message string, status int) {
 	choices, err := w.Store.ConnectionArticles()
 	if err != nil {
-		http.Error(rw, "матеріали недоступні", 503)
+		http.Error(rw, "матеріали недоступні", http.StatusServiceUnavailable)
 		return
 	}
 	ready := []Item{}
@@ -226,7 +226,7 @@ func (w *Web) renderConnectionForm(rw http.ResponseWriter, r *http.Request, n Co
 	}
 	vocabulary, err := w.Store.ConnectionVocabulary()
 	if err != nil {
-		http.Error(rw, "словник недоступний", 503)
+		http.Error(rw, "словник недоступний", http.StatusServiceUnavailable)
 		return
 	}
 	w.renderStatus(rw, "connectionForm", pageData{Connection: &n, ConnectionChoices: ready, ConnectionSlots: slots, ConnectionError: message, ConnectionVocabulary: vocabulary}, status)

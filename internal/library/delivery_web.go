@@ -13,7 +13,7 @@ func (w *Web) deliveryList(rw http.ResponseWriter, r *http.Request) {
 	var err error
 	data.Deliveries, err = w.Store.Deliveries()
 	if err != nil {
-		http.Error(rw, "добірки недоступні", 503)
+		http.Error(rw, "добірки недоступні", http.StatusServiceUnavailable)
 		return
 	}
 	w.render(rw, "deliveries", data)
