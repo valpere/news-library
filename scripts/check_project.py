@@ -4,6 +4,7 @@ import ast
 import json
 from pathlib import Path
 import re
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,7 @@ def main():
                 failures.append(f'{path.relative_to(ROOT)}: missing {target}')
     checked = 0
     for path in (ROOT/'experiments').rglob('manifest.json'):
+        sys.path.insert(0, str(ROOT/'experiments'/'scripts'))
         from news_library_pilot import digest, validate
         manifest = json.loads(path.read_text())
         samples = {s['id']: s for s in manifest['sample']}
