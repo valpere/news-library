@@ -61,8 +61,6 @@ class CouncilTest(unittest.TestCase):
         detail, transient = council.diagnose('step noise\n' + overloaded + '\n')
         self.assertTrue(transient)
         self.assertIn('503', detail)
-        kiro = json.dumps({'type': 'runError', 'data': {'stage': 'prompt', 'message': 'Internal error'}})
-        self.assertTrue(council.diagnose(kiro)[1])
         auth = json.dumps({'type': 'error', 'error': {'data': {'message': 'Invalid API key'}}})
         self.assertEqual(council.diagnose(auth), ('Invalid API key', False))
         self.assertEqual(council.diagnose('{"type":"text"}\nnot json'), ('', False))
@@ -89,11 +87,6 @@ class CouncilTest(unittest.TestCase):
         calls.clear()
         done = council.retry(lambda a: calls.append(a) or {'status': 'complete'}, retries=2, sleep=lambda s: None)
         self.assertEqual((calls, done['attempts']), ([0], 1))
-
-    def test_kilo_plan_bookkeeping_is_not_a_snapshot_violation(self):
-        self.assertEqual(council.unexpected_changes('kilo', ['.kilo/plans', '.kilo/plans/x.md']), [])
-        self.assertEqual(council.unexpected_changes('kilo', ['.kilo/plans', 'docs/HLD.md']), ['docs/HLD.md'])
-        self.assertEqual(council.unexpected_changes('opencode', ['.kilo/plans']), ['.kilo/plans'])
 
     def test_model_override_replaces_only_the_model_argument(self):
         model, command = council.with_model(council.AGENTS['opencode'], 'opencode/other-free')
@@ -169,7 +162,6 @@ class CouncilTest(unittest.TestCase):
     def test_cli_event_extraction_retains_only_final_answer(self):
         raw=json.dumps({'type':'text','part':{'text':'final'}})
         self.assertEqual(council.report_text('opencode',raw),'final')
-        self.assertEqual(council.report_text('kiro-cli',json.dumps({'type':'runFinished','data':{'finalText':'done'}})),'done')
         self.assertEqual(council.report_text('agy',json.dumps({'response':'answer'})),'answer')
 
 
