@@ -246,11 +246,11 @@ func (w *Web) Handler() http.Handler {
 	mux.HandleFunc("/api/read/", w.readAPI)
 	mux.HandleFunc("POST /reindex", func(rw http.ResponseWriter, r *http.Request) {
 		if w.Semantic == nil {
-			http.Error(rw, "indexing is disabled", 503)
+			http.Error(rw, "indexing is disabled", http.StatusServiceUnavailable)
 			return
 		}
 		if err := w.Store.RebuildEmbeddings(); err != nil {
-			http.Error(rw, "index unavailable", 503)
+			http.Error(rw, "index unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		http.Redirect(rw, r, "/", http.StatusSeeOther)
@@ -464,7 +464,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 				digestError = job.Error
 				failures, e := w.Store.JobFailures(job.ID)
 				if e != nil {
-					http.Error(rw, "діагностика генерації недоступна", 503)
+					http.Error(rw, "діагностика генерації недоступна", http.StatusServiceUnavailable)
 					return
 				}
 				if len(failures) > 0 {
@@ -482,7 +482,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 	}
 	connections, err := w.Store.Connections("", id, 0)
 	if err != nil {
-		http.Error(rw, "зв’язки недоступні", 503)
+		http.Error(rw, "зв’язки недоступні", http.StatusServiceUnavailable)
 		return
 	}
 	failureKind, failureLabel, failureAdvice, retryLabel, rejected := "", "", "", "Повторити генерацію дайджесту", ""
@@ -501,17 +501,17 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 	if snap != nil {
 		knowledge, err = w.Store.Knowledge(id, snap.ID)
 		if err != nil {
-			http.Error(rw, "метадані недоступні", 503)
+			http.Error(rw, "метадані недоступні", http.StatusServiceUnavailable)
 			return
 		}
 		knowledgeFailures, err = w.Store.KnowledgeFailures(id, snap.ID)
 		if err != nil {
-			http.Error(rw, "історія аналізу недоступна", 503)
+			http.Error(rw, "історія аналізу недоступна", http.StatusServiceUnavailable)
 			return
 		}
 		knowledgeStatus, err = w.Store.KnowledgeStatus(id, snap.ID)
 		if err != nil {
-			http.Error(rw, "стан аналізу недоступний", 503)
+			http.Error(rw, "стан аналізу недоступний", http.StatusServiceUnavailable)
 			return
 		}
 	}

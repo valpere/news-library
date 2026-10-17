@@ -165,7 +165,7 @@ func (w *Web) digestRetryBatchPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	candidates, truncated, err := w.Store.FailedDigestCandidates(after)
 	if err != nil {
-		http.Error(rw, "список невдалих дайджестів недоступний", 503)
+		http.Error(rw, "список невдалих дайджестів недоступний", http.StatusServiceUnavailable)
 		return
 	}
 	next := int64(0)

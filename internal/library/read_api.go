@@ -25,15 +25,15 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Cache-Control", "no-store")
 	// Authenticate before routing; token grants no access to mutation methods.
 	if w.ReadToken == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+w.ReadToken)) != 1 {
-		http.Error(rw, "read credentials required", 401)
+		http.Error(rw, "read credentials required", http.StatusUnauthorized)
 		return
 	}
 	if r.Method != "GET" {
-		http.Error(rw, "read API only supports GET", 405)
+		http.Error(rw, "read API only supports GET", http.StatusMethodNotAllowed)
 		return
 	}
 	if origin := r.Header.Get("Origin"); origin != "" {
-		http.Error(rw, "read API is for authenticated tools", 403)
+		http.Error(rw, "read API is for authenticated tools", http.StatusForbidden)
 		return
 	}
 	jsonResponse := func(v any) {
@@ -71,7 +71,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 	if path == "connections" {
 		notes, err := w.Store.Connections(r.URL.Query().Get("q"), 0, 0)
 		if err != nil {
-			http.Error(rw, "notes unavailable", 503)
+			http.Error(rw, "notes unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		jsonResponse(map[string]any{"notes": notes, "limit": 100})
@@ -116,7 +116,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(rw, "library unavailable", 503)
+		http.Error(rw, "library unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	kind := "item"
@@ -130,7 +130,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 	payload := readItem(item)
 	ratings, err := w.Store.Ratings(id)
 	if err != nil {
-		http.Error(rw, "history unavailable", 503)
+		http.Error(rw, "history unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	// Dated history includes unknown dates as JSON null, never invented values.
@@ -156,7 +156,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 	if item.Selected.Valid {
 		snapshot, err := w.Store.Snapshot(item.Selected.Int64)
 		if err != nil {
-			http.Error(rw, "source unavailable", 503)
+			http.Error(rw, "source unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if raw := r.URL.Query().Get("source"); raw != "" {
@@ -179,7 +179,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		if kind != "fragment" {
 			digest, err = w.Store.DigestForSnapshot(snapshot.ID)
 			if err != nil {
-				http.Error(rw, "digest unavailable", 503)
+				http.Error(rw, "digest unavailable", http.StatusServiceUnavailable)
 				return
 			}
 			if digest != nil {
@@ -246,13 +246,13 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 	}
 	backlinks, err := w.Store.Connections("", id, 0)
 	if err != nil {
-		http.Error(rw, "backlinks unavailable", 503)
+		http.Error(rw, "backlinks unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	if item.Selected.Valid {
 		knowledge, e := w.Store.Knowledge(id, item.Selected.Int64)
 		if e != nil {
-			http.Error(rw, "knowledge unavailable", 503)
+			http.Error(rw, "knowledge unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if knowledge == nil {

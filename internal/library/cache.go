@@ -254,24 +254,24 @@ func (c *HTTPCache) Get(ctx context.Context, raw string, force, allowStale bool)
 // Curl and local tools need no extra credentials on the loopback listener.
 func (w *Web) cache(rw http.ResponseWriter, r *http.Request) {
 	if w.Cache == nil {
-		http.Error(rw, "HTTP-кеш не налаштовано", 503)
+		http.Error(rw, "HTTP-кеш не налаштовано", http.StatusServiceUnavailable)
 		return
 	}
 	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host {
-		http.Error(rw, "сторонній Origin", 403)
+		http.Error(rw, "сторонній Origin", http.StatusForbidden)
 		return
 	}
 	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
-		http.Error(rw, "сторонній browser запит", 403)
+		http.Error(rw, "сторонній browser запит", http.StatusForbidden)
 		return
 	}
 	response, err := w.Cache.Get(r.Context(), r.URL.Query().Get("url"), r.URL.Query().Get("refresh") == "1", r.URL.Query().Get("stale") == "1")
 	if err != nil {
 		var source *SourceError
 		if errors.As(err, &source) {
-			http.Error(rw, source.Message, 502)
+			http.Error(rw, source.Message, http.StatusBadGateway)
 		} else {
-			http.Error(rw, "кеш недоступний", 502)
+			http.Error(rw, "кеш недоступний", http.StatusBadGateway)
 		}
 		return
 	}

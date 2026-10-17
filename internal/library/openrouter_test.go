@@ -142,7 +142,7 @@ func TestOpenRouterDoesNotFollowRedirectOrLeakKey(t *testing.T) {
 			json.NewEncoder(w).Encode(freeFixtureCatalog(freeFixture))
 			return
 		}
-		http.Redirect(w, q, destination.URL, 307)
+		http.Redirect(w, q, destination.URL, http.StatusTemporaryRedirect)
 	}, freeFixture)
 	_, err := r.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "source"})
 	if err == nil || hits != 0 || strings.Contains(err.Error(), "private-test-key") {

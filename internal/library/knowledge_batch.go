@@ -196,7 +196,7 @@ func (s *Store) QueueKnowledgeBatch(token string, limit int, includeRetry bool) 
 func (w *Web) knowledgeBatchPage(rw http.ResponseWriter, r *http.Request) {
 	summary, err := w.Store.KnowledgeBatchSummary()
 	if err != nil {
-		http.Error(rw, "стан дообробки недоступний", 503)
+		http.Error(rw, "стан дообробки недоступний", http.StatusServiceUnavailable)
 		return
 	}
 	w.render(rw, "knowledgeBatch", pageData{KnowledgeBatchSummary: summary, KnowledgeBatchToken: rand.Text(), KnowledgeEnabled: w.Store.KnowledgeEnabled && w.Store.DigestConfig != nil})
