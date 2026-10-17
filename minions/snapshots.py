@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """List, protect and (explicitly) prune data snapshots in snapshots/. Never touches data/."""
 import argparse
+import json
+import re
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -8,7 +10,7 @@ import shutil
 import sqlite3
 import sys
 
-from ops_common import ROOT
+from ops_common import ROOT, config
 
 DIR = ROOT / 'snapshots'
 KEEP = '.keep'
@@ -73,11 +75,64 @@ def prune(selected, apply, base=DIR):
     return out
 
 
+def candidates(base=DIR, older_than=30, keep_last=5, now=None):
+    """Unkept snapshots outside the newest keep_last and at least older_than days old."""
+    rows = sorted((describe(n, base, now) for n in names(base)), key=lambda d: d['age_days'])
+    return [d['name'] for i, d in enumerate(rows)
+            if i >= keep_last and d['age_days'] >= older_than and not d['kept']]
+
+
+def link_tree(src, dst):
+    """Hardlink an immutable file tree (copy where linking is impossible); symlinks are skipped."""
+    for f in src.rglob('*'):
+        if f.is_symlink():
+            continue
+        target = dst / f.relative_to(src)
+        if f.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif f.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.link(f, target)
+            except OSError:
+                shutil.copy2(f, target)
+
+
+def create(purpose, data, base=DIR, now=None):
+    """Consistent SQLite copy plus hardlinked immutable texts/digests. Never writes to data."""
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,60}', purpose):
+        raise ValueError('purpose: lowercase letters, digits and dashes')
+    db = data / 'library.sqlite'
+    if not db.is_file():
+        raise ValueError(f'no library.sqlite in {data}')
+    stamp = (now or datetime.now(timezone.utc)).strftime('%Y%m%d-%H%M%S')
+    dst = base / f'{purpose}-{stamp}'
+    base.mkdir(mode=0o700, exist_ok=True)
+    dst.mkdir(mode=0o700)  # fails if it exists; never overwrites
+    try:
+        with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as src, sqlite3.connect(dst / 'library.sqlite') as out:
+            src.backup(out)
+        for sub in ('texts', 'digests'):
+            if (data / sub).is_dir():
+                link_tree(data / sub, dst / sub)
+        files = sum(1 for f in dst.rglob('*') if f.is_file())
+        (dst / 'snapshot.json').write_text(json.dumps(
+            {'purpose': purpose, 'created': stamp, 'schema': schema(dst), 'files': files}, indent=1) + '\n')
+    except BaseException:
+        shutil.rmtree(dst, ignore_errors=True)
+        raise
+    return dst.name
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest='cmd', required=True)
     ls = sub.add_parser('list')
-    ls.add_argument('--older-than', type=int, default=30, help='days; marks unkept ones as candidates')
+    ls.add_argument('--older-than', type=int, default=30, help='days; candidate minimum age')
+    ls.add_argument('--keep-last', type=int, default=5, help='newest N are never candidates')
+    cr = sub.add_parser('create', help='new snapshot of the data dir (read-only on data)')
+    cr.add_argument('purpose', help='e.g. before-migration-v16')
+    cr.add_argument('--data', type=Path, help='default: NEWS_LIBRARY_DATA from .env')
     for c in ('keep', 'unkeep'):
         sub.add_parser(c).add_argument('name')
     pr = sub.add_parser('prune')
@@ -85,10 +140,14 @@ def main(argv=None):
     pr.add_argument('--apply', action='store_true', help='actually delete (default: dry run)')
     args = ap.parse_args(argv)
     if args.cmd == 'list':
+        cand = candidates(DIR, args.older_than, args.keep_last)
         for name in names():
             d = describe(name)
-            flag = 'KEPT' if d['kept'] else ('candidate' if d['age_days'] >= args.older_than else '')
+            flag = 'KEPT' if d['kept'] else ('candidate' if name in cand else '')
             print(f"{d['name']}\t{d['mb']}MB\t{d['age_days']}d\tschema={d['schema']}\t{flag}")
+    elif args.cmd == 'create':
+        data = args.data or ROOT / config(ROOT / '.env')['NEWS_LIBRARY_DATA']
+        print('created ' + create(args.purpose, Path(data)))
     elif args.cmd in ('keep', 'unkeep'):
         set_keep(args.name, args.cmd == 'keep')
         print(f'{args.cmd} {args.name}')
