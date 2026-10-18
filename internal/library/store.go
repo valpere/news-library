@@ -139,6 +139,12 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, errors.New("database schema is newer than this application")
 	}
+	if version > 0 && version < CurrentSchema {
+		if err = backupBeforeMigration(db, path, version); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	tx, err := db.Begin()
 	if err == nil {
 		if version == 0 {
