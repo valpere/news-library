@@ -335,7 +335,11 @@ func (w *Web) chatCards(refs []ChatReference) ([]ChatCard, error) {
 			if sourceErr == nil && source.Title != "" {
 				card.Item.Title = source.Title
 			}
-			if d, e := w.Store.DigestForSnapshot(ref.SourceID); e == nil && d != nil {
+			if d, e := w.Store.DigestForSnapshot(ref.SourceID); e == nil && d != nil && isTranslationPrompt(d.PromptVersion) {
+				card.Summary = boundedKnowledgeText(d.Markdown, 700)
+				card.DigestID = d.ID
+				card.CanRate = true
+			} else if e == nil && d != nil {
 				if sections, e := SplitDigest(d.Markdown); e == nil && len(sections) > 0 {
 					card.Summary = boundedKnowledgeText(sections[0].Markdown, 700)
 					card.DigestID = d.ID

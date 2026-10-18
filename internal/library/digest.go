@@ -307,11 +307,13 @@ func digestMessages(j Job, snap Snapshot) ([]map[string]string, error) {
 	if j.InputLimit <= 0 || len(snap.Text) > j.InputLimit {
 		return nil, &SourceError{Kind: "limit", Message: "текст перевищує ліміт дайджесту; весь текст збережено, збільште ліміт або подайте коротшу версію"}
 	}
-	if j.PromptVersion != DigestPromptVersion && j.PromptVersion != DigestPredictionPromptVersion {
+	if j.PromptVersion != DigestPromptVersion && j.PromptVersion != DigestPredictionPromptVersion && !isTranslationPrompt(j.PromptVersion) {
 		return nil, &SourceError{Kind: "configuration", Message: "версія промпту не підтримується; потрібен явний повтор із поточною конфігурацією"}
 	}
 	system := digestSystem
-	if words := len(strings.Fields(snap.Text)); words < shortSourceWords {
+	if isTranslationPrompt(j.PromptVersion) {
+		system = translationSystem
+	} else if words := len(strings.Fields(snap.Text)); words < shortSourceWords {
 		system = strings.Replace(system, standardSize, fmt.Sprintf("Джерело коротке (%d слів): дайджест — не більше %d слів, секції «Деталі» і «Практичне застосування» — одне коротке речення або «У джерелі немає додаткових відомостей». Не розтягуй і не повторюй зміст.", words, max(words, minShortDigestWords)), 1)
 	}
 	if j.PromptVersion == DigestPredictionPromptVersion {
@@ -342,7 +344,12 @@ func decodeDigestContent(raw string, j Job) (Digest, error) {
 	if strings.HasPrefix(markdown, "```markdown\n") && strings.HasSuffix(markdown, "\n```") {
 		markdown = strings.TrimSuffix(strings.TrimPrefix(markdown, "```markdown\n"), "\n```")
 	}
-	if _, err = SplitDigest(markdown); err != nil {
+	if isTranslationPrompt(j.PromptVersion) {
+		markdown = strings.TrimSpace(markdown)
+		if err = validateTranslation(markdown); err != nil {
+			return Digest{}, digestFailureError(err, rawReply)
+		}
+	} else if _, err = SplitDigest(markdown); err != nil {
 		return Digest{}, digestFailureError(err, rawReply)
 	}
 	return Digest{Markdown: markdown, Model: j.Model, PromptVersion: j.PromptVersion, Prediction: prediction}, nil
