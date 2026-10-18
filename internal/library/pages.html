@@ -93,6 +93,7 @@
 <form method="post" action="/items/{{.Item.ID}}/retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повторити отримання тексту</button></form>
 {{end}}
 <details><summary>Вставити текст вручну</summary><form method="post" action="/items/{{.Item.ID}}/manual"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="manual">Нова версія; попередні залишаться в історії</label><textarea id="manual" name="text" rows="10" required></textarea><button>Зберегти текст</button></form></details>
+<details><summary>Сміття</summary><form method="post" action="/items/{{.Item.ID}}/junk"><input type="hidden" name="csrf" value="{{.CSRF}}"><p class="muted">Ставить вашу оцінку «Нульова» й переносить матеріал у помийку: він зникає з пошуку, черги й добірок. Тексти, дайджести й історія оцінок зберігаються.</p><label>Причина (необов’язково) <input name="note" maxlength="500"></label><label><input type="checkbox" name="confirm" value="1" required> Так, це сміття</label><button>Перенести в помийку</button></form></details>
 <details><summary>Черга та помилки</summary>{{range .Jobs}}<p>Завдання #{{.ID}} · {{state .State}} · спроби: {{.Attempts}}{{if .FailureKind}} · {{failureLabel .FailureKind}}{{end}}<br>{{.Error}}</p>{{end}}</details>
 {{if and (or .Pending .KnowledgePending) (not .RateWithoutText)}}<script src="/static/progress.js" defer></script>{{end}}
 {{template "bottom" .}}

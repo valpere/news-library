@@ -200,7 +200,7 @@ TestChatUsefulnessExplicitLabelsAndAllUnread та TestWebUsefulnessAndReadAPISca
 
 Додаткове приймання поза FR-таблицею: помийка недоступних сторінок (UC-16, схема v15) —
 [trash_test.go](../internal/library/trash_test.go): TestTrashMissingPageIsSeparateAndDeduplicated,
-TestTrashPreservesRecoverableAndSavedSources, TestTrashMigrationAndBackup, TestTrashSurvivesBackupRestore;
+TestTrashPreservesRecoverableAndSavedSources, TestTrashMigrationAndBackup, TestTrashSurvivesBackupRestore; ручне «сміття» — [junk_test.go](../internal/library/junk_test.go): TestMarkJunkRatesZeroAndMovesToTrash, TestMarkJunkCancelsQueuedWork, TestReaddingJunkURLIsRecognisedAsTrashed, TestWebJunkRequiresConfirmation;
 перенесення файлів — [repack_test.go](../internal/library/repack_test.go); відновлення знань —
 [knowledge_recovery_test.go](../internal/library/knowledge_recovery_test.go). UC-16 пов'язано з FR-03
 лише за вимогою «немає тексту — немає вигаданого результату»; сама поведінка помийки приймається цими тестами.
