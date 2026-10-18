@@ -72,6 +72,13 @@ class CouncilTest(unittest.TestCase):
             self.assertIsInstance(detail, str)
         self.assertEqual(council.diagnose(json.dumps({'type': 'error', 'error': {'data': 'overloaded 503'}})), ('overloaded 503', True))
 
+    def test_diagnose_falls_back_to_stderr_text(self):
+        self.assertEqual(council.diagnose('', 'warn\nAPI Error: 503 Service overloaded\n'), ('API Error: 503 Service overloaded', True))
+        self.assertEqual(council.diagnose('', 'fatal: bad flag\n'), ('fatal: bad flag', False))
+        overloaded = json.dumps({'type': 'error', 'error': {'data': {'message': '[503] busy'}}})
+        self.assertEqual(council.diagnose(overloaded, 'noise')[0], '[503] busy')
+        self.assertEqual(council.diagnose('', ''), ('', False))
+
     def test_retry_only_transient_failures_up_to_limit(self):
         calls = []
         def run(attempt):
