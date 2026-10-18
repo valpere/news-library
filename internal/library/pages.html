@@ -44,6 +44,8 @@
 <noscript><p>Щоб побачити результат, натисніть «Оновити стан».</p></noscript></article>
 {{else if eq .Item.FilterState "rejected"}}
 <p>Пояснення відсіву доступне в «Рішення правил».</p>
+{{else if .DigestSkipped}}
+<article><h2>Дайджест не потрібен</h2><p>Джерело коротше за поріг дайджесту: читати оригінал швидше, ніж дайджест. Текст збережено нижче.</p></article>
 {{else if .Selected}}
 <article><h2>Дайджест недоступний</h2><p>{{if .DigestEnabled}}Генерацію не завершено. Збережений текст доступний нижче.{{else}}Генерацію вимкнено в конфігурації. Збережений текст доступний нижче.{{end}}</p>{{if .Item.Error}}<p class="error">{{.Item.Error}}</p>{{end}}
 {{template "digestFailure" .}}{{if .CanRetryDigest}}<form method="post" action="/items/{{.Item.ID}}/digest-retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>{{.DigestRetryLabel}}</button></form>{{end}}</article>
@@ -63,7 +65,7 @@
 <details><summary>Якість дайджесту</summary><form method="post" action="/items/{{.Item.ID}}/feedback"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="digest" value="{{.Digest.ID}}"><label>Як передано зміст <select name="quality" required><option value="">Оберіть</option><option value="good">Вдалий</option><option value="inaccurate">Є помилки</option><option value="incomplete">Пропущено важливе</option><option value="unclear">Незрозумілий</option></select></label><label>Коментар <textarea name="note" maxlength="4000" rows="3"></textarea></label><p><button>Зберегти відгук</button></p><p class="muted">Відгук стосується дайджесту #{{.Digest.ID}} і не змінює оцінку користі матеріалу.</p></form>{{range .Feedback}}<p>{{quality .Quality}} · {{date .RecordedAt}} · дайджест #{{.DigestID}}<br>{{.Note}}</p>{{else}}<p>Відгуків ще немає.</p>{{end}}</details>
 {{if .CanRegenerate}}<form method="post" action="/items/{{.Item.ID}}/digest-regenerate"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="source" value="{{.Selected.ID}}"><button>Створити нову версію дайджесту</button><p class="muted">Використати поточну модель і профіль інтересів; попередні версії та відгуки залишаться.</p></form>{{end}}
 {{end}}
-{{if or .Digest (and .Selected (not .DigestEnabled))}}
+{{if or .Digest .DigestSkipped (and .Selected (not .DigestEnabled))}}
 {{template "rating" .}}
 {{template "libraryActions" .}}
 {{else}}

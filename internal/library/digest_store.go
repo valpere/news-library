@@ -13,6 +13,9 @@ type DigestConfig struct {
 	MaxInputBytes             int
 	Interests                 string
 	ChunkLimit, ChunkMaxParts int
+	// MinSourceWords: sources shorter than this get no digest (0 = no cutoff).
+	// Not part of Version(): it decides whether a job exists, not how it runs.
+	MinSourceWords int
 }
 
 func (c DigestConfig) Version() string {
@@ -93,12 +96,36 @@ func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
 		return err
 	}
 	c := s.DigestConfig
+	if c.MinSourceWords > 0 {
+		words, err := snapshotWords(tx, s.Files, snapshotID)
+		if err != nil {
+			return err
+		}
+		if words < c.MinSourceWords {
+			_, err = tx.Exec(`UPDATE items SET state='ready',error='' WHERE id=? AND selected_snapshot=? AND state NOT IN ('needs_input')`, itemID, snapshotID)
+			return err
+		}
+	}
 	_, err = tx.Exec(`INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests,chunk_limit,chunk_max_parts) VALUES(?,'digest',?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, itemID, snapshotID, c.Version(), c.Model, c.PromptVersion, c.MaxInputBytes, c.Interests, c.ChunkLimit, c.ChunkMaxParts)
 	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(`UPDATE items SET state='enriching',error='' WHERE id=? AND selected_snapshot=? AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=?)`, itemID, snapshotID, snapshotID)
 	return err
+}
+
+// snapshotWords counts words of a stored source inside the caller's transaction
+// (the pool has one connection, so s.DB must not be used here).
+func snapshotWords(tx *sql.Tx, f Files, snapshotID int64) (int, error) {
+	var path, hash string
+	if err := tx.QueryRow(`SELECT text_path,hash FROM source_versions WHERE id=?`, snapshotID).Scan(&path, &hash); err != nil {
+		return 0, err
+	}
+	data, err := f.Read(path, hash)
+	if err != nil {
+		return 0, err
+	}
+	return len(strings.Fields(string(data))), nil
 }
 func (s *Store) Snapshot(id int64) (Snapshot, error) {
 	var v Snapshot

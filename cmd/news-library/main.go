@@ -83,7 +83,7 @@ func run() error {
 		if strings.TrimSpace(c.Interests) != "" {
 			prompt = library.DigestPredictionPromptVersion
 		}
-		if err = s.EnableDigests(library.DigestConfig{Model: c.Model, PromptVersion: prompt, MaxInputBytes: c.InputLimit, Interests: c.Interests, ChunkLimit: c.InputLimit, ChunkMaxParts: c.ChunkMaxParts}); err != nil {
+		if err = s.EnableDigests(library.DigestConfig{Model: c.Model, PromptVersion: prompt, MaxInputBytes: c.InputLimit, Interests: c.Interests, ChunkLimit: c.InputLimit, ChunkMaxParts: c.ChunkMaxParts, MinSourceWords: c.MinDigestWords}); err != nil {
 			return err
 		}
 	}
