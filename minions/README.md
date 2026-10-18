@@ -3,7 +3,7 @@
 ## Operational helpers
 
 `python3 minions/library_doctor.py --output tmp/doctor-01` reads private `.env`
-and schema-v15 SQLite without opening the application Store. It reports only
+and schema-v16 SQLite without opening the application Store. It reports only
 whitelisted configuration checks, aggregate progress and secret presence.
 Optional `--probe-local` checks the configured loopback web socket and Ollama
 `GET /api/tags`; it never starts services or performs inference. Environment
@@ -41,6 +41,12 @@ Skills are under `minions/skills/`, with local discovery links in `.agents/skill
 `source-recovery`, `knowledge-recovery`, and `openrouter-check`. Existing checks,
 cloud digest smoke and browser-CDP skills remain available. Temporary evidence
 is never part of the public project archive.
+
+`python3 minions/search_feedback.py --output tmp/search-feedback-01` reads the
+recorded search relevance judgments (read-only) and writes `summary.json`
+(per mode: searches, judged, not-found, exact precision, MRR) and `cases.json`
+for `search_eval.py` (expected = results judged "точно те"). Private queries stay
+under `tmp/`.
 
 Explicit site control (only when the user asks): `node minions/site_ctl.mjs status|start|stop`
 (`start --resume-restored` for restored data); pid and log in `tmp/site/`,

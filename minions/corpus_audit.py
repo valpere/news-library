@@ -39,8 +39,8 @@ def audit(data):
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         db.execute('BEGIN')
-        if db.execute('PRAGMA user_version').fetchone()[0] != 15:
-            raise ValueError('schema v15 required; audit never migrates')
+        if db.execute('PRAGMA user_version').fetchone()[0] != 16:
+            raise ValueError('schema v16 required; audit never migrates')
         integrity = [r[0] for r in db.execute('PRAGMA integrity_check')]
         if integrity != ['ok']:
             problems.append({'kind': 'sqlite_integrity', 'details': integrity})

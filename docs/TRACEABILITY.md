@@ -28,6 +28,7 @@
 | FR-18 | UC-05, UC-15 | M1, M2, M3 | AT-18 | passed M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); passed M2 Confidence: [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
 | FR-19 | UC-09 | M3 | AT-19 | passed: [saved digest/excerpt, dated context, ownership/UTF-8 bounds](../internal/library/semantic_test.go) |
 | FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries / TestWebLocalhostWithoutCSRF / TestWebCSRFPolicyByOrigin](../internal/library/web_test.go) |
+| FR-21 | UC-17 | M3 | AT-21 | passed: [TestSearchEventRecordingAndJudgments / TestSearchJudgmentsDoNotChangeUsefulnessRatings / TestWebSearchRecordsAndJudges](../internal/library/search_feedback_test.go) |
 
 ## Перевірка специфікації
 
