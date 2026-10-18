@@ -1,4 +1,4 @@
-"""Private operational reports, constrained config and read-only schema-v15 access."""
+"""Private operational reports, constrained config and read-only schema-v16 access."""
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
@@ -68,8 +68,8 @@ def database(data):
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         db.execute('BEGIN')
-        if db.execute('PRAGMA user_version').fetchone()[0] != 15:
-            raise ValueError('schema v15 required; no migration performed')
+        if db.execute('PRAGMA user_version').fetchone()[0] != 16:
+            raise ValueError('schema v16 required; no migration performed')
         yield db
     finally:
         db.close()

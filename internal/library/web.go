@@ -94,6 +94,10 @@ type pageData struct {
 	BackgroundPaused          bool
 	CSRF                      string
 	SearchMode, SearchWarning string
+	SearchEventID             int64
+	SearchBack                string
+	SearchNotFound            bool
+	SearchJudgments           map[int64]int
 	EmbeddingStatus           string
 	EmbeddingsEnabled         bool
 	Indexed, Eligible         int
@@ -191,7 +195,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 			return s
 		}, "states": func() []string {
 			return []string{"queued", "fetching", "ready", "needs_input", "retry_wait", "failed", "enriching", "digest_retry_wait", "digest_failed", "filtered"}
-		}, "ratingScore": func(n int64) sql.NullInt64 { return sql.NullInt64{Int64: n, Valid: true} }, "numberString": func(n int64) string { return strconv.FormatInt(n, 10) }, "usefulnessLevels": usefulnessLevels, "ratingLabel": ratingLabel, "usefulnessFilterLabel": usefulnessFilterLabel, "date": func(raw string) string {
+		}, "ratingScore": func(n int64) sql.NullInt64 { return sql.NullInt64{Int64: n, Valid: true} }, "numberString": func(n int64) string { return strconv.FormatInt(n, 10) }, "usefulnessLevels": usefulnessLevels, "searchScores": searchScores, "searchJudgment": searchJudgmentLabel, "ratingLabel": ratingLabel, "usefulnessFilterLabel": usefulnessFilterLabel, "date": func(raw string) string {
 			t, err := time.Parse(time.RFC3339Nano, raw)
 			if err != nil {
 				return raw
@@ -232,6 +236,8 @@ func (w *Web) Handler() http.Handler {
 	mux.HandleFunc("POST /connections/{id}", w.saveConnection)
 	mux.HandleFunc("GET /{$}", w.chatHome)
 	mux.HandleFunc("GET /browse", w.list)
+	mux.HandleFunc("POST /search-events/{id}/judgments", w.searchJudgment)
+	mux.HandleFunc("POST /search-events/{id}/not-found", w.searchNotFound)
 	mux.HandleFunc("POST /chat", w.chatSubmit)
 	mux.HandleFunc("POST /chat/new", w.chatNew)
 	mux.HandleFunc("GET /static/chat.js", func(rw http.ResponseWriter, r *http.Request) {
@@ -349,7 +355,12 @@ func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "некоректні параметри пошуку", 400)
 		return
 	}
-	w.render(rw, "list", pageData{Items: result.Items, Filters: f, SearchMode: q.Get("mode"), SearchWarning: result.Warning, Indexed: result.Indexed, Eligible: result.Eligible, EmbeddingStatus: w.Store.EmbeddingStatus(), EmbeddingsEnabled: w.Semantic != nil})
+	data := pageData{Items: result.Items, Filters: f, SearchMode: q.Get("mode"), SearchWarning: result.Warning, Indexed: result.Indexed, Eligible: result.Eligible, EmbeddingStatus: w.Store.EmbeddingStatus(), EmbeddingsEnabled: w.Semantic != nil}
+	if strings.TrimSpace(f.Query) != "" {
+		data.SearchEventID, data.SearchJudgments, data.SearchNotFound = w.recordSearch(q, f, result)
+		data.SearchBack = r.URL.RequestURI()
+	}
+	w.render(rw, "list", data)
 }
 func pathID(r *http.Request) (int64, error) {
 	id, e := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -708,4 +719,35 @@ func (w *Web) exportDigest(rw http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(rw, r)
 	}
+}
+
+// recordSearch stores the human search for later relevance judgments. A
+// storage failure must not break searching, so it only disables the controls.
+func (w *Web) recordSearch(q url.Values, f Filters, result SearchResult) (int64, map[int64]int, bool) {
+	ids := make([]int64, 0, len(result.Items))
+	for _, item := range result.Items {
+		if len(ids) == 100 {
+			break
+		}
+		ids = append(ids, item.ID)
+	}
+	rest := url.Values{}
+	for k, v := range q {
+		if k != "q" && k != "mode" {
+			rest[k] = v
+		}
+	}
+	mode := q.Get("mode")
+	if mode == "" {
+		mode = "fts"
+	}
+	id, err := w.Store.RecordSearch(f.Query, mode, result.Mode, rest.Encode(), ids)
+	if err != nil {
+		return 0, nil, false
+	}
+	e, judgments, err := w.Store.SearchEvent(id)
+	if err != nil {
+		return 0, nil, false
+	}
+	return id, judgments, e.NotFoundAt != ""
 }
