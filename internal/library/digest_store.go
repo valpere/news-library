@@ -96,17 +96,22 @@ func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
 		return err
 	}
 	c := s.DigestConfig
+	prompt, interests, chunkLimit, chunkMaxParts := c.PromptVersion, c.Interests, c.ChunkLimit, c.ChunkMaxParts
 	if c.MinSourceWords > 0 {
-		words, err := snapshotWords(tx, s.Files, snapshotID)
+		text, err := snapshotText(tx, s.Files, snapshotID)
 		if err != nil {
 			return err
 		}
-		if words < c.MinSourceWords {
-			_, err = tx.Exec(`UPDATE items SET state='ready',error='' WHERE id=? AND selected_snapshot=? AND state NOT IN ('needs_input')`, itemID, snapshotID)
-			return err
+		if len(strings.Fields(text)) < c.MinSourceWords {
+			// Tiny source: no digest. A foreign-language one is translated.
+			if !needsUkrainianTranslation(text) {
+				_, err = tx.Exec(`UPDATE items SET state='ready',error='' WHERE id=? AND selected_snapshot=? AND state NOT IN ('needs_input')`, itemID, snapshotID)
+				return err
+			}
+			prompt, interests, chunkLimit, chunkMaxParts = TranslationPromptVersion, "", 0, 0
 		}
 	}
-	_, err = tx.Exec(`INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests,chunk_limit,chunk_max_parts) VALUES(?,'digest',?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, itemID, snapshotID, c.Version(), c.Model, c.PromptVersion, c.MaxInputBytes, c.Interests, c.ChunkLimit, c.ChunkMaxParts)
+	_, err = tx.Exec(`INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests,chunk_limit,chunk_max_parts) VALUES(?,'digest',?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, itemID, snapshotID, c.Version(), c.Model, prompt, c.MaxInputBytes, interests, chunkLimit, chunkMaxParts)
 	if err != nil {
 		return err
 	}
@@ -114,18 +119,15 @@ func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
 	return err
 }
 
-// snapshotWords counts words of a stored source inside the caller's transaction
-// (the pool has one connection, so s.DB must not be used here).
-func snapshotWords(tx *sql.Tx, f Files, snapshotID int64) (int, error) {
+// snapshotText reads a stored source inside the caller's transaction (the pool
+// has one connection, so s.DB must not be used here).
+func snapshotText(tx *sql.Tx, f Files, snapshotID int64) (string, error) {
 	var path, hash string
 	if err := tx.QueryRow(`SELECT text_path,hash FROM source_versions WHERE id=?`, snapshotID).Scan(&path, &hash); err != nil {
-		return 0, err
+		return "", err
 	}
 	data, err := f.Read(path, hash)
-	if err != nil {
-		return 0, err
-	}
-	return len(strings.Fields(string(data))), nil
+	return string(data), err
 }
 func (s *Store) Snapshot(id int64) (Snapshot, error) {
 	var v Snapshot
@@ -142,8 +144,16 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	if j.Stage != "digest" || !j.SnapshotID.Valid {
 		return errors.New("not a digest job")
 	}
-	if _, err := SplitDigest(d.Markdown); err != nil {
+	translation := isTranslationPrompt(j.PromptVersion)
+	if translation {
+		if err := validateTranslation(d.Markdown); err != nil {
+			return err
+		}
+	} else if _, err := SplitDigest(d.Markdown); err != nil {
 		return err
+	}
+	if translation && j.Interests != "" {
+		return errors.New("translation has no interest prediction")
 	}
 	if j.Interests != "" {
 		if err := validatePrediction(d.Prediction); err != nil {
@@ -182,7 +192,7 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 			return err
 		}
 	}
-	if s.KnowledgeEnabled {
+	if s.KnowledgeEnabled && !translation {
 		did, e := result.LastInsertId()
 		if e != nil {
 			return e

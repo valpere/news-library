@@ -112,6 +112,7 @@ type pageData struct {
 	Sections                  []DigestSection
 	DigestEnabled             bool
 	DigestSkipped             bool
+	DigestIsTranslation       bool
 	CanRetryDigest            bool
 	ExportScript              template.JS
 	ExportCSP                 string
@@ -196,7 +197,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 			return s
 		}, "states": func() []string {
 			return []string{"queued", "fetching", "ready", "needs_input", "retry_wait", "failed", "enriching", "digest_retry_wait", "digest_failed", "filtered"}
-		}, "ratingScore": func(n int64) sql.NullInt64 { return sql.NullInt64{Int64: n, Valid: true} }, "numberString": func(n int64) string { return strconv.FormatInt(n, 10) }, "usefulnessLevels": usefulnessLevels, "searchScores": searchScores, "searchJudgment": searchJudgmentLabel, "ratingLabel": ratingLabel, "usefulnessFilterLabel": usefulnessFilterLabel, "date": func(raw string) string {
+		}, "ratingScore": func(n int64) sql.NullInt64 { return sql.NullInt64{Int64: n, Valid: true} }, "numberString": func(n int64) string { return strconv.FormatInt(n, 10) }, "usefulnessLevels": usefulnessLevels, "translationHTML": translationHTML, "searchScores": searchScores, "searchJudgment": searchJudgmentLabel, "ratingLabel": ratingLabel, "usefulnessFilterLabel": usefulnessFilterLabel, "date": func(raw string) string {
 			t, err := time.Parse(time.RFC3339Nano, raw)
 			if err != nil {
 				return raw
@@ -439,7 +440,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 			digest = &d
 			err = e
 		}
-		if err == nil && digest != nil {
+		if err == nil && digest != nil && !isTranslationPrompt(digest.PromptVersion) {
 			sections, err = SplitDigest(digest.Markdown)
 		}
 		if err == nil {
@@ -535,7 +536,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 			digestSkipped = false
 		}
 	}
-	w.render(rw, "detail", pageData{DigestSkipped: digestSkipped, KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
+	w.render(rw, "detail", pageData{DigestSkipped: digestSkipped, DigestIsTranslation: digest != nil && isTranslationPrompt(digest.PromptVersion), KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))
@@ -714,6 +715,10 @@ func (w *Web) exportDigest(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".md"}))
 		fmt.Fprintf(rw, "# %s\n\nURL: %s\n\nМодель: %s · %s\n\nТекст #%d · %s · %s · частин: %d\n\n%s\n", item.Title, item.URL, d.ActualModel, d.CreatedAt, snapshot.ID, snapshot.Completeness, snapshot.Warning, d.ChunkCount, d.Markdown)
 	case "html":
+		if isTranslationPrompt(d.PromptVersion) {
+			http.NotFound(rw, r)
+			return
+		}
 		sections, err := SplitDigest(d.Markdown)
 		if err != nil {
 			http.Error(rw, "дайджест пошкоджено", 500)
