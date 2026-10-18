@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const DigestPredictionPromptVersion = "uk-sections-interest-v1"
+const DigestPredictionPromptVersion = "uk-sections-interest-v2"
 const predictionInstruction = `Поверни тільки JSON-об’єкт з двома полями:
 {"markdown":"дайджест Markdown із зазначеними секціями","prediction":{"probability":0.0,"reason":"коротке пояснення українською"}}
 probability — оцінка ймовірності, що цей матеріал зацікавить користувача з указаними поточними інтересами (0..1).
