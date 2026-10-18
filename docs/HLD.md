@@ -578,7 +578,7 @@ HTTP proxy із safeDial, CONNECT лише 80/443, HTTP лише GET/port 80; к
 адреса/redirect повторно проходить DNS/IP checks. Context/закриття завершує
 процесну групу, proxy та tunnels, output bounded. Резерв optional, відсутній
 executable дає діагностику й manual/retry без втрати URL/тексту. Конфігурація
-NEWS_LIBRARY_YT_DLP (типово yt-dlp, empty disables) та YOUTUBE_LANGUAGES
+NEWS_LIBRARY_YT_DLP (типово yt-dlp, empty disables) та NEWS_LIBRARY_YOUTUBE_LANGUAGES
 (типово uk,en), flag/environment/.env precedence як в інших settings.
 Офіційні параметри: [yt-dlp](https://github.com/yt-dlp/yt-dlp#usage-and-options).
 

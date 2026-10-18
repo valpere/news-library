@@ -210,7 +210,7 @@ def message(value):
     return ''
 
 
-def diagnose(raw):
+def diagnose(raw, stderr=''):
     """Last provider error message from a CLI's JSON event stream and whether a retry may help."""
     detail = ''
     for line in raw.splitlines():
@@ -222,6 +222,9 @@ def diagnose(raw):
             continue
         if event.get('type') == 'error':
             detail = message(event.get('error'))
+    if not detail:  # CLIs that report provider errors as plain text on stderr
+        lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+        detail = lines[-1][:300] if lines else ''
     return detail, bool(detail and TRANSIENT.search(detail))
 
 
@@ -303,9 +306,10 @@ def run_once(name, archive, prompt, documents, directory, timeout):
         result['error'] = str(error)
         try:
             raw = (directory / 'stdout.log').read_text()
+            err = (directory / 'stderr.log').read_text()
         except OSError:
-            raw = ''
-        detail, transient = diagnose(raw)
+            raw = err = ''
+        detail, transient = diagnose(raw, err)
         if detail:
             result['error_detail'] = detail
         result['transient'] = transient and result['error'] == 'reviewer exited unsuccessfully'
