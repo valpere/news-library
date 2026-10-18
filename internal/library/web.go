@@ -223,6 +223,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /trash", w.trashPage)
+	mux.HandleFunc("POST /items/{id}/junk", w.markJunk)
 	mux.HandleFunc("GET /knowledge-batch", w.knowledgeBatchPage)
 	mux.HandleFunc("POST /knowledge-batch", w.knowledgeBatchSubmit)
 	mux.HandleFunc("GET /items/{id}/knowledge/markdown", w.exportKnowledge)

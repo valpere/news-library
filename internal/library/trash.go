@@ -5,6 +5,8 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 )
 
 // Keep the identity and immutable history, but remove the URL from the active collection.
@@ -20,6 +22,75 @@ func trashMissingPage(tx *sql.Tx, id int64, reason string) error {
 	}
 	_, err = tx.Exec(`DELETE FROM item_fts WHERE rowid=? AND EXISTS(SELECT 1 FROM trash_entries WHERE item_id=?)`, id, id)
 	return err
+}
+
+// MarkJunk is the user's own verdict that a material is junk: it records a
+// zero usefulness rating (with the current source and digest as context) and
+// moves the item to the trash in one transaction. Unlike an unavailable page,
+// its texts, digests and rating history are kept. Repeating it changes nothing.
+func (s *Store) MarkJunk(id int64, note string) error {
+	note = strings.TrimSpace(note)
+	if utf8.RuneCountInString(note) > 500 {
+		return errors.New("пояснення завелике")
+	}
+	reason := "сміття, позначено користувачем"
+	if note != "" {
+		reason += ": " + note
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var active int
+	if err = tx.QueryRow(`SELECT count(*) FROM active_items WHERE id=?`, id).Scan(&active); err != nil {
+		return err
+	}
+	if active == 0 {
+		var trashed int
+		if err = tx.QueryRow(`SELECT count(*) FROM trash_entries WHERE item_id=?`, id).Scan(&trashed); err != nil {
+			return err
+		}
+		if trashed == 1 {
+			return nil
+		}
+		return sql.ErrNoRows
+	}
+	if _, err = tx.Exec(`INSERT INTO rating_events(item_id,score,recorded_at,source_version_id,digest_id,reason,scale)
+ SELECT i.id,0,?,i.selected_snapshot,(SELECT max(g.id) FROM generated_artifacts g WHERE g.snapshot_id=i.selected_snapshot),?,? FROM active_items i WHERE i.id=?`,
+		nowUTC(), reason, UsefulnessScale, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO trash_entries(item_id,reason,moved_at) VALUES(?,?,?)`, id, reason, nowUTC()); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`DELETE FROM item_fts WHERE rowid=?`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE jobs SET state='cancelled' WHERE item_id=? AND state IN ('queued','retry_wait')`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (w *Web) markJunk(rw http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	if r.PostForm.Get("confirm") != "1" {
+		http.Error(rw, "підтвердіть перенесення в помийку", http.StatusBadRequest)
+		return
+	}
+	if err = w.Store.MarkJunk(id, r.PostForm.Get("note")); errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(rw, r)
+		return
+	} else if err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(rw, r, "/trash", http.StatusSeeOther)
 }
 
 func (s *Store) TrashReason(id int64) (string, error) {
