@@ -6,9 +6,9 @@ description: Start, stop or check the local news-library site only when the user
 Run from the news-library root (after `make build`):
 
 ```sh
-python3 minions/site_ctl.py status
-python3 minions/site_ctl.py start [--resume-restored]
-python3 minions/site_ctl.py stop
+node minions/site_ctl.mjs status
+node minions/site_ctl.mjs start [--resume-restored]
+node minions/site_ctl.mjs stop
 ```
 
 Never start the site on your own initiative: other helpers treat a stopped
