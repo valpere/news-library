@@ -12,6 +12,7 @@ test:
 	go test -race ./cmd/... ./internal/... ./minions/...
 	go vet ./cmd/... ./internal/... ./minions/...
 	python3 -m unittest discover -s minions -p 'test_*.py'
+	node --test minions/site_ctl.test.mjs
 
 .PHONY: build run
 build:

@@ -42,7 +42,7 @@ Skills are under `minions/skills/`, with local discovery links in `.agents/skill
 cloud digest smoke and browser-CDP skills remain available. Temporary evidence
 is never part of the public project archive.
 
-Explicit site control (only when the user asks): `python3 minions/site_ctl.py status|start|stop`
+Explicit site control (only when the user asks): `node minions/site_ctl.mjs status|start|stop`
 (`start --resume-restored` for restored data); pid and log in `tmp/site/`,
 graceful SIGTERM stop only, no library data access.
 
