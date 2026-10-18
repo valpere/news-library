@@ -252,3 +252,21 @@ func TestOpenRouterDataCollectionPrecedence(t *testing.T) {
 		t.Fatal(c.OpenRouterDataCollection, err)
 	}
 }
+
+func TestDigestMinWordsConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	os.WriteFile(path, []byte("OLLAMA_MODEL=fixture:cloud\n"), 0600)
+	c, e := readConfig([]string{"-env-file", path})
+	if e != nil || c.MinDigestWords != 40 {
+		t.Fatalf("default must be 40: %d %v", c.MinDigestWords, e)
+	}
+	c, e = readConfig([]string{"-env-file", path, "-digest-min-words", "0"})
+	if e != nil || c.MinDigestWords != 0 {
+		t.Fatalf("0 disables the cutoff: %d %v", c.MinDigestWords, e)
+	}
+	for _, bad := range []string{"-1", "1001", "abc"} {
+		if _, e = readConfig([]string{"-env-file", path, "-digest-min-words", bad}); e == nil {
+			t.Fatalf("%s accepted", bad)
+		}
+	}
+}
