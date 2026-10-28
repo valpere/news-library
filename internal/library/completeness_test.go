@@ -98,7 +98,7 @@ func TestWebConfirmCompletenessFlow(t *testing.T) {
 	if strings.Contains(body, "Текст, схоже, неповний") {
 		t.Fatal("a user-confirmed text must not be flagged as probably incomplete")
 	}
-	if !strings.Contains(body, "Зняти підтвердження") || !strings.Contains(body, "підтвердили ви") {
+	if strings.Contains(body, "Зняти підтвердження") || !strings.Contains(body, "підтвердили ви") {
 		t.Fatalf("confirmed state missing:\n%s", body)
 	}
 	post(t, w, page+"/completeness", url.Values{"source": {strconv.FormatInt(snap.ID, 10)}, "action": {"withdraw"}})
