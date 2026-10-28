@@ -101,7 +101,7 @@ func (a neuripsAdapter) Extract(ctx context.Context, f *Fetcher, u *url.URL) (Sn
 	}
 	return Snapshot{
 		Text: strings.TrimSpace(b.String()), Title: paper.Title, Completeness: "unknown",
-		Warning: fmt.Sprintf("Повний текст статті з читалки Bytez (%d слів); повноту оригіналу не підтверджено", words),
+		Warning: fmt.Sprintf("Повний текст статті з читалки Bytez (%d слів)", words),
 	}, nil
 }
 
