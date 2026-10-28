@@ -58,7 +58,8 @@ func diagnoseSource(s Snapshot) *SourceDiagnosis {
 	err := ValidateSourceContent(s)
 	var se *SourceError
 	if !errors.As(err, &se) {
-		if marker := trailingMarker(s.Text); marker != "" && s.Completeness != "full" {
+		if signs := incompleteSigns(s.Text); len(signs) > 0 && s.Completeness != "full" {
+			marker := signs[0]
 			return &SourceDiagnosis{
 				Soft:  true,
 				Title: "Текст, схоже, неповний",
