@@ -34,6 +34,14 @@ func newNeuripsAdapter() neuripsAdapter {
 
 func (a neuripsAdapter) Name() string { return neuripsAdapterName }
 
+func (a neuripsAdapter) Hosts() []string {
+	hosts := make([]string, 0, len(a.pageHosts))
+	for h := range a.pageHosts {
+		hosts = append(hosts, h)
+	}
+	return hosts
+}
+
 func (a neuripsAdapter) Match(u *url.URL) bool {
 	return a.pageHosts[strings.ToLower(u.Hostname())] && neuripsPosterPath.MatchString(u.Path)
 }

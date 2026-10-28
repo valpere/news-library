@@ -9,14 +9,17 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeAdapter struct {
 	name, path string
+	hosts      []string
 	err        error
 	calls      *int
 }
 
+func (a fakeAdapter) Hosts() []string       { return a.hosts }
 func (a fakeAdapter) Name() string          { return a.name }
 func (a fakeAdapter) Match(u *url.URL) bool { return u.Path == a.path }
 func (a fakeAdapter) Extract(context.Context, *Fetcher, *url.URL) (Snapshot, error) {
@@ -116,5 +119,73 @@ func TestAdapterNamesAreUniqueAndVersioned(t *testing.T) {
 			t.Errorf("adapter name %q must be unique and end with a version (-vN)", n)
 		}
 		seen[n] = true
+	}
+}
+
+// A site that changed its format or started refusing us must not cost an extra
+// failing request for every new item: after three failures in a row the adapter
+// rests for a while and only the generic extraction runs.
+func TestAdapterRestsAfterRepeatedFailuresAndRecovers(t *testing.T) {
+	srv := adapterFixture(t)
+	calls := 0
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	bad := fakeAdapter{name: "flaky-v1", path: "/p", err: errors.New("HTTP 429"), calls: &calls}
+	f := &Fetcher{client: srv.Client(), MaxBytes: 1 << 20, Adapters: []SourceAdapter{bad}, clock: func() time.Time { return now }}
+	for i := 1; i <= adapterFailureLimit; i++ {
+		if snap, err := f.Fetch(context.Background(), srv.URL+"/p"); err != nil || !strings.Contains(snap.Warning, "не спрацював") {
+			t.Fatalf("failure %d: %+v %v", i, snap, err)
+		}
+	}
+	if calls != adapterFailureLimit {
+		t.Fatalf("calls %d", calls)
+	}
+	snap, err := f.Fetch(context.Background(), srv.URL+"/p")
+	if err != nil || calls != adapterFailureLimit {
+		t.Fatalf("the resting adapter must not be called again: calls=%d err=%v", calls, err)
+	}
+	if !strings.Contains(snap.Warning, "flaky-v1") || !strings.Contains(snap.Warning, "тимчасово вимкнено") || !strings.Contains(snap.Text, "Загальний витяг") {
+		t.Fatalf("the rest must be visible and the generic text saved: %q", snap.Warning)
+	}
+	now = now.Add(adapterRest + time.Second)
+	f.Fetch(context.Background(), srv.URL+"/p")
+	if calls != adapterFailureLimit+1 {
+		t.Fatalf("after the rest the adapter is tried again, calls=%d", calls)
+	}
+}
+
+func TestASuccessResetsTheFailureCount(t *testing.T) {
+	srv := adapterFixture(t)
+	calls := 0
+	flaky := &toggleAdapter{fakeAdapter: fakeAdapter{name: "toggle-v1", path: "/p", calls: &calls}}
+	f := &Fetcher{client: srv.Client(), MaxBytes: 1 << 20, Adapters: []SourceAdapter{flaky}}
+	for i := 0; i < 5; i++ {
+		flaky.fail = i%3 != 2 // fail, fail, succeed, fail, fail ...
+		f.Fetch(context.Background(), srv.URL+"/p")
+	}
+	if calls != 5 {
+		t.Fatalf("two failures then a success must keep the adapter active, calls=%d", calls)
+	}
+}
+
+type toggleAdapter struct {
+	fakeAdapter
+	fail bool
+}
+
+func (a *toggleAdapter) Extract(ctx context.Context, f *Fetcher, u *url.URL) (Snapshot, error) {
+	a.fakeAdapter.err = nil
+	if a.fail {
+		a.fakeAdapter.err = errors.New("збій")
+	}
+	return a.fakeAdapter.Extract(ctx, f, u)
+}
+
+func TestMatchingDoesNoNetworkWork(t *testing.T) {
+	f := &Fetcher{Adapters: DefaultAdapters()} // no client: any network use would panic
+	for _, raw := range []string{"https://example.com/a", "https://neurips.cc/Conferences/2025", "https://github.com/x/y"} {
+		u, _ := url.Parse(raw)
+		if _, _, ok, err := f.extractWithAdapter(context.Background(), u); ok || err != nil {
+			t.Fatalf("%s: %v %v", raw, ok, err)
+		}
 	}
 }
