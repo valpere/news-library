@@ -1,6 +1,8 @@
 package library
 
 import (
+	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -38,7 +40,47 @@ func ValidateSourceContent(s Snapshot) error {
 		return &SourceError{Kind: "source", Challenge: true, Message: "замість статті джерело повернуло перевірку браузера; потрібне повторне отримання тексту, а не повтор дайджесту"}
 	}
 	if copyrightOnly(s.Text) {
-		return &SourceError{Kind: "source", FooterOnly: true, Message: "збережено лише copyright, без змісту статті; отримайте текст повторно або вставте його вручну, повтор дайджесту не допоможе"}
+		return &SourceError{Kind: "source", FooterOnly: true, Message: "у збереженому тексті є лише рядок про авторські права (copyright), статті немає; причину й що робити описано на сторінці матеріалу, повтор дайджесту не допоможе"}
 	}
 	return nil
+}
+
+// SourceDiagnosis explains, in plain words, why a saved text cannot yield a
+// digest. It is derived from the text itself, so it stays correct no matter
+// which job failed or when.
+type SourceDiagnosis struct{ Title, Details string }
+
+func diagnoseSource(s Snapshot) *SourceDiagnosis {
+	err := ValidateSourceContent(s)
+	var se *SourceError
+	if !errors.As(err, &se) {
+		return nil
+	}
+	origin := fmt.Sprintf("Текст #%d (отримано %s, витяг %s)", s.ID, datePart(s.RetrievedAt), s.Extractor)
+	switch {
+	case se.FooterOnly:
+		line := strings.TrimSpace(strings.Split(strings.TrimSpace(s.Text), "\n")[0])
+		if r := []rune(line); len(r) > 160 {
+			line = string(r[:160]) + "…"
+		}
+		return &SourceDiagnosis{
+			Title: "Збережено лише рядок про авторські права",
+			Details: origin + " складається з одного рядка: «" + line + "». Це підвал сторінки, а не стаття: витяг не знайшов основного тексту " +
+				"(так буває зі сторінками-змістами, меню та сторінками, що будуються скриптом). З такого тексту дайджест не має змісту.",
+		}
+	case se.Challenge:
+		return &SourceDiagnosis{
+			Title: "Замість статті збережено перевірку браузера",
+			Details: origin + " — це сторінка перевірки (капча чи «Just a moment…»), а не стаття. " +
+				"Дайджест із неї не має змісту; потрібно отримати текст повторно.",
+		}
+	}
+	return nil
+}
+
+func datePart(ts string) string {
+	if len(ts) >= 10 {
+		return ts[:10]
+	}
+	return "дата невідома"
 }
