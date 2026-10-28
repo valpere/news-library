@@ -389,7 +389,8 @@ provider, snapshot, час і usage. Мережа виконується поз�
 стаття, попереджає, що наявний дайджест створено з нього, і дає дії: повторне
 отримання, ручне введення, «Сміття».
 Підтвердження повноти (schema v17). `POST /items/{id}/completeness` додає подію в
-append-only `completeness_confirmations` (`complete` 1 — підтверджено, 0 — знято;
+append-only `completeness_confirmations` (`complete` 1 — підтверджено, 0 — знято; кнопки
+знімання на сторінці немає, подію `withdraw` приймає лише сам ендпоінт;
 чинна остання). `Store.Snapshot/Snapshots` накладають її на читання: поки остання
 подія 1, `completeness`=`full`, а `warning` починається з «Повноту підтвердив
 користувач <дата>». Власне значення витягу й текст у `source_versions` не змінюються;
