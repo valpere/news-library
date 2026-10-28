@@ -1,6 +1,9 @@
 package library
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAssessOffersConfirmationOnlyWhenTextLooksIncomplete(t *testing.T) {
 	long := "Перший абзац статті.\nДругий абзац статті."
@@ -29,5 +32,36 @@ func TestAssessKeepsStatusAndConfirmation(t *testing.T) {
 	a := Assess(Snapshot{Text: "один\nдва", Completeness: "full", UserConfirmed: true})
 	if a.Status != "full" || !a.Confirmed || a.Diagnosis != nil {
 		t.Fatalf("%+v", a)
+	}
+}
+
+func TestCompletenessLabel(t *testing.T) {
+	body := "Перший абзац.\nДругий абзац."
+	cases := []struct {
+		name string
+		s    Snapshot
+		want string
+	}{
+		{"full", Snapshot{Text: body, Completeness: "full"}, "повний текст"},
+		{"partial", Snapshot{Text: body, Completeness: "partial"}, "частковий текст"},
+		{"unknown without signs says nothing", Snapshot{Text: body, Completeness: "unknown"}, ""},
+		{"teaser marker", Snapshot{Text: body + "\nRead more", Completeness: "unknown"}, "схоже на неповний текст («Read more»)"},
+	}
+	for _, c := range cases {
+		if got := Assess(c.s).Label(); got != c.want {
+			t.Errorf("%s: %q want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestDeliveryTextMentionsCompletenessOnlyWhenKnown(t *testing.T) {
+	item, digest := Item{ID: 1, Title: "T", URL: "https://example.com/a", Placement: "inbox"}, Digest{ID: 2, Markdown: "дайджест"}
+	plain := deliveryText(item, Snapshot{ID: 3, Text: "Один.\nДва.", Completeness: "unknown"}, digest)
+	if strings.Contains(plain, "не підтверджено") || strings.HasSuffix(plain, " · ") {
+		t.Fatalf("noise for an ordinary text: %q", plain)
+	}
+	teaser := deliveryText(item, Snapshot{ID: 3, Text: "Один.\nДва.\nRead more", Completeness: "unknown"}, digest)
+	if !strings.Contains(teaser, "схоже на неповний текст") {
+		t.Fatalf("missing sign: %q", teaser)
 	}
 }

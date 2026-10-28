@@ -24,14 +24,29 @@ func incompleteSigns(text string) []string {
 	if marker := trailingMarker(text); marker != "" {
 		return []string{marker}
 	}
-	return nil
+	return []string{}
 }
 
 func Assess(s Snapshot) Completeness {
-	a := Completeness{Status: s.Completeness, Confirmed: s.UserConfirmed, Diagnosis: diagnoseSource(s)}
+	a := Completeness{Status: s.Completeness, Reasons: []string{}, Confirmed: s.UserConfirmed, Diagnosis: diagnoseSource(s)}
 	if a.Diagnosis != nil && a.Diagnosis.Soft {
 		a.Reasons = incompleteSigns(s.Text)
 		a.CanConfirm = !s.UserConfirmed && s.Completeness != "partial"
 	}
 	return a
+}
+
+// Label is the short human wording for readers of a summary (Telegram, exports).
+// An unknown status without signs says nothing: that is the ordinary HTML case,
+// not a warning.
+func (c Completeness) Label() string {
+	switch {
+	case len(c.Reasons) > 0:
+		return "схоже на неповний текст («" + c.Reasons[0] + "»)"
+	case c.Status == "full":
+		return "повний текст"
+	case c.Status == "partial":
+		return "частковий текст"
+	}
+	return ""
 }

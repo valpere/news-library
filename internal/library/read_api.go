@@ -236,7 +236,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 				end = len(text)
 			}
 		}
-		payload["source"] = map[string]any{"id": snapshot.ID, "url": item.URL, "hash": snapshot.Hash, "retrieved_at": snapshot.RetrievedAt, "origin": snapshot.Origin, "extractor": snapshot.Extractor, "completeness": snapshot.Completeness, "warning": snapshot.Warning}
+		payload["source"] = map[string]any{"id": snapshot.ID, "url": item.URL, "hash": snapshot.Hash, "retrieved_at": snapshot.RetrievedAt, "origin": snapshot.Origin, "extractor": snapshot.Extractor, "completeness": snapshot.Completeness, "incomplete_signs": Assess(snapshot).Reasons, "warning": snapshot.Warning}
 		payload["text"] = text
 		payload["start_byte"] = start
 		payload["end_byte"] = end
