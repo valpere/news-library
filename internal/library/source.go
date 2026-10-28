@@ -258,7 +258,7 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 	return snap, err
 }
 func decodeArticle(data []byte, final *url.URL, kind string, partial bool, meta *NetworkMeta) (Snapshot, error) {
-	snap := Snapshot{Origin: "fetch", Extractor: "readability-v2.1.3", Completeness: "unknown", Warning: "Виділений текст HTML; повноту оригіналу не підтверджено"}
+	snap := Snapshot{Origin: "fetch", Extractor: "readability-v2.1.3", Completeness: "unknown", Warning: "Виділений текст HTML"}
 	if strings.Contains(kind, "text/plain") {
 		snap.Text = string(data)
 		snap.Title = final.Hostname()
@@ -286,11 +286,6 @@ func decodeArticle(data []byte, final *url.URL, kind string, partial bool, meta 
 		}
 		// Keep extracted footer text. Store marks it needs_input before AI.
 		snap.Warning = err.Error()
-	}
-	if snap.Completeness == "unknown" && snap.Origin == "fetch" && !strings.Contains(kind, "text/plain") && snap.Warning == "Виділений текст HTML; повноту оригіналу не підтверджено" {
-		if why := partialSourceSuspicion(snap.Text); why != "" {
-			snap.Warning = "Підозра на неповний витяг: " + why + "; повноту оригіналу не підтверджено"
-		}
 	}
 	snap.RetrievedAt = meta.FetchedAt
 	if meta.CacheStatus == "HIT" || meta.CacheStatus == "STALE" || meta.CacheStatus == "REVALIDATED" {
