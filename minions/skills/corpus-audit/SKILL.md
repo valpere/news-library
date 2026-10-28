@@ -7,7 +7,7 @@ description: Audit news-library primary-file integrity, current connection refer
 python3 minions/corpus_audit.py --data data --output tmp/corpus-audit-01
 ```
 
-Use an existing schema-v16 store and a new private tmp directory. The audit checks
+Use an existing schema-v17 store and a new private tmp directory. The audit checks
 source/digest/metadata/connection hashes and reference ownership, not all backup
 files. Use backup-check for diagnostic/checkpoint coverage.
 

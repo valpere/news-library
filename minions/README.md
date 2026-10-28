@@ -3,7 +3,7 @@
 ## Operational helpers
 
 `python3 minions/library_doctor.py --output tmp/doctor-01` reads private `.env`
-and schema-v16 SQLite without opening the application Store. It reports only
+and schema-v17 SQLite without opening the application Store. It reports only
 whitelisted configuration checks, aggregate progress and secret presence.
 Optional `--probe-local` checks the configured loopback web socket and Ollama
 `GET /api/tags`; it never starts services or performs inference. Environment

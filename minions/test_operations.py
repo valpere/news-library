@@ -27,7 +27,7 @@ class OperationsTests(unittest.TestCase):
         self.path = self.data / 'library.sqlite'
         with sqlite3.connect(self.path) as db:
             db.executescript('''
-                PRAGMA user_version=16;
+                PRAGMA user_version=17;
                 CREATE TABLE items(id,state,filter_state,selected_snapshot);
                 CREATE VIEW active_items AS SELECT * FROM items WHERE id!=99;
                 CREATE TABLE source_versions(id,item_id);

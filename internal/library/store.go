@@ -64,6 +64,9 @@ var schemaV15 string
 //go:embed schema_v16.sql
 var schemaV16 string
 
+//go:embed schema_v17.sql
+var schemaV17 string
+
 type Store struct {
 	KnowledgeEnabled bool
 	DB               *sql.DB
@@ -88,6 +91,10 @@ type Item struct {
 type Snapshot struct {
 	ID, ItemID                                                               int64
 	Text, Title, Hash, RetrievedAt, Origin, Extractor, Completeness, Warning string
+	// UserConfirmed: the user vouched that this text is complete (overlay on the
+	// extractor's value, which stays in source_versions). ConfirmedAt is its date.
+	UserConfirmed bool
+	ConfirmedAt   string
 }
 type RatingEvent struct {
 	ID, ItemID, Score         int64
@@ -197,6 +204,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err == nil && version < 16 {
 			_, err = tx.Exec(schemaV16)
+		}
+		if err == nil && version < 17 {
+			_, err = tx.Exec(schemaV17)
 		}
 		if err == nil {
 			err = tx.Commit()
@@ -626,16 +636,15 @@ func (s *Store) Item(id int64) (Item, error) {
 	return scanItem(s.DB.QueryRow(itemSelect+" WHERE i.id=?", id))
 }
 func (s *Store) Snapshots(id int64) ([]Snapshot, error) {
-	rows, err := s.DB.Query("SELECT id,item_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning FROM source_versions WHERE item_id=? ORDER BY id DESC", id)
+	rows, err := s.DB.Query(snapshotSelect+" WHERE v.item_id=? ORDER BY v.id DESC", id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var result []Snapshot
 	for rows.Next() {
-		var v Snapshot
-		var path string
-		if err = rows.Scan(&v.ID, &v.ItemID, &path, &v.Title, &v.Hash, &v.RetrievedAt, &v.Origin, &v.Extractor, &v.Completeness, &v.Warning); err != nil {
+		v, path, err := scanSnapshot(rows)
+		if err != nil {
 			return nil, err
 		}
 		data, e := s.Files.Read(path, v.Hash)

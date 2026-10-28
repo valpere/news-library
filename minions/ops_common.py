@@ -1,4 +1,4 @@
-"""Private operational reports, constrained config and read-only schema-v16 access."""
+"""Private operational reports, constrained config and read-only schema access."""
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
@@ -11,6 +11,7 @@ import ipaddress
 from urllib.request import HTTPRedirectHandler, ProxyHandler, build_opener
 
 ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_VERSION = 17  # keep in step with CurrentSchema in internal/library/backup.go
 DEFAULTS = {
     'NEWS_LIBRARY_DATA': 'data', 'NEWS_LIBRARY_BIND': '127.0.0.1:8787',
     'OLLAMA_API_URL': 'http://localhost:11434/api/chat', 'OLLAMA_MODEL': 'gemma4:cloud',
@@ -68,8 +69,8 @@ def database(data):
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         db.execute('BEGIN')
-        if db.execute('PRAGMA user_version').fetchone()[0] != 16:
-            raise ValueError('schema v16 required; no migration performed')
+        if db.execute('PRAGMA user_version').fetchone()[0] != SCHEMA_VERSION:
+            raise ValueError(f'schema v{SCHEMA_VERSION} required; no migration performed')
         yield db
     finally:
         db.close()

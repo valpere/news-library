@@ -305,7 +305,7 @@ func TestCacheV5MigrationPreservesBodyWithoutInventingValidators(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, statement := range []string{"DROP TABLE search_judgments", "DROP TABLE search_events", "DROP VIEW active_items", "DROP TABLE trash_entries",
+	for _, statement := range []string{"DROP TABLE completeness_confirmations", "DROP TABLE search_judgments", "DROP TABLE search_events", "DROP VIEW active_items", "DROP TABLE trash_entries",
 		"DROP TABLE chat_turns", "DROP TABLE chat_sessions", "DROP TABLE knowledge_batches",
 		"DROP TABLE knowledge_failures",
 		"DROP TABLE article_knowledge",

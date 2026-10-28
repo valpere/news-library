@@ -117,7 +117,7 @@ func TestTrashMigrationAndBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Emulate v14 with completed historic failure.
-	if _, err := s.DB.Exec("DROP TABLE search_judgments; DROP TABLE search_events; DROP VIEW active_items; DROP TABLE trash_entries; PRAGMA user_version=14"); err != nil {
+	if _, err := s.DB.Exec("DROP TABLE completeness_confirmations; DROP TABLE search_judgments; DROP TABLE search_events; DROP VIEW active_items; DROP TABLE trash_entries; PRAGMA user_version=14"); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(s.Files.Root, "library.sqlite")

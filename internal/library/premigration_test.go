@@ -15,7 +15,7 @@ func downgradeToV14(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, q := range []string{"DROP TABLE search_judgments", "DROP TABLE search_events", "DROP VIEW active_items", "DROP TABLE trash_entries", "PRAGMA user_version=14"} {
+	for _, q := range []string{"DROP TABLE completeness_confirmations", "DROP TABLE search_judgments", "DROP TABLE search_events", "DROP VIEW active_items", "DROP TABLE trash_entries", "PRAGMA user_version=14"} {
 		if _, err := db.Exec(q); err != nil {
 			t.Fatal(err)
 		}

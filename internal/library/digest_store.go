@@ -130,9 +130,7 @@ func snapshotText(tx *sql.Tx, f Files, snapshotID int64) (string, error) {
 	return string(data), err
 }
 func (s *Store) Snapshot(id int64) (Snapshot, error) {
-	var v Snapshot
-	var path string
-	err := s.DB.QueryRow(`SELECT id,item_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning FROM source_versions WHERE id=?`, id).Scan(&v.ID, &v.ItemID, &path, &v.Title, &v.Hash, &v.RetrievedAt, &v.Origin, &v.Extractor, &v.Completeness, &v.Warning)
+	v, path, err := scanSnapshot(s.DB.QueryRow(snapshotSelect+` WHERE v.id=?`, id))
 	if err != nil {
 		return v, err
 	}
