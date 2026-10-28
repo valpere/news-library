@@ -270,3 +270,19 @@ func TestDigestMinWordsConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestSourceAdaptersConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	os.WriteFile(path, []byte("OLLAMA_MODEL=fixture:cloud\n"), 0600)
+	c, e := readConfig([]string{"-env-file", path})
+	if e != nil || c.SourceAdapters != "all" {
+		t.Fatalf("default is all: %q %v", c.SourceAdapters, e)
+	}
+	if c, e = readConfig([]string{"-env-file", path, "-source-adapters", "none"}); e != nil || c.SourceAdapters != "none" {
+		t.Fatalf("none: %q %v", c.SourceAdapters, e)
+	}
+	t.Setenv("NEWS_LIBRARY_SOURCE_ADAPTERS", "neurips-typo-v9")
+	if _, e = readConfig([]string{"-env-file", path}); e == nil || !strings.Contains(e.Error(), "neurips-typo-v9") {
+		t.Fatalf("an unknown adapter must be a config error: %v", e)
+	}
+}
