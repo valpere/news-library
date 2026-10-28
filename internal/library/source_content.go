@@ -48,12 +48,24 @@ func ValidateSourceContent(s Snapshot) error {
 // SourceDiagnosis explains, in plain words, why a saved text cannot yield a
 // digest. It is derived from the text itself, so it stays correct no matter
 // which job failed or when.
-type SourceDiagnosis struct{ Title, Details string }
+type SourceDiagnosis struct {
+	Title, Details string
+	// Soft: a probable, not certain, problem. Hard ones mean no digest can be made.
+	Soft bool
+}
 
 func diagnoseSource(s Snapshot) *SourceDiagnosis {
 	err := ValidateSourceContent(s)
 	var se *SourceError
 	if !errors.As(err, &se) {
+		if marker := trailingMarker(s.Text); marker != "" && s.Completeness != "full" {
+			return &SourceDiagnosis{
+				Soft:  true,
+				Title: "Текст, схоже, неповний",
+				Details: fmt.Sprintf("Текст #%d (отримано %s, витяг %s) закінчується рядком «%s» — це схоже на посилання на інші сторінки, а не на кінець статті. "+
+					"Імовірно, збережено лише вступ або індексну сторінку; повноту оригіналу не підтверджено.", s.ID, datePart(s.RetrievedAt), s.Extractor, marker),
+			}
+		}
 		return nil
 	}
 	origin := fmt.Sprintf("Текст #%d (отримано %s, витяг %s)", s.ID, datePart(s.RetrievedAt), s.Extractor)
