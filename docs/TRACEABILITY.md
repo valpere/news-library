@@ -30,6 +30,7 @@
 | FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries / TestWebLocalhostWithoutCSRF / TestWebCSRFPolicyByOrigin](../internal/library/web_test.go) |
 | FR-21 | UC-17 | M3 | AT-21 | passed: [TestSearchEventRecordingAndJudgments / TestSearchJudgmentsDoNotChangeUsefulnessRatings / TestWebSearchRecordsAndJudges](../internal/library/search_feedback_test.go) |
 | FR-22 | UC-18 | M2 | AT-22 | passed: [completeness_test.go](../internal/library/completeness_test.go) (оверлей без зміни тексту, зняття, відмова для чужого/смітникового тексту, веб-потік, без кнопки для «лише copyright») |
+| FR-23 | UC-01, UC-02 | M2 | AT-23 | passed: [adapters_test.go](../internal/library/adapters_test.go), [adapter_neurips_test.go](../internal/library/adapter_neurips_test.go) (вибір, пріоритет, відкат із попередженням, незмінений загальний шлях), [config_test.go](../cmd/news-library/config_test.go) |
 
 ## Перевірка специфікації
 

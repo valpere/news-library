@@ -39,6 +39,7 @@ type Fetcher struct {
 	UserAgent        string
 	YTDLP            string
 	YouTubeLanguages []string
+	Adapters         []SourceAdapter
 	metadataResolver func(context.Context, string) (youtubeMetadata, error)
 
 	client   *http.Client
@@ -218,11 +219,25 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 	if isYT {
 		return f.youtube(ctx, id)
 	}
+	adapterNote := ""
+	if len(f.Adapters) > 0 {
+		adapted, note, ok, e := f.extractWithAdapter(ctx, u)
+		if e != nil {
+			return Snapshot{}, e
+		}
+		if ok {
+			return adapted, nil
+		}
+		adapterNote = note
+	}
 	data, final, kind, partial, err := f.get(ctx, raw)
 	if err != nil {
 		return Snapshot{}, err
 	}
 	snap, err := decodeArticle(data, final, kind, partial, meta)
+	if err == nil && adapterNote != "" {
+		snap.Warning += "; " + adapterNote
+	}
 	var se *SourceError
 	if errors.As(err, &se) && se.Challenge && (f.CURL != "" || f.browserResolver != nil) {
 		resolver := f.browserResolver

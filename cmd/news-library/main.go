@@ -99,6 +99,9 @@ func run() error {
 	fetcher := library.NewFetcher(c.FetchTimeout, c.MaxBytes)
 	fetcher.UserAgent = c.FetchUserAgent
 	fetcher.YTDLP = c.YTDLP
+	if fetcher.Adapters, err = library.SelectAdapters(c.SourceAdapters); err != nil {
+		return err
+	}
 	fetcher.YouTubeLanguages, _ = library.ParseYouTubeLanguages(c.YouTubeLanguages)
 	cache := &library.HTTPCache{Store: s, Fetcher: fetcher, TTL: c.CacheTTL, MaxBytes: c.CacheMaxBytes, Retention: c.CacheRetention}
 	fetcher.Cache = cache

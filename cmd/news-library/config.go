@@ -38,6 +38,7 @@ type config struct {
 	FilterThreshold                                       float64
 	FetchTimeout, DigestTimeout, Lease, Backoff, CacheTTL time.Duration
 	Attempts, InputLimit, MinDigestWords                  int
+	SourceAdapters                                        string
 	MaxBytes                                              int64
 	NoWorker, NoDigests                                   bool
 	CacheMaxBytes                                         int64
@@ -85,7 +86,7 @@ func readConfig(args []string) (config, error) {
 		"data": "NEWS_LIBRARY_DATA", "bind": "NEWS_LIBRARY_BIND", "model": "OLLAMA_MODEL", "ollama-url": "OLLAMA_API_URL",
 		"fetch-timeout": "NEWS_LIBRARY_FETCH_TIMEOUT", "digest-timeout": "NEWS_LIBRARY_DIGEST_TIMEOUT", "lease": "NEWS_LIBRARY_LEASE",
 		"backoff": "NEWS_LIBRARY_BACKOFF", "cache-ttl": "NEWS_LIBRARY_CACHE_TTL", "attempts": "NEWS_LIBRARY_ATTEMPTS",
-		"max-bytes": "NEWS_LIBRARY_MAX_BYTES", "digest-max-bytes": "NEWS_LIBRARY_DIGEST_MAX_BYTES", "digest-min-words": "NEWS_LIBRARY_DIGEST_MIN_WORDS", "no-worker": "NEWS_LIBRARY_NO_WORKER", "no-digests": "NEWS_LIBRARY_NO_DIGESTS",
+		"max-bytes": "NEWS_LIBRARY_MAX_BYTES", "digest-max-bytes": "NEWS_LIBRARY_DIGEST_MAX_BYTES", "digest-min-words": "NEWS_LIBRARY_DIGEST_MIN_WORDS", "source-adapters": "NEWS_LIBRARY_SOURCE_ADAPTERS", "no-worker": "NEWS_LIBRARY_NO_WORKER", "no-digests": "NEWS_LIBRARY_NO_DIGESTS",
 	}
 	overrides := map[string]string{}
 	for i := 0; i < len(args); i++ {
@@ -183,6 +184,10 @@ func readConfig(args []string) (config, error) {
 		return c, errors.New("digest-min-words має бути 0..1000 (0 вимикає відсічку)")
 	}
 	c.MinDigestWords = int(minWords)
+	c.SourceAdapters = get("NEWS_LIBRARY_SOURCE_ADAPTERS", "all")
+	if _, e = library.SelectAdapters(c.SourceAdapters); e != nil {
+		return c, e
+	}
 	c.InputLimit = int(limit)
 	c.Telegram.Enabled, e = boolean("NEWS_LIBRARY_TELEGRAM_ENABLED", "false")
 	if e != nil {
@@ -288,6 +293,7 @@ func readConfig(args []string) (config, error) {
 	flags.IntVar(&c.Attempts, "attempts", c.Attempts, "максимум спроб завдання")
 	flags.Int64Var(&c.MaxBytes, "max-bytes", c.MaxBytes, "ліміт джерела/ручного тексту")
 	flags.IntVar(&c.InputLimit, "digest-max-bytes", c.InputLimit, "ліміт тексту одного дайджесту")
+	flags.StringVar(&c.SourceAdapters, "source-adapters", c.SourceAdapters, "адаптери джерел: all, none або список імен через кому")
 	flags.IntVar(&c.MinDigestWords, "digest-min-words", c.MinDigestWords, "джерела коротші за це число слів без дайджесту (0 вимикає)")
 	flags.BoolVar(&c.NoWorker, "no-worker", c.NoWorker, "лише UI, без виконання черги")
 	flags.BoolVar(&c.NoDigests, "no-digests", c.NoDigests, "вимкнути генерацію, зберігаючи отримання тексту")
