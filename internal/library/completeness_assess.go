@@ -83,3 +83,10 @@ func (c Completeness) Label() string {
 	}
 	return ""
 }
+
+// ShownWarning is the warning as readers see it. Texts saved before extractors
+// stopped judging completeness carry "; повноту оригіналу не підтверджено" in the
+// stored warning; versions are immutable, so it is dropped at display time.
+func (s Snapshot) ShownWarning() string {
+	return strings.TrimSuffix(s.Warning, "; повноту оригіналу не підтверджено")
+}
