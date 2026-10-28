@@ -65,3 +65,35 @@ func TestDeliveryTextMentionsCompletenessOnlyWhenKnown(t *testing.T) {
 		t.Fatalf("missing sign: %q", teaser)
 	}
 }
+
+func TestAssessDistinguishesTeaserFromCutoff(t *testing.T) {
+	head := "Перший абзац статті про одну тему.\n"
+	cut := "Автор пояснює, що результати експерименту залежать від багатьох чинників, серед яких і"
+	cases := []struct {
+		name     string
+		s        Snapshot
+		wantKind string
+	}{
+		{"teaser", Snapshot{Text: head + "Read more", Completeness: "unknown"}, "teaser"},
+		{"cut mid sentence", Snapshot{Text: head + cut, Completeness: "unknown"}, "cutoff"},
+		{"short list item is not a cutoff", Snapshot{Text: head + "CLAUDE.md: store project conventions", Completeness: "unknown"}, ""},
+		{"finished sentence", Snapshot{Text: head + cut + " погода.", Completeness: "unknown"}, ""},
+		{"subtitles are guaranteed full", Snapshot{Text: head + cut, Completeness: "full"}, ""},
+	}
+	for _, c := range cases {
+		a := Assess(c.s)
+		got := ""
+		if len(a.Reasons) > 0 {
+			got = a.Reasons[0].Kind
+		}
+		if got != c.wantKind {
+			t.Errorf("%s: kind %q want %q (%+v)", c.name, got, c.wantKind, a.Reasons)
+		}
+		if c.wantKind != "" && (a.Diagnosis == nil || a.Diagnosis.Kind != c.wantKind || !a.CanConfirm) {
+			t.Errorf("%s: diagnosis %+v confirm %v", c.name, a.Diagnosis, a.CanConfirm)
+		}
+	}
+	if l := Assess(Snapshot{Text: head + cut, Completeness: "unknown"}).Label(); l != "текст обривається посеред речення" {
+		t.Errorf("label %q", l)
+	}
+}
