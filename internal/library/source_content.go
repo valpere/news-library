@@ -52,6 +52,8 @@ type SourceDiagnosis struct {
 	Title, Details string
 	// Soft: a probable, not certain, problem. Hard ones mean no digest can be made.
 	Soft bool
+	// Kind names the sign behind a soft diagnosis (teaser or cutoff); empty for hard ones.
+	Kind string
 }
 
 func diagnoseSource(s Snapshot) *SourceDiagnosis {
@@ -59,13 +61,15 @@ func diagnoseSource(s Snapshot) *SourceDiagnosis {
 	var se *SourceError
 	if !errors.As(err, &se) {
 		if signs := incompleteSigns(s.Text); len(signs) > 0 && s.Completeness != "full" {
-			marker := signs[0]
-			return &SourceDiagnosis{
-				Soft:  true,
-				Title: "Текст, схоже, неповний",
-				Details: fmt.Sprintf("Текст #%d (отримано %s, витяг %s) закінчується рядком «%s» — це схоже на посилання на інші сторінки, а не на кінець статті. "+
-					"Імовірно, збережено лише вступ або індексну сторінку; повноту оригіналу не підтверджено.", s.ID, datePart(s.RetrievedAt), s.Extractor, marker),
+			where := fmt.Sprintf("Текст #%d (отримано %s, витяг %s)", s.ID, datePart(s.RetrievedAt), s.Extractor)
+			if signs[0].Kind == reasonTeaser {
+				return &SourceDiagnosis{Soft: true, Kind: reasonTeaser, Title: "Текст, схоже, неповний",
+					Details: where + fmt.Sprintf(" закінчується рядком «%s» — це схоже на посилання на інші сторінки, а не на кінець статті. "+
+						"Імовірно, збережено лише вступ або індексну сторінку; повноту оригіналу не підтверджено.", signs[0].Detail)}
 			}
+			return &SourceDiagnosis{Soft: true, Kind: reasonCutoff, Title: "Текст, схоже, обривається",
+				Details: where + " закінчується довгим рядком без завершення речення. Імовірно, статтю обрізано (ліміт, paywall, збій витягу); " +
+					"повноту оригіналу не підтверджено."}
 		}
 		return nil
 	}

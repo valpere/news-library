@@ -128,3 +128,25 @@ func TestWebConfirmRejectsAForeignSnapshot(t *testing.T) {
 		t.Fatalf("foreign snapshot accepted: %d", rw.Code)
 	}
 }
+
+func TestWebCutoffOffersRecoveryStubsNotJunk(t *testing.T) {
+	s, w := testWeb(t)
+	cut := strings.Repeat("Вступ до статті. ", 12) + "\n\nАвтор пояснює, що результати експерименту залежать від багатьох чинників, серед яких і"
+	id := add(t, s, "https://example.com/cut")
+	manual(t, s, id, cut)
+	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
+	for _, want := range []string{"Текст, схоже, обривається", "Підтвердити повноту", `Дотягнути решту тексту`, `Спробувати інший спосіб отримання`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if !strings.Contains(body, "disabled") || strings.Contains(body, `href="#junk-action"`) {
+		t.Errorf("stubs must be disabled and junk not offered for a cutoff")
+	}
+	tid := add(t, s, "https://example.com/teaser")
+	manual(t, s, tid, strings.Repeat("Вступ до серії. ", 12)+"\n\nExplore more articles")
+	body = webRequest(w, "GET", "/items/"+strconv.FormatInt(tid, 10), nil, nil).Body.String()
+	if strings.Contains(body, "Дотягнути решту тексту") || !strings.Contains(body, `href="#junk-action"`) {
+		t.Errorf("a teaser offers junk and no recovery stubs")
+	}
+}
