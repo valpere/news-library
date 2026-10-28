@@ -31,7 +31,7 @@
 <h2>{{if .Item.Title}}{{.Item.Title}}{{else}}{{.Item.URL}}{{end}}</h2>
 <p><a href="{{.Item.URL}}" rel="noreferrer">Відкрити джерело</a> · {{date .Item.AddedAt}}</p>
 <p>{{if .Item.Read}}прочитано{{else}}непрочитано{{end}} · корисність: {{ratingLabel .Item.Score .Item.ScoreScale}}</p>
-{{with .SourceDiagnosis}}<article id="source-diagnosis" class="error"><h3>{{.Title}}</h3><p>{{.Details}}</p>{{if $.DiagnosedDigestShown}}{{if .Soft}}<p>Дайджест нижче створено з цього тексту: він міг не охопити те, чого в тексті немає.</p>{{else}}<p><strong>Дайджест нижче створено з цього самого тексту, тому йому не варто довіряти.</strong></p>{{end}}{{end}}<p>Що можна зробити:</p><ul><li><form method="post" action="/items/{{$.Item.ID}}/retry"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button>Отримати текст повторно</button></form> — якщо сторінку виправили або вдосконалили витяг;</li><li><a href="#manual-text">Вставити текст вручну</a> — скопіюйте потрібний зміст зі сторінки;</li><li><a href="#junk-action">Позначити сміттям</a> — якщо матеріал вам не потрібен.</li></ul></article>{{end}}
+{{with .SourceDiagnosis}}<article id="source-diagnosis" class="error"><h3>{{.Title}}</h3><p>{{.Details}}</p>{{if $.DiagnosedDigestShown}}{{if .Soft}}<p>Дайджест нижче створено з цього тексту: він міг не охопити те, чого в тексті немає.</p>{{else}}<p><strong>Дайджест нижче створено з цього самого тексту, тому йому не варто довіряти.</strong></p>{{end}}{{end}}<p>Що можна зробити:</p><ul><li><form method="post" action="/items/{{$.Item.ID}}/retry"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button>Отримати текст повторно</button></form> — якщо сторінку виправили або вдосконалили витяг;</li><li><a href="#manual-text">Вставити текст вручну</a> — скопіюйте потрібний зміст зі сторінки;</li><li><a href="#junk-action">Позначити сміттям</a> — якщо матеріал вам не потрібен.</li>{{if .Soft}}<li>{{template "completenessAction" $}} — якщо ви звірили з оригіналом і текст справді повний.</li>{{end}}</ul></article>{{end}}
 {{if eq .Item.FilterState "rejected"}}<article id="filter-result"><h2>Відсіяно правилами</h2><p>Генерацію пропущено. Посилання, доступний текст і власні рішення збережені.</p><form method="post" action="/items/{{.Item.ID}}/filter-override"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повернути до обробки</button></form></article>{{end}}
 <section id="processing" data-pending="{{.Pending}}" aria-live="polite">
 {{if .Digest}}
@@ -58,7 +58,7 @@
 {{if .Selected}}
 <details><summary>Повний збережений текст · версія #{{.Selected.ID}}</summary>
 <p>{{.Selected.Origin}} · {{.Selected.Extractor}} · {{.Selected.Completeness}} · {{date .Selected.RetrievedAt}}</p>
-<p class="muted">{{.Selected.Warning}}</p><pre>{{.Selected.Text}}</pre></details>
+<p class="muted">{{.Selected.Warning}}</p>{{template "completenessAction" .}}<pre>{{.Selected.Text}}</pre></details>
 {{end}}
 </section>
 {{if and .Digest (not .DigestIsTranslation)}}
@@ -105,9 +105,10 @@
 {{define "translationContent"}}<article id="translation"><h2>Переклад українською</h2>
 <p class="muted">{{.Digest.ActualModel}} · {{date .Digest.CreatedAt}} · текст #{{.Digest.SnapshotID}} · джерело коротше за поріг дайджесту, тому подано переклад</p>
 <div>{{translationHTML .Digest.Markdown}}</div></article>{{end}}
+{{define "completenessAction"}}{{if .Selected}}{{if .Selected.UserConfirmed}}<form method="post" action="/items/{{.Item.ID}}/completeness"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="source" value="{{.Selected.ID}}"><input type="hidden" name="action" value="withdraw"><small>Повноту підтвердили ви ({{date .Selected.ConfirmedAt}}).</small> <button>Зняти підтвердження</button></form>{{else if .CanConfirmCompleteness}}<form method="post" action="/items/{{.Item.ID}}/completeness"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="source" value="{{.Selected.ID}}"><input type="hidden" name="action" value="confirm"><button title="Натисніть, лише якщо звірили з оригіналом і збережений текст справді повний">Підтвердити повноту</button></form>{{end}}{{end}}{{end}}
 {{define "digestContent"}}<article id="digest"><h2>Дайджест</h2>
 <p class="muted">{{.Digest.ActualModel}} · {{date .Digest.CreatedAt}} · текст #{{.Digest.SnapshotID}} · дайджест #{{.Digest.ID}}</p>
-<p>{{.Selected.Completeness}} · {{.Selected.Warning}}{{if gt .Digest.ChunkCount 1}} · Оброблено частинами: {{.Digest.ChunkCount}}{{end}}</p>
+<p>{{.Selected.Completeness}} · {{.Selected.Warning}}{{if gt .Digest.ChunkCount 1}} · Оброблено частинами: {{.Digest.ChunkCount}}{{end}}</p>{{if not .SourceDiagnosis}}{{template "completenessAction" .}}{{end}}
 <div class="row" role="tablist" aria-label="Секції дайджесту">{{range $k,$section := .Sections}}<button type="button" role="tab" id="tab-{{$k}}" aria-controls="section-{{$k}}" aria-selected="false" data-section="section-{{$k}}">{{.Title}}</button>{{end}}</div>
 {{range $k,$section := .Sections}}<section id="section-{{$k}}" role="tabpanel" aria-labelledby="tab-{{$k}}"><h3>{{.Title}}</h3>{{.HTML}}</section>{{end}}
 <p><button id="copy-digest" type="button">Копіювати Markdown</button> <span id="copy-status" role="status"></span>{{if not .ExportScript}} · <a href="/items/{{.Item.ID}}/digests/{{.Digest.ID}}/markdown">Markdown</a> · <a href="/items/{{.Item.ID}}/digests/{{.Digest.ID}}/html">HTML</a>{{end}}</p>

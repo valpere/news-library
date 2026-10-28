@@ -29,6 +29,7 @@
 | FR-19 | UC-09 | M3 | AT-19 | passed: [saved digest/excerpt, dated context, ownership/UTF-8 bounds](../internal/library/semantic_test.go) |
 | FR-20 | UC-01, UC-02, UC-10 | M1 | AT-20 | passed: [TestFetchNetworkBoundaries](../internal/library/source_test.go), [TestWebMutationBoundaries / TestWebLocalhostWithoutCSRF / TestWebCSRFPolicyByOrigin](../internal/library/web_test.go) |
 | FR-21 | UC-17 | M3 | AT-21 | passed: [TestSearchEventRecordingAndJudgments / TestSearchJudgmentsDoNotChangeUsefulnessRatings / TestWebSearchRecordsAndJudges](../internal/library/search_feedback_test.go) |
+| FR-22 | UC-18 | M2 | AT-22 | passed: [completeness_test.go](../internal/library/completeness_test.go) (оверлей без зміни тексту, зняття, відмова для чужого/смітникового тексту, веб-потік, без кнопки для «лише copyright») |
 
 ## Перевірка специфікації
 

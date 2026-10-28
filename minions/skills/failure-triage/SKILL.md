@@ -11,7 +11,7 @@ Run at the repository root; choose a new private output directory. The plan uses
 active items and selected source/digest, with corresponding metadata/runs.
 Completed stages supersede historical failures. Waiting or running work should
 not be duplicated. Check report.json for the requested IDs; do not publish
-corpus data. `--data PATH` selects a different existing schema-v16 store.
+corpus data. `--data PATH` selects a different existing schema-v17 store.
 
 A temporary retry candidate is a suggestion, not an automatic retry or a promise
 of success. Format/configuration/limit/source failures need their indicated

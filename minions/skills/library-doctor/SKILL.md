@@ -9,7 +9,7 @@ Run from the news-library root:
 python3 minions/library_doctor.py --output tmp/doctor-01
 ```
 
-Use a fresh output directory. The helper reads schema v16 without migration,
+Use a fresh output directory. The helper reads schema v17 without migration,
 uses private `.env` plus process overrides, and never prints secret values.
 Use `--data PATH` for an explicitly selected store. Command flags of an existing
 server are unknown; do not mistake env settings for confirmed runtime settings.

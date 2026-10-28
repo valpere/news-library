@@ -10,6 +10,8 @@ from pathlib import Path
 import sqlite3
 import sys
 
+from ops_common import SCHEMA_VERSION
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -39,8 +41,8 @@ def audit(data):
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         db.execute('BEGIN')
-        if db.execute('PRAGMA user_version').fetchone()[0] != 16:
-            raise ValueError('schema v16 required; audit never migrates')
+        if db.execute('PRAGMA user_version').fetchone()[0] != SCHEMA_VERSION:
+            raise ValueError(f'schema v{SCHEMA_VERSION} required; audit never migrates')
         integrity = [r[0] for r in db.execute('PRAGMA integrity_check')]
         if integrity != ['ok']:
             problems.append({'kind': 'sqlite_integrity', 'details': integrity})

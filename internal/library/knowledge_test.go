@@ -443,7 +443,7 @@ func TestKnowledgeMigrationPreservesExistingNotes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, statement := range []string{"DROP TABLE search_judgments", "DROP TABLE search_events", "DROP VIEW active_items", "DROP TABLE trash_entries", "DROP TABLE chat_turns", "DROP TABLE chat_sessions", "DROP TABLE knowledge_batches", "DROP TABLE knowledge_failures", "DROP TABLE article_knowledge", "DROP TABLE knowledge_runs", "ALTER TABLE connection_versions DROP COLUMN author", "ALTER TABLE connection_versions DROP COLUMN model", "ALTER TABLE connection_versions DROP COLUMN prompt_version", "ALTER TABLE rating_events DROP COLUMN scale", "PRAGMA user_version=10"} {
+	for _, statement := range []string{"DROP TABLE completeness_confirmations", "DROP TABLE search_judgments", "DROP TABLE search_events", "DROP VIEW active_items", "DROP TABLE trash_entries", "DROP TABLE chat_turns", "DROP TABLE chat_sessions", "DROP TABLE knowledge_batches", "DROP TABLE knowledge_failures", "DROP TABLE article_knowledge", "DROP TABLE knowledge_runs", "ALTER TABLE connection_versions DROP COLUMN author", "ALTER TABLE connection_versions DROP COLUMN model", "ALTER TABLE connection_versions DROP COLUMN prompt_version", "ALTER TABLE rating_events DROP COLUMN scale", "PRAGMA user_version=10"} {
 		if _, err = s.DB.Exec(statement); err != nil {
 			t.Fatal(statement, err)
 		}
