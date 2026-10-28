@@ -96,7 +96,7 @@ func deliveryText(item Item, snapshot Snapshot, digest Digest) string {
 	if header == "" {
 		header = "Матеріал #" + strconv.FormatInt(item.ID, 10)
 	}
-	return header + "\n" + telegramLimit(item.URL, 500) + "\n\n" + telegramLimit(digest.Markdown, 2600) + "\n\nВласна оцінка: " + rating + " · " + map[string]string{"inbox": "вхідні", "library": "у бібліотеці", "deferred": "відкладено"}[item.Placement] + "\nТекст #" + strconv.FormatInt(snapshot.ID, 10) + " · дайджест #" + strconv.FormatInt(digest.ID, 10) + " · " + map[string]string{"full": "повний текст", "partial": "частковий текст", "unknown": "повноту не підтверджено"}[snapshot.Completeness] + "\n" + telegramLimit(snapshot.Warning, 180)
+	return header + "\n" + telegramLimit(item.URL, 500) + "\n\n" + telegramLimit(digest.Markdown, 2600) + "\n\nВласна оцінка: " + rating + " · " + map[string]string{"inbox": "вхідні", "library": "у бібліотеці", "deferred": "відкладено"}[item.Placement] + "\nТекст #" + strconv.FormatInt(snapshot.ID, 10) + " · дайджест #" + strconv.FormatInt(digest.ID, 10) + completenessSuffix(snapshot)
 }
 func (s *Store) PreviewDelivery(c TelegramConfig, trigger, slot string) (int64, error) {
 	if err := c.Validate(); err != nil {
@@ -524,4 +524,11 @@ func (w *DeliveryWorker) Run(ctx context.Context) {
 		case <-timer.C:
 		}
 	}
+}
+
+func completenessSuffix(snapshot Snapshot) string {
+	if label := Assess(snapshot).Label(); label != "" {
+		return " · " + label
+	}
+	return ""
 }
