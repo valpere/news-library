@@ -31,6 +31,7 @@
 <h2>{{if .Item.Title}}{{.Item.Title}}{{else}}{{.Item.URL}}{{end}}</h2>
 <p><a href="{{.Item.URL}}" rel="noreferrer">Відкрити джерело</a> · {{date .Item.AddedAt}}</p>
 <p>{{if .Item.Read}}прочитано{{else}}непрочитано{{end}} · корисність: {{ratingLabel .Item.Score .Item.ScoreScale}}</p>
+{{with .SourceDiagnosis}}<article id="source-diagnosis" class="error"><h3>{{.Title}}</h3><p>{{.Details}}</p>{{if $.DiagnosedDigestShown}}<p><strong>Дайджест нижче створено з цього самого тексту, тому йому не варто довіряти.</strong></p>{{end}}<p>Що можна зробити:</p><ul><li><form method="post" action="/items/{{$.Item.ID}}/retry"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button>Отримати текст повторно</button></form> — якщо сторінку виправили або вдосконалили витяг;</li><li><a href="#manual-text">Вставити текст вручну</a> — скопіюйте потрібний зміст зі сторінки;</li><li><a href="#junk-action">Позначити сміттям</a> — якщо матеріал вам не потрібен.</li></ul></article>{{end}}
 {{if eq .Item.FilterState "rejected"}}<article id="filter-result"><h2>Відсіяно правилами</h2><p>Генерацію пропущено. Посилання, доступний текст і власні рішення збережені.</p><form method="post" action="/items/{{.Item.ID}}/filter-override"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повернути до обробки</button></form></article>{{end}}
 <section id="processing" data-pending="{{.Pending}}" aria-live="polite">
 {{if .Digest}}
@@ -92,8 +93,8 @@
 {{if not .Pending}}
 <form method="post" action="/items/{{.Item.ID}}/retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Повторити отримання тексту</button></form>
 {{end}}
-<details><summary>Вставити текст вручну</summary><form method="post" action="/items/{{.Item.ID}}/manual"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="manual">Нова версія; попередні залишаться в історії</label><textarea id="manual" name="text" rows="10" required></textarea><button>Зберегти текст</button></form></details>
-<details><summary>Сміття</summary><form method="post" action="/items/{{.Item.ID}}/junk"><input type="hidden" name="csrf" value="{{.CSRF}}"><p class="muted">Ставить вашу оцінку «Нульова» й переносить матеріал у помийку: він зникає з пошуку, черги й добірок. Тексти, дайджести й історія оцінок зберігаються.</p><label>Причина (необов’язково) <input name="note" maxlength="500"></label><label><input type="checkbox" name="confirm" value="1" required> Так, це сміття</label><button>Перенести в помийку</button></form></details>
+<details id="manual-text"><summary>Вставити текст вручну</summary><form method="post" action="/items/{{.Item.ID}}/manual"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="manual">Нова версія; попередні залишаться в історії</label><textarea id="manual" name="text" rows="10" required></textarea><button>Зберегти текст</button></form></details>
+<details id="junk-action"><summary>Сміття</summary><form method="post" action="/items/{{.Item.ID}}/junk"><input type="hidden" name="csrf" value="{{.CSRF}}"><p class="muted">Ставить вашу оцінку «Нульова» й переносить матеріал у помийку: він зникає з пошуку, черги й добірок. Тексти, дайджести й історія оцінок зберігаються.</p><label>Причина (необов’язково) <input name="note" maxlength="500"></label><label><input type="checkbox" name="confirm" value="1" required> Так, це сміття</label><button>Перенести в помийку</button></form></details>
 <details><summary>Черга та помилки</summary>{{range .Jobs}}<p>Завдання #{{.ID}} · {{state .State}} · спроби: {{.Attempts}}{{if .FailureKind}} · {{failureLabel .FailureKind}}{{end}}<br>{{.Error}}</p>{{end}}</details>
 {{if and (or .Pending .KnowledgePending) (not .RateWithoutText)}}<script src="/static/progress.js" defer></script>{{end}}
 {{template "bottom" .}}
