@@ -40,6 +40,8 @@ type Fetcher struct {
 	YTDLP            string
 	YouTubeLanguages []string
 	Adapters         []SourceAdapter
+	adapters         adapterState
+	clock            func() time.Time
 	metadataResolver func(context.Context, string) (youtubeMetadata, error)
 
 	client   *http.Client
