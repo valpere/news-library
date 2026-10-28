@@ -97,3 +97,18 @@ func TestAssessDistinguishesTeaserFromCutoff(t *testing.T) {
 		t.Errorf("label %q", l)
 	}
 }
+
+func TestShownWarningDropsTheOldJudgmentSuffix(t *testing.T) {
+	cases := map[string]string{
+		"Виділений текст HTML; повноту оригіналу не підтверджено":                                                  "Виділений текст HTML",
+		"Повний текст статті з читалки Bytez (5877 слів); повноту оригіналу не підтверджено":                       "Повний текст статті з читалки Bytez (5877 слів)",
+		"Повноту підтвердив користувач 2026-10-28; витяг: Виділений текст HTML; повноту оригіналу не підтверджено": "Повноту підтвердив користувач 2026-10-28; витяг: Виділений текст HTML",
+		"Виділений текст HTML": "Виділений текст HTML",
+		"Субтитри: en":         "Субтитри: en",
+	}
+	for in, want := range cases {
+		if got := (Snapshot{Warning: in}).ShownWarning(); got != want {
+			t.Errorf("%q -> %q want %q", in, got, want)
+		}
+	}
+}
