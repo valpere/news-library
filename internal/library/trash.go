@@ -130,6 +130,7 @@ type TrashCard struct {
 	ID                                int64
 	URL, Title, Reason, MovedAt, Text string
 	HasText                           bool
+	PurgeBlockedBy                    string
 }
 
 func (s *Store) TrashCard(id int64) (TrashCard, error) {
@@ -138,6 +139,9 @@ func (s *Store) TrashCard(id int64) (TrashCard, error) {
 	err := s.DB.QueryRow(`SELECT i.id,i.original_url,i.title,t.reason,t.moved_at,coalesce(i.selected_snapshot,0)
  FROM items i JOIN trash_entries t ON t.item_id=i.id WHERE i.id=?`, id).Scan(&c.ID, &c.URL, &c.Title, &c.Reason, &c.MovedAt, &selected)
 	if err != nil {
+		return c, err
+	}
+	if c.PurgeBlockedBy, err = s.PurgeBlocker(id); err != nil {
 		return c, err
 	}
 	if selected > 0 {
@@ -202,5 +206,13 @@ func (w *Web) trashPage(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "Не вдалося прочитати помийку", 500)
 		return
 	}
-	w.render(rw, "trash", pageData{TrashEntries: entries})
+	notice := ""
+	if p, e := strconv.Atoi(r.URL.Query().Get("purged")); e == nil && r.URL.Query().Get("kept") != "" {
+		k, _ := strconv.Atoi(r.URL.Query().Get("kept"))
+		notice = "Видалено назавжди: " + strconv.Itoa(p) + "."
+		if k > 0 {
+			notice += " Лишилось " + strconv.Itoa(k) + ": їх згадано в нотатках-зв'язках чи добірках, їхня історія незмінна."
+		}
+	}
+	w.render(rw, "trash", pageData{TrashEntries: entries, TrashNotice: notice})
 }

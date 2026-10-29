@@ -305,7 +305,7 @@ func TestCacheV5MigrationPreservesBodyWithoutInventingValidators(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, statement := range []string{"DROP TABLE completeness_confirmations", "DROP TABLE search_judgments", "DROP TABLE search_events", "DROP VIEW active_items", "DROP TABLE trash_entries",
+	for _, statement := range []string{"DROP TABLE completeness_confirmations", "DROP TABLE search_judgments", "DROP TABLE search_events", "DROP VIEW active_items", "DROP TRIGGER IF EXISTS immutable_snapshot_delete; DROP TRIGGER IF EXISTS immutable_artifact_delete; DROP TRIGGER IF EXISTS immutable_rating_delete; DROP TRIGGER IF EXISTS immutable_filter_delete; DROP TRIGGER IF EXISTS immutable_feedback_delete; DROP TRIGGER IF EXISTS immutable_prediction_delete; DROP TRIGGER IF EXISTS immutable_checkpoint_delete; DROP TRIGGER IF EXISTS immutable_job_failure_delete; DROP TRIGGER IF EXISTS immutable_article_knowledge_delete; DROP TRIGGER IF EXISTS immutable_knowledge_failure_delete; DROP TABLE trash_entries",
 		"DROP TABLE chat_turns", "DROP TABLE chat_sessions", "DROP TABLE knowledge_batches",
 		"DROP TABLE knowledge_failures",
 		"DROP TABLE article_knowledge",
