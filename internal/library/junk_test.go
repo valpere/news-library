@@ -101,8 +101,8 @@ func TestWebJunkRequiresConfirmation(t *testing.T) {
 	if why, _ := s.TrashReason(id); !strings.Contains(why, "вода") {
 		t.Fatalf("reason %q", why)
 	}
-	if rw := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil); rw.Code != 404 {
-		t.Fatalf("trashed page: %d", rw.Code)
+	if rw := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil); rw.Code != 200 || !strings.Contains(rw.Body.String(), "/restore") {
+		t.Fatalf("trashed card: %d", rw.Code)
 	}
 	if body := webRequest(w, "GET", "/trash", nil, nil).Body.String(); !strings.Contains(body, "example.com/junk") || !strings.Contains(body, "вода") {
 		t.Fatalf("trash page:\n%s", body)

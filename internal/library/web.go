@@ -115,6 +115,8 @@ type pageData struct {
 	SourceDiagnosis           *SourceDiagnosis
 	DiagnosedDigestShown      bool
 	CanConfirmCompleteness    bool
+	TrashEntries              []TrashEntry
+	TrashCard                 *TrashCard
 	DigestIsTranslation       bool
 	CanRetryDigest            bool
 	ExportScript              template.JS
@@ -226,6 +228,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /trash", w.trashPage)
+	mux.HandleFunc("POST /items/{id}/restore", w.restoreFromTrash)
 	mux.HandleFunc("POST /items/{id}/junk", w.markJunk)
 	mux.HandleFunc("POST /items/{id}/completeness", w.confirmCompleteness)
 	mux.HandleFunc("GET /knowledge-batch", w.knowledgeBatchPage)
@@ -384,6 +387,10 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 	}
 	i, err := w.Store.Item(id)
 	if errors.Is(err, sql.ErrNoRows) {
+		if card, e := w.Store.TrashCard(id); e == nil {
+			w.render(rw, "trashed", pageData{TrashCard: &card})
+			return
+		}
 		http.NotFound(rw, r)
 		return
 	}

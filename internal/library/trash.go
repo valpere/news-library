@@ -3,8 +3,8 @@ package library
 import (
 	"database/sql"
 	"errors"
-	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -124,7 +124,77 @@ func (s *Store) Trash() ([]TrashEntry, error) {
 	return entries, rows.Err()
 }
 
-var trashTemplate = template.Must(template.New("trash").Parse(`<!doctype html><html lang="uk"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Помийка — бібліотека</title><main><a href="/">До чату</a><h1>Помийка</h1><p>Ці URL не беруть участі в роботі бібліотеки. Повторне додавання розпізнається без нової обробки.</p>{{if .}}<table><thead><tr><th>№</th><th>Посилання</th><th>Причина</th><th>Перенесено</th></tr></thead><tbody>{{range .}}<tr><td>{{.ID}}</td><td><a href="{{.URL}}" rel="noreferrer">{{.URL}}</a></td><td>{{.Reason}}</td><td>{{.MovedAt}}</td></tr>{{end}}</tbody></table>{{else}}<p>Помийка порожня.</p>{{end}}</main></html>`))
+// TrashCard is what the trash shows for one material: where it came from, why it
+// was moved and the text kept, so the user can decide to restore it.
+type TrashCard struct {
+	ID                                int64
+	URL, Title, Reason, MovedAt, Text string
+	HasText                           bool
+}
+
+func (s *Store) TrashCard(id int64) (TrashCard, error) {
+	var c TrashCard
+	var selected int64
+	err := s.DB.QueryRow(`SELECT i.id,i.original_url,i.title,t.reason,t.moved_at,coalesce(i.selected_snapshot,0)
+ FROM items i JOIN trash_entries t ON t.item_id=i.id WHERE i.id=?`, id).Scan(&c.ID, &c.URL, &c.Title, &c.Reason, &c.MovedAt, &selected)
+	if err != nil {
+		return c, err
+	}
+	if selected > 0 {
+		snap, e := s.Snapshot(selected)
+		if e != nil {
+			return c, e
+		}
+		c.Text, c.HasText = snap.Text, true
+		if c.Title == "" {
+			c.Title = snap.Title
+		}
+	}
+	return c, nil
+}
+
+// RestoreFromTrash brings a material back to the active collection. Only the
+// trash entry goes away: texts, digests and the rating history, including the
+// zero rating a junk verdict recorded, stay as they were. The search index entry
+// is rebuilt from the selected text.
+func (s *Store) RestoreFromTrash(id int64) error {
+	card, err := s.TrashCard(id)
+	if err != nil {
+		return err
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`DELETE FROM trash_entries WHERE item_id=?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return sql.ErrNoRows
+	}
+	if _, err = tx.Exec(`INSERT INTO item_fts(rowid,title,text,url) VALUES(?,?,?,(SELECT canonical_url FROM items WHERE id=?))`, id, card.Title, card.Text, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (w *Web) restoreFromTrash(rw http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	if err = w.Store.RestoreFromTrash(id); errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(rw, r)
+		return
+	} else if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(rw, r, "/items/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+}
 
 func (w *Web) trashPage(rw http.ResponseWriter, r *http.Request) {
 	entries, err := w.Store.Trash()
@@ -132,6 +202,5 @@ func (w *Web) trashPage(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "Не вдалося прочитати помийку", 500)
 		return
 	}
-	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = trashTemplate.Execute(rw, entries)
+	w.render(rw, "trash", pageData{TrashEntries: entries})
 }
