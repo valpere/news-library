@@ -37,6 +37,14 @@ make build
 ./build/news-library -help
 ```
 
+Щоденна Telegram-добірка працює лише поки сервер запущений, тож його варто тримати як
+користувацьку службу systemd (`~/.config/systemd/user/news-library.service`, поза репозиторієм:
+`WorkingDirectory` — корінь проєкту, `ExecStart` — `build/news-library`, `Restart=on-failure`,
+лог у `tmp/site/agent.log`, `systemctl --user enable --now news-library`). Після `make build`
+перезапуск — `systemctl --user restart news-library`; статус — `systemctl --user status news-library`.
+`minions/site_ctl.mjs` лишається для ручного запуску без служби: не змішуйте їх, поки служба
+активна.
+
 Локальні налаштування читаються з `./.env`; зразок — [.env.example](.env.example).
 Наявний файл збережіть; переносіть лише потрібні відсутні параметри.
 Пріоритет: flags → process environment → `.env` → defaults.
