@@ -18,7 +18,7 @@ func TestUsefulnessScaleAndLegacyMigration(t *testing.T) {
 	if err := s.Rate(old, 95, nil, nil, "old judgment"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DB.Exec("DROP TABLE completeness_confirmations; DROP TABLE search_judgments; DROP TABLE search_events; DROP VIEW active_items; DROP TABLE trash_entries; ALTER TABLE rating_events DROP COLUMN scale; PRAGMA user_version=13"); err != nil {
+	if _, err := s.DB.Exec("DROP TABLE completeness_confirmations; DROP TABLE search_judgments; DROP TABLE search_events; DROP VIEW active_items; DROP TRIGGER IF EXISTS immutable_snapshot_delete; DROP TRIGGER IF EXISTS immutable_artifact_delete; DROP TRIGGER IF EXISTS immutable_rating_delete; DROP TRIGGER IF EXISTS immutable_filter_delete; DROP TRIGGER IF EXISTS immutable_feedback_delete; DROP TRIGGER IF EXISTS immutable_prediction_delete; DROP TRIGGER IF EXISTS immutable_checkpoint_delete; DROP TRIGGER IF EXISTS immutable_job_failure_delete; DROP TRIGGER IF EXISTS immutable_article_knowledge_delete; DROP TRIGGER IF EXISTS immutable_knowledge_failure_delete; DROP TABLE trash_entries; ALTER TABLE rating_events DROP COLUMN scale; PRAGMA user_version=13"); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(s.Files.Root, "library.sqlite")

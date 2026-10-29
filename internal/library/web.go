@@ -116,6 +116,7 @@ type pageData struct {
 	DiagnosedDigestShown      bool
 	CanConfirmCompleteness    bool
 	TrashEntries              []TrashEntry
+	TrashNotice               string
 	TrashCard                 *TrashCard
 	DigestIsTranslation       bool
 	CanRetryDigest            bool
@@ -229,6 +230,8 @@ func (w *Web) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /trash", w.trashPage)
 	mux.HandleFunc("POST /items/{id}/restore", w.restoreFromTrash)
+	mux.HandleFunc("POST /items/{id}/purge", w.purgeTrashed)
+	mux.HandleFunc("POST /trash/purge", w.clearTrash)
 	mux.HandleFunc("POST /items/{id}/junk", w.markJunk)
 	mux.HandleFunc("POST /items/{id}/completeness", w.confirmCompleteness)
 	mux.HandleFunc("GET /knowledge-batch", w.knowledgeBatchPage)
