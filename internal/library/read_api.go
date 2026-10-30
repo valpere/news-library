@@ -134,18 +134,6 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, "source unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if raw := r.URL.Query().Get("source"); raw != "" {
-			sid, e := strconv.ParseInt(raw, 10, 64)
-			if e != nil {
-				http.Error(rw, "invalid source", 400)
-				return
-			}
-			snapshot, err = w.Store.Snapshot(sid)
-			if err != nil || snapshot.ItemID != id {
-				http.NotFound(rw, r)
-				return
-			}
-		}
 		payload["source_id"] = snapshot.ID
 		payload["selected_source_id"] = item.Selected.Int64
 		payload["confidence"] = nil

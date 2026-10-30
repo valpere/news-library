@@ -80,7 +80,6 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='news-library-knowledge-s
                 page.get_by_role('link',name='Збереження і відновлення черги',exact=True).click()
                 assert 'автор: модель fixture:cloud' in page.locator('body').inner_text()
                 assert 'Підстава зв’язку' in page.locator('.connection-body').inner_text()
-                assert page.locator('a[href*="?source="]').count() == 2
             page.goto(f'{origin}/items/{ids[1]}')
             with page.expect_download() as info:
                 page.get_by_role('link',name='Markdown із метаданими',exact=True).click()

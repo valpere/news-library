@@ -40,26 +40,10 @@ func (s *Store) FeedbackHistory(itemID, digestID int64) ([]DigestFeedback, error
 	}
 	return result, rows.Err()
 }
-func (s *Store) DigestsForSnapshot(sid int64) ([]Digest, error) {
-	rows, err := s.DB.Query("SELECT id,item_id,snapshot_id,job_id,model,actual_model,provider,prompt_version,created_at FROM generated_artifacts WHERE snapshot_id=? ORDER BY id DESC", sid)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := []Digest{}
-	for rows.Next() {
-		var d Digest
-		if err = rows.Scan(&d.ID, &d.ItemID, &d.SnapshotID, &d.JobID, &d.Model, &d.ActualModel, &d.Provider, &d.PromptVersion, &d.CreatedAt); err != nil {
-			return nil, err
-		}
-		result = append(result, d)
-	}
-	return result, rows.Err()
-}
 
-// Regeneration is an explicit action with a new job/artifact; previous digests
-// and their rating/feedback references remain intact.
-func (s *Store) RegenerateDigest(itemID, snapshotID int64) error {
+// Regeneration is an explicit action with a new job; the new digest replaces the
+// current one (and its feedback) when it completes.
+func (s *Store) RegenerateDigest(itemID int64) error {
 	if s.DigestConfig == nil {
 		return errors.New("генерацію не налаштовано")
 	}
@@ -73,9 +57,10 @@ func (s *Store) RegenerateDigest(itemID, snapshotID int64) error {
 	if err = tx.QueryRow("SELECT selected_snapshot,filter_state FROM items WHERE id=?", itemID).Scan(&selected, &filtered); err != nil {
 		return err
 	}
-	if !selected.Valid || selected.Int64 != snapshotID {
-		return errors.New("повторна генерація доступна для поточної версії тексту")
+	if !selected.Valid {
+		return errors.New("спершу потрібен текст матеріалу")
 	}
+	snapshotID := selected.Int64
 	if filtered == "rejected" {
 		return errors.New("спершу явно поверніть матеріал до обробки")
 	}

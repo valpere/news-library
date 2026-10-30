@@ -77,19 +77,13 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
             page.get_by_role('button',name='Зберегти відгук',exact=True).click()
             assert 'корисність: Низька' in page.locator('body').inner_text()
             assert Gateway.calls == 1
-            page.get_by_role('button',name='Створити нову версію дайджесту',exact=True).click()
+            page.get_by_role('button',name='Перегенерувати дайджест',exact=True).click()
             page.get_by_text('Оновлюється дайджест.',exact=False).wait_for()
             page.locator('#processing[data-pending="false"]').wait_for(state='attached',timeout=15000)
             next_digest = page.locator('input[name=digest]').first.input_value()
             assert next_digest != first_digest
             assert Gateway.calls == 2
-            page.get_by_text('Історія оцінок (1)',exact=True).click()
-            assert f'дайджест: #{first_digest}' in page.locator('body').inner_text()
-            page.get_by_text('Версії дайджесту (2)',exact=True).click()
-            page.locator(f'a[href$="&digest={first_digest}"]').click()
-            page.get_by_text('Якість дайджесту',exact=True).click()
-            assert 'Fixture feedback' in page.locator('body').inner_text()
-            assert page.locator('input[name=digest]').first.input_value() == first_digest
+            assert 'Fixture feedback' not in page.locator('body').inner_text()
             page.screenshot(path=str(root/'tmp/smoke-m2.png'),full_page=True)
             page.goto(origin+'/browse')
             page.locator('input[name=confidence_min]').fill('70')

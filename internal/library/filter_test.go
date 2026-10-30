@@ -127,7 +127,7 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	if e = s.RetryDigest(id); e == nil {
 		t.Fatal("digest retry bypassed reject")
 	}
-	if e = s.RegenerateDigest(id, snapshots[0].ID); e == nil {
+	if e = s.RegenerateDigest(id); e == nil {
 		t.Fatal("regeneration bypassed reject")
 	}
 	before, _ := s.FilterDecisions(id)

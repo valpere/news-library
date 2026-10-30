@@ -190,11 +190,16 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 			return err
 		}
 	}
+	newID, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	erased, err := s.eraseEarlierDigests(tx, j.SnapshotID.Int64, newID)
+	if err != nil {
+		return err
+	}
 	if s.KnowledgeEnabled && !translation {
-		did, e := result.LastInsertId()
-		if e != nil {
-			return e
-		}
+		did := newID
 		if err = s.queueKnowledge(tx, j.ItemID, j.SnapshotID.Int64, did, j.Model); err != nil {
 			return err
 		}
@@ -205,7 +210,11 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	if _, err = tx.Exec(`UPDATE items SET state='ready',error='' WHERE id=? AND selected_snapshot=?`, j.ItemID, j.SnapshotID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.removeUnusedFiles(erased) // best effort: the rows are already gone
+	return nil
 }
 
 const digestSelect = `SELECT id,item_id,snapshot_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count FROM generated_artifacts`

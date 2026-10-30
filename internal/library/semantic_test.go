@@ -206,13 +206,6 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	if rw.Code != 200 {
 		t.Fatal(rw.Code)
 	}
-	other := add(t, s, "https://example.com/other")
-	s.Manual(other, "unrelated")
-	otherItem, _ := s.Item(other)
-	rw = webRequest(w, "GET", "/api/read/items/1/context?source="+fmtID(otherItem.Selected.Int64), nil, auth)
-	if rw.Code != 404 {
-		t.Fatal("foreign source disclosed", rw.Code)
-	}
 	for _, path := range []string{"/api/read/items/1", "/items/1/read", "/reindex"} {
 		rw = webRequest(w, "POST", path, url.Values{"csrf": {w.CSRF}, "read": {"1"}}, auth)
 		if rw.Code < 400 {

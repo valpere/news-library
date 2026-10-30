@@ -77,7 +77,7 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 		t.Fatal("prediction card", rw.Code)
 	}
 	enablePredictions(t, s, "Different fixture profile")
-	if e = s.RegenerateDigest(b, db.SnapshotID); e != nil {
+	if e = s.RegenerateDigest(b); e != nil {
 		t.Fatal(e)
 	}
 	j := claim(t, s)
@@ -87,9 +87,8 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 	if e = s.CompleteDigest(j, Digest{Markdown: fixtureDigest, ActualModel: j.Model, Provider: "fixture", Prediction: &InterestPrediction{Probability: .1, Reason: "A changed fixture profile predicts less interest", Profile: j.Interests}}); e != nil {
 		t.Fatal(e)
 	}
-	old, e := s.Digest(db.ID, b)
-	if e != nil || old.Prediction.Probability != .9 || old.Prediction.Profile != "Fixture interests: Go and SQLite" {
-		t.Fatal("old prediction overwritten", e)
+	if _, e = s.Digest(db.ID, b); e == nil {
+		t.Fatal("replaced digest and its prediction kept")
 	}
 	i, _ = s.Item(b)
 	r, _ := s.Ratings(b)
