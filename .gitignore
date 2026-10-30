@@ -49,3 +49,6 @@ tmp/
 .agents
 session-log.md
 experiments/
+
+# Claude Code per-project local layer (hooks, local settings, session log and index)
+.claude/
