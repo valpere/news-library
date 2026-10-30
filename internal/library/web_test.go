@@ -64,9 +64,8 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 	vs, _ := s.Snapshots(id)
 	sid := strconv.FormatInt(vs[0].ID, 10)
 	post(t, w, base+"rating", url.Values{"score": {"3"}, "source": {sid}, "reason": {"useful"}})
-	post(t, w, base+"placement", url.Values{"placement": {"library"}})
 	post(t, w, base+"tags", url.Values{"tags": {"go, reading"}})
-	rw = webRequest(w, "GET", "/?q=knowledge&placement=library&rating=3&tags=go&read=0&sort=relevance", nil, nil)
+	rw = webRequest(w, "GET", "/?q=knowledge&rating=3&tags=go&read=0&sort=relevance", nil, nil)
 	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "/items/1") {
 		t.Fatal("UI search", rw.Code, rw.Body.String())
 	}
@@ -92,7 +91,7 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 	}
 	post(t, w, base+"read", url.Values{"read": {"1"}})
 	i, _ = s.Item(id)
-	if !i.Read || i.Placement != "library" || i.Score.Int64 != 0 {
+	if !i.Read || i.Score.Int64 != 0 {
 		t.Fatal("UI independent actions")
 	}
 	rw = webRequest(w, "GET", "/items/1?source="+sid, nil, nil)

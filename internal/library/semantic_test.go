@@ -60,7 +60,6 @@ func TestSemanticSynonymFiltersHybridAndOfflineFTS(t *testing.T) {
 	if err := s.Manual(id, "database survives restart without losing data"); err != nil {
 		t.Fatal(err)
 	}
-	s.SetPlacement(id, "deferred")
 	s.SetTags(id, []string{"systems"})
 	other := add(t, s, "https://example.com/weather")
 	s.Manual(other, "weather forecast")
@@ -71,7 +70,7 @@ func TestSemanticSynonymFiltersHybridAndOfflineFTS(t *testing.T) {
 		t.Fatal("zero rating filter", zero, e)
 	}
 	before := f.calls
-	got, err := semantic.Search(context.Background(), Filters{Query: "persistent storage", Placement: "deferred", Tags: []string{"systems"}, Rating: "unrated"}, "vector")
+	got, err := semantic.Search(context.Background(), Filters{Query: "persistent storage", Tags: []string{"systems"}, Rating: "unrated"}, "vector")
 	if err != nil || len(got.Items) != 1 || got.Items[0].ID != id || got.Items[0].MatchSnapshot == 0 || !strings.Contains(got.Items[0].MatchSnippet, "database") {
 		t.Fatal(got, err)
 	}
@@ -93,7 +92,7 @@ func TestSemanticSynonymFiltersHybridAndOfflineFTS(t *testing.T) {
 		t.Fatal("FTS calls embeddings", got, err)
 	}
 	item, _ := s.Item(id)
-	if item.Read || item.Score.Valid || item.Placement != "deferred" {
+	if item.Read || item.Score.Valid {
 		t.Fatal("search mutated human state")
 	}
 	f.fail = false
@@ -175,7 +174,6 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	w.ReadToken = token
 	id := add(t, s, "https://example.com/read")
 	s.Manual(id, strings.Repeat("Український текст. ", 400))
-	s.SetPlacement(id, "deferred")
 	item, _ := s.Item(id)
 	sid := item.Selected.Int64
 	s.Rate(id, 3, &sid, nil, "historical")
@@ -192,7 +190,7 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	}
 	var got map[string]any
 	json.Unmarshal(rw.Body.Bytes(), &got)
-	if got["placement"] != "deferred" || got["truncated"] != true || got["context_kind"] != "source_excerpt" || got["rating"] != float64(3) {
+	if got["truncated"] != true || got["context_kind"] != "source_excerpt" || got["rating"] != float64(3) {
 		t.Fatal(got)
 	}
 	history := got["rating_history"].([]any)[0].(map[string]any)
@@ -224,7 +222,7 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 			t.Fatal("agent mutation accepted", path, rw.Code)
 		}
 	}
-	rw = webRequest(w, "GET", "/api/read/search?q=Український&placement=deferred", nil, auth)
+	rw = webRequest(w, "GET", "/api/read/search?q=Український", nil, auth)
 	if rw.Code != 200 {
 		t.Fatal(rw.Code)
 	}

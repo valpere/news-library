@@ -1,4 +1,4 @@
-"""Offline M4 preview and real CLI backup/restore acceptance; no Telegram calls."""
+"""Offline M4 real CLI backup/restore acceptance."""
 import sqlite3
 import json
 import os
@@ -50,18 +50,11 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='m4-smoke-') as directory
             page.get_by_role('button',name='Додати URL',exact=True).click()
             page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)
             page.get_by_text('Вставити текст вручну',exact=True).click()
-            page.locator('textarea[name=text]').fill('Saved source for backup and Telegram preview <script>unsafe()</script>.')
+            page.locator('textarea[name=text]').fill('Saved source for backup <script>unsafe()</script>.')
             page.get_by_role('button',name='Зберегти текст',exact=True).click()
             page.locator('#digest').wait_for(timeout=15000)
             page.locator('select[name=score]').select_option('2')
             page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
-            assert page.request.post(origin+'/items/1/placement',form={'placement':'deferred'},max_redirects=0).status==303
-            page.get_by_role('link',name='Telegram-добірки',exact=True).click()
-            assert 'Доставка вимкнена' in page.locator('body').inner_text()
-            page.get_by_role('button',name='Підготувати добірку',exact=True).click()
-            assert 'Попередній перегляд' in page.locator('h2').inner_text()
-            assert 'Безпечне відновлення' in page.locator('pre').inner_text()
-            assert page.get_by_role('button',name='Надіслати в Telegram',exact=True).count()==0
             assert Gateway.calls==1
             page.screenshot(path=str(root/'tmp/smoke-m4.png'),full_page=True)
             for command,args in [('backup',['-source',str(data),'-output',str(work/'backup')]),
@@ -72,15 +65,10 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='m4-smoke-') as directory
             try:
                 page.goto(restored_origin+'/items/1')
                 assert 'корисність: Низька' in page.locator('body').inner_text()
-                with sqlite3.connect(work/'restored'/'library.sqlite') as db:
-                    assert db.execute('SELECT placement FROM items WHERE id=1').fetchone()[0]=='deferred'
                 assert 'Фонове виконання призупинено' in page.locator('body').inner_text()
-                page.goto(restored_origin+'/deliveries/1')
-                assert 'Результат невідомий' in page.locator('h2').inner_text()
-                assert 'Безпечне відновлення' in page.locator('pre').inner_text()
                 assert Gateway.calls==1
             finally:stop(restored)
             browser.close()
     finally:stop(process)
 gateway.shutdown()
-print('PASS M4 browser/CLI: frozen digest preview with no send/generation, live backup+verify+restore, unchanged judgments and source, paused workers and quarantined old delivery. Fake cloud only.')
+print('PASS M4 browser/CLI: live backup+verify+restore, unchanged judgments and source, paused workers. Fake cloud only.')

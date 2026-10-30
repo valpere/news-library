@@ -25,7 +25,6 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 	item, _ := s.Item(id)
 	sid := item.Selected.Int64
 	s.Rate(id, 3, &sid, nil, "unknown date")
-	s.SetPlacement(id, "deferred")
 	// A pending regeneration with a saved digest checkpoint must survive.
 	s.RegenerateDigest(id, sid)
 	pending := claim(t, s)
@@ -53,7 +52,7 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 	}
 	defer restored.Close()
 	item, err = restored.Item(id)
-	if err != nil || item.Score.Int64 != 3 || item.Placement != "deferred" || !RestoredPaused(target) {
+	if err != nil || item.Score.Int64 != 3 || !RestoredPaused(target) {
 		t.Fatal(item, err)
 	}
 	history, _ := restored.Ratings(id)

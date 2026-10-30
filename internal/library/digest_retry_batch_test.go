@@ -95,7 +95,7 @@ func TestBatchDigestRetryHistoryAndDuplicateSubmission(t *testing.T) {
 		}
 	}
 	after, _ := s.Item(a.ItemID)
-	if after.Read != before.Read || after.Score != before.Score || after.Placement != before.Placement || after.Selected != before.Selected {
+	if after.Read != before.Read || after.Score != before.Score || after.Selected != before.Selected {
 		t.Fatal(before, after)
 	}
 	completeFixtureDigest(t, s)

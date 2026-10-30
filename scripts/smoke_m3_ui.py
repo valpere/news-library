@@ -57,7 +57,6 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
             page.get_by_text('Вставити текст вручну',exact=True).click()
             page.locator('textarea[name=text]').fill('A database keeps information after a restart. <script>unsafe()</script>')
             page.get_by_role('button',name='Зберегти текст',exact=True).click()
-            assert page.request.post(origin+'/items/1/placement',form={'placement':'deferred'},max_redirects=0).status==303
             with sqlite3.connect(Path(data)/'library.sqlite') as db:
                 deadline=time.monotonic()+15
                 while time.monotonic()<deadline:
@@ -67,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
             page.goto(origin+'/browse')
             page.locator('input[name=q]').fill('persistent storage')
             page.locator('select[name=mode]').select_option('vector')
-            page.goto(origin+'/browse?placement=deferred&q=persistent+storage&mode=vector')
+            page.goto(origin+'/browse?q=persistent+storage&mode=vector')
             page.get_by_role('button',name='Знайти',exact=True).click()
             assert page.locator('article').count()==1
             assert 'A database' in page.locator('article').inner_text()
@@ -77,7 +76,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
             assert page.request.get(origin+'/api/read/items/1/context').status==401
             before_read=Gateway.calls
             context=page.request.get(origin+'/api/read/items/1/context',headers=auth)
-            assert context.status==200 and context.json()['placement']=='deferred'
+            assert context.status==200
             assert context.json()['context_kind']=='source_excerpt'
             assert Gateway.calls==before_read
             assert page.request.post(origin+'/items/1/read',headers=auth,data={'read':'1'}).status==403
@@ -88,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
             assert 'Пошук за змістом недоступний' in page.locator('body').inner_text()
             assert page.locator('article').count()==1
             with sqlite3.connect(Path(data)/'library.sqlite') as db:
-                assert db.execute('SELECT is_read,placement FROM items').fetchone()==(0,'deferred')
+                assert db.execute('SELECT is_read FROM items').fetchone()==(0,)
                 assert db.execute('SELECT count(*) FROM rating_events').fetchone()[0]==0
                 assert db.execute('SELECT count(*) FROM generated_artifacts').fetchone()[0]==0
             browser.close()

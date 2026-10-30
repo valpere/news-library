@@ -13,7 +13,7 @@ import (
 
 func requestFilters(r *http.Request) Filters {
 	q := r.URL.Query()
-	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), Placement: q.Get("placement"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
+	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
 	for _, tag := range strings.Split(q.Get("tags"), ",") {
 		if tag = strings.TrimSpace(tag); tag != "" {
 			f.Tags = append(f.Tags, tag)
@@ -275,7 +275,7 @@ func readItem(item Item) map[string]any {
 	if item.Confidence.Valid {
 		confidence = item.Confidence.Float64
 	}
-	return map[string]any{"id": item.ID, "url": item.URL, "title": item.Title, "placement": item.Placement, "read": item.Read, "rating": score, "rating_scale": item.ScoreScale, "rating_label": ratingLabel(item.Score, item.ScoreScale), "confidence": confidence, "filter_state": item.FilterState, "state": item.State, "source_id": source, "tags": item.Tags, "snippet": item.MatchSnippet, "snippet_source": item.MatchSnapshot, "start_byte": item.MatchStart, "end_byte": item.MatchEnd}
+	return map[string]any{"id": item.ID, "url": item.URL, "title": item.Title, "read": item.Read, "rating": score, "rating_scale": item.ScoreScale, "rating_label": ratingLabel(item.Score, item.ScoreScale), "confidence": confidence, "filter_state": item.FilterState, "state": item.State, "source_id": source, "tags": item.Tags, "snippet": item.MatchSnippet, "snippet_source": item.MatchSnapshot, "start_byte": item.MatchStart, "end_byte": item.MatchEnd}
 }
 func (w *Web) search(r *http.Request, f Filters, mode string) (SearchResult, error) {
 	semantic := w.Semantic

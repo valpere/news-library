@@ -54,11 +54,6 @@ func run() error {
 		if e = store.Manual(id, text); e != nil {
 			return e
 		}
-		if n == 0 {
-			if e = store.SetPlacement(id, "deferred"); e != nil {
-				return e
-			}
-		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
@@ -82,7 +77,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if item.Read || item.Score.Valid || item.Placement != "deferred" {
+	if item.Read || item.Score.Valid {
 		return fmt.Errorf("human state changed")
 	}
 	revision, err := bge.Revision(ctx)

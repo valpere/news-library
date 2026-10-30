@@ -34,7 +34,7 @@ type Item struct {
 	MatchSnapshot                                             int64
 	MatchStart, MatchEnd                                      int
 	ID                                                        int64
-	OriginalURL, URL, Title, AddedAt, Placement, State, Error string
+	OriginalURL, URL, Title, AddedAt, State, Error string
 	Read                                                      bool
 	Selected                                                  sql.NullInt64
 	Score                                                     sql.NullInt64
@@ -75,7 +75,7 @@ type Job struct {
 type Filters struct {
 	Usefulness                                             string
 	Category                                               string
-	Query, Placement, Rating, Read, State, Sort, Direction string
+	Query, Rating, Read, State, Sort, Direction string
 	Filter, ConfidenceMin, ConfidenceMax                   string
 	Tags                                                   []string
 }
@@ -471,12 +471,6 @@ func (s *Store) rateShown(id, score int64, source, digest *int64, assessed *time
 	}
 	return s.update("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason,scale) SELECT id,?,?,?,?,?,?,? FROM active_items WHERE id=?", score, nowUTC(), at, sid, did, reason, scale, id)
 }
-func (s *Store) SetPlacement(id int64, value string) error {
-	if value != "inbox" && value != "library" && value != "deferred" {
-		return errors.New("невідоме розміщення")
-	}
-	return s.update("UPDATE items SET placement=? WHERE id=? AND id IN (SELECT id FROM active_items)", value, id)
-}
 func (s *Store) SetRead(id int64, value bool) error {
 	return s.update("UPDATE items SET is_read=? WHERE id=? AND id IN (SELECT id FROM active_items)", value, id)
 }
@@ -523,12 +517,12 @@ func (s *Store) SetTags(id int64, tags []string) error {
 }
 
 const confidenceExpr = `(SELECT p.probability FROM generated_artifacts a LEFT JOIN interest_predictions p ON p.digest_id=a.id WHERE a.snapshot_id=i.selected_snapshot ORDER BY a.id DESC LIMIT 1)`
-const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.placement,i.state,i.error,i.is_read,i.selected_snapshot,(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),coalesce((SELECT scale FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),''),(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
+const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.state,i.error,i.is_read,i.selected_snapshot,(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),coalesce((SELECT scale FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),''),(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var i Item
 	var tags sql.NullString
-	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.Placement, &i.State, &i.Error, &i.Read, &i.Selected, &i.Score, &i.ScoreScale, &tags, &i.FilterState, &i.Confidence)
+	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.State, &i.Error, &i.Read, &i.Selected, &i.Score, &i.ScoreScale, &tags, &i.FilterState, &i.Confidence)
 	i.Tags = tags.String
 	return i, err
 }
@@ -583,7 +577,7 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		query += " AND (i.id IN (SELECT rowid FROM item_fts WHERE item_fts MATCH ?) OR EXISTS(SELECT 1 FROM article_knowledge k WHERE k.item_id=i.id AND k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND instr(k.search_text,?)>0))"
 		args = append(args, strings.Join(terms, " AND "), strings.ToLower(f.Query))
 	}
-	for _, pair := range []struct{ v, column string }{{f.Placement, "i.placement"}, {f.State, "i.state"}} {
+	for _, pair := range []struct{ v, column string }{{f.State, "i.state"}} {
 		if pair.v != "" {
 			query += " AND " + pair.column + "=?"
 			args = append(args, pair.v)

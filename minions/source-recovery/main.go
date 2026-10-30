@@ -320,7 +320,7 @@ func humanState(db *sql.DB) (string, error) {
 	if e := db.QueryRow(`SELECT coalesce(json_group_array(json_array(id,item_id,score,scale,recorded_at,assessed_at,source_version_id,digest_id,reason)),'[]') FROM (SELECT * FROM rating_events ORDER BY id)`).Scan(&a); e != nil {
 		return "", e
 	}
-	if e := db.QueryRow(`SELECT coalesce(json_group_array(json_array(id,is_read,placement)),'[]') FROM (SELECT id,is_read,placement FROM items ORDER BY id)`).Scan(&b); e != nil {
+	if e := db.QueryRow(`SELECT coalesce(json_group_array(json_array(id,is_read)),'[]') FROM (SELECT id,is_read FROM items ORDER BY id)`).Scan(&b); e != nil {
 		return "", e
 	}
 	return a + b, nil

@@ -40,10 +40,9 @@ func TestUsefulnessFiltersDoNotReinterpretLegacyNumbers(t *testing.T) {
 
 func TestChatUsefulnessExplicitLabelsAndAllUnread(t *testing.T) {
 	s, w := testWeb(t)
-	for n, placement := range []string{"inbox", "library", "deferred"} {
+	for n := range 3 {
 		id := add(t, s, fmt.Sprintf("https://example.com/usefulness/%d", n))
 		manual(t, s, id, "Useful displayed source")
-		s.SetPlacement(id, placement)
 	}
 	calls := 0
 	w.ChatPlanner = chatPlannerFunc(func(_ context.Context, _ string, _ ChatPlanInput) (ChatCommand, error) {
@@ -51,8 +50,8 @@ func TestChatUsefulnessExplicitLabelsAndAllUnread(t *testing.T) {
 		return ChatCommand{Action: "item", ItemAction: "rate", Index: 1, Usefulness: "Висока"}, nil
 	})
 	session, reply := chatTurn(t, w, ChatSession{}, "", "inbox", "")
-	if len(reply.Cards) != 3 || session.State.Filters.Placement != "" {
-		t.Fatal("unread excluded placement", reply)
+	if len(reply.Cards) != 3 {
+		t.Fatal("unread excluded", reply)
 	}
 	session, reply = chatTurn(t, w, session, "", "item", "rate:1")
 	if reply.Kind != "question" || len(reply.Actions) != 7 {
