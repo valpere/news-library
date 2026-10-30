@@ -9,16 +9,14 @@ import (
 	"testing"
 )
 
-func TestUsefulnessFiltersDoNotReinterpretLegacyNumbers(t *testing.T) {
+func TestUsefulnessFilterAndSort(t *testing.T) {
 	s := testStore(t)
-	old := add(t, s, "https://example.com/old-four")
-	s.Rate(old, 4, nil, nil, "")
-	fresh := add(t, s, "https://example.com/new-four")
-	s.RateUsefulnessShown(fresh, 4, nil, nil, nil, "")
+	four := add(t, s, "https://example.com/new-four")
+	s.Rate(four, 4, nil)
 	zero := add(t, s, "https://example.com/zero")
-	s.RateUsefulnessShown(zero, 0, nil, nil, nil, "")
+	s.Rate(zero, 0, nil)
 	unknown := add(t, s, "https://example.com/unknown")
-	for value, want := range map[string]int64{"4": fresh, "0": zero, "legacy": old, "unrated": unknown} {
+	for value, want := range map[string]int64{"4": four, "0": zero, "unrated": unknown} {
 		rows, err := s.Search(Filters{Usefulness: value})
 		if err != nil || len(rows) != 1 || rows[0].ID != want {
 			t.Fatal(value, rows, err)
@@ -26,11 +24,8 @@ func TestUsefulnessFiltersDoNotReinterpretLegacyNumbers(t *testing.T) {
 	}
 	for _, direction := range []string{"asc", "desc"} {
 		rows, err := s.Search(Filters{Sort: "usefulness", Direction: direction})
-		if err != nil || len(rows) != 4 {
-			t.Fatal(err)
-		}
-		if rows[0].ScoreScale != UsefulnessScale || rows[1].ScoreScale != UsefulnessScale || rows[2].ScoreScale == UsefulnessScale || rows[3].ScoreScale == UsefulnessScale {
-			t.Fatal("mixed scales", rows)
+		if err != nil || len(rows) != 3 || rows[2].ID != unknown {
+			t.Fatal(err, rows)
 		}
 	}
 	if _, err := s.Search(Filters{Usefulness: "7"}); err == nil {
@@ -59,12 +54,12 @@ func TestChatUsefulnessExplicitLabelsAndAllUnread(t *testing.T) {
 	}
 	session, reply = chatTurn(t, w, session, "Дуже висока", "", "")
 	history, err := s.Ratings(session.State.Cards[0].Item.ID)
-	if err != nil || len(history) != 1 || history[0].Score != 5 || history[0].Scale != UsefulnessScale || !history[0].AssessedAt.Valid || calls != 0 {
+	if err != nil || len(history) != 1 || history[0].Score != 5 || !history[0].AssessedAt.Valid || calls != 0 {
 		t.Fatal(history, err, calls)
 	}
 	session, _ = chatTurn(t, w, session, "оціни другий матеріал: висока.", "", "")
 	history, _ = s.Ratings(session.State.Cards[1].Item.ID)
-	if len(history) != 1 || history[0].Score != 4 || history[0].Scale != UsefulnessScale || calls != 0 {
+	if len(history) != 1 || history[0].Score != 4 || calls != 0 {
 		t.Fatal(history, calls)
 	}
 	// A model-proposed label for a read-only request is never human judgment.
@@ -89,18 +84,13 @@ func TestWebUsefulnessAndReadAPIScale(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/scale-ui")
 	manual(t, s, id, "Shown source")
-	i, _ := s.Item(id)
-	sid := i.Selected.Int64
-	if err := s.Rate(id, 4, &sid, nil, "legacy"); err != nil {
-		t.Fatal(err)
-	}
+	post(t, w, fmt.Sprintf("/items/%d/rating", id), url.Values{"score": {"4"}, "unknown_date": {"1"}})
 	rw := webRequest(w, "GET", fmt.Sprintf("/items/%d", id), nil, nil)
-	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "Історична числова оцінка: 4") || strings.Contains(rw.Body.String(), "value=\"deferred\"") || strings.Contains(rw.Body.String(), ">Оцінити 2<") {
-		t.Fatal("old UI or missing legacy label")
+	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "корисність: Висока") || strings.Contains(rw.Body.String(), "value=\"deferred\"") || strings.Contains(rw.Body.String(), ">Оцінити 2<") {
+		t.Fatal("old UI or missing label")
 	}
-	post(t, w, fmt.Sprintf("/items/%d/rating", id), url.Values{"score": {"4"}, "scale": {UsefulnessScale}, "source": {fmtID(sid)}})
 	ratings, _ := s.Ratings(id)
-	if len(ratings) != 2 || ratings[0].Scale != UsefulnessScale || ratings[1].Scale != LegacyRatingScale || ratings[1].AssessedAt.Valid {
+	if len(ratings) != 1 || ratings[0].Score != 4 || ratings[0].AssessedAt.Valid {
 		t.Fatal(ratings)
 	}
 	w.ReadToken = strings.Repeat("r", 32)
@@ -109,11 +99,11 @@ func TestWebUsefulnessAndReadAPIScale(t *testing.T) {
 	if err := json.Unmarshal(rw.Body.Bytes(), &payload); err != nil || rw.Code != 200 {
 		t.Fatal(err, rw.Code)
 	}
-	if payload["rating_scale"] != UsefulnessScale || payload["rating_label"] != "Висока" {
+	if payload["rating"] != float64(4) || payload["rating_label"] != "Висока" {
 		t.Fatal(payload)
 	}
 	before := len(ratings)
-	rw = webRequest(w, "POST", fmt.Sprintf("/items/%d/rating", id), url.Values{"score": {"7"}, "scale": {UsefulnessScale}}, nil)
+	rw = webRequest(w, "POST", fmt.Sprintf("/items/%d/rating", id), url.Values{"score": {"7"}}, nil)
 	ratings, _ = s.Ratings(id)
 	if rw.Code != 400 || len(ratings) != before {
 		t.Fatal("invalid level mutated history")

@@ -11,7 +11,6 @@ type ChatCriteria struct {
 	Tags          *[]string `json:"tags,omitempty"`
 	Read          *string   `json:"read,omitempty"`
 	Usefulness    *string   `json:"usefulness,omitempty"`
-	Rating        *string   `json:"rating,omitempty"`
 	State         *string   `json:"state,omitempty"`
 	Filter        *string   `json:"filter,omitempty"`
 	ConfidenceMin *string   `json:"confidence_min,omitempty"`
@@ -99,11 +98,7 @@ type ChatFacet struct {
 
 func chatCriteriaLabels(f Filters, mode string) []string {
 	labels := []string{}
-	rating := f.Rating
-	if rating == "unrated" {
-		rating = "неоцінені"
-	}
-	for _, p := range []struct{ name, value string }{{"Тема", f.Query}, {"Категорія", f.Category}, {"Читання", map[string]string{"0": "непрочитані", "1": "прочитані"}[f.Read]}, {"Числова оцінка (сумісність)", rating}, {"Корисність", usefulnessFilterLabel(f.Usefulness)}, {"Стан", map[string]string{"queued": "у черзі", "fetching": "отримання тексту", "ready": "готові", "enriching": "аналізуються", "needs_input": "потрібен текст", "retry_wait": "очікують повтору", "digest_failed": "дайджест не завершено", "digest_retry_wait": "очікують повтору дайджесту", "filtered": "відсіяні правилами", "failed": "помилка"}[f.State]}, {"Правила", map[string]string{"passed": "пройшли відбір", "rejected": "відсіяні", "overridden": "повернуті до обробки", "not_checked": "ще не перевірені"}[f.Filter]}, {"Прогноз від, %", f.ConfidenceMin}, {"Прогноз до, %", f.ConfidenceMax}, {"Сортування", map[string]string{"added": "дата додавання", "rating": "числова оцінка", "usefulness": "особиста корисність", "confidence": "прогноз моделі", "relevance": "відповідність темі"}[f.Sort]}, {"Порядок", map[string]string{"asc": "зростання", "desc": "спадання"}[f.Direction]}} {
+	for _, p := range []struct{ name, value string }{{"Тема", f.Query}, {"Категорія", f.Category}, {"Читання", map[string]string{"0": "непрочитані", "1": "прочитані"}[f.Read]}, {"Корисність", usefulnessFilterLabel(f.Usefulness)}, {"Стан", map[string]string{"queued": "у черзі", "fetching": "отримання тексту", "ready": "готові", "enriching": "аналізуються", "needs_input": "потрібен текст", "retry_wait": "очікують повтору", "digest_failed": "дайджест не завершено", "digest_retry_wait": "очікують повтору дайджесту", "filtered": "відсіяні правилами", "failed": "помилка"}[f.State]}, {"Правила", map[string]string{"passed": "пройшли відбір", "rejected": "відсіяні", "overridden": "повернуті до обробки", "not_checked": "ще не перевірені"}[f.Filter]}, {"Прогноз від, %", f.ConfidenceMin}, {"Прогноз до, %", f.ConfidenceMax}, {"Сортування", map[string]string{"added": "дата додавання", "usefulness": "особиста корисність", "confidence": "прогноз моделі", "relevance": "відповідність темі"}[f.Sort]}, {"Порядок", map[string]string{"asc": "зростання", "desc": "спадання"}[f.Direction]}} {
 		if p.value != "" {
 			labels = append(labels, p.name+": "+p.value)
 		}

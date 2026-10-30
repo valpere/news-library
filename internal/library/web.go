@@ -100,7 +100,6 @@ type pageData struct {
 	Item                      Item
 	Snapshots                 []Snapshot
 	Selected                  *Snapshot
-	Ratings                   []RatingEvent
 	Jobs                      []JobStatus
 	Digest                    *Digest
 	Sections                  []DigestSection
@@ -184,7 +183,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 		},
 		"states": func() []string {
 			return []string{"queued", "fetching", "ready", "needs_input", "retry_wait", "failed", "enriching", "digest_retry_wait", "digest_failed", "filtered"}
-		}, "ratingScore": func(n int64) sql.NullInt64 { return sql.NullInt64{Int64: n, Valid: true} }, "numberString": func(n int64) string { return strconv.FormatInt(n, 10) }, "usefulnessLevels": usefulnessLevels, "translationHTML": translationHTML, "searchScores": searchScores, "searchJudgment": searchJudgmentLabel, "ratingLabel": ratingLabel, "usefulnessFilterLabel": usefulnessFilterLabel, "date": func(raw string) string {
+		}, "numberString": func(n int64) string { return strconv.FormatInt(n, 10) }, "usefulnessLevels": usefulnessLevels, "translationHTML": translationHTML, "searchScores": searchScores, "searchJudgment": searchJudgmentLabel, "ratingLabel": ratingLabel, "usefulnessFilterLabel": usefulnessFilterLabel, "date": func(raw string) string {
 			t, err := time.Parse(time.RFC3339Nano, raw)
 			if err != nil {
 				return raw
@@ -327,17 +326,10 @@ func (w *Web) renderStatus(rw http.ResponseWriter, name string, data pageData, s
 }
 func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
+	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
 	for _, tag := range strings.Split(q.Get("tags"), ",") {
 		if tag = strings.TrimSpace(tag); tag != "" {
 			f.Tags = append(f.Tags, tag)
-		}
-	}
-	if f.Rating != "" && f.Rating != "unrated" {
-		n, e := strconv.ParseInt(f.Rating, 10, 64)
-		if e != nil || n < 0 {
-			http.Error(rw, "некоректний фільтр оцінки", 400)
-			return
 		}
 	}
 	result, err := w.search(r, f, q.Get("mode"))
@@ -400,11 +392,6 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Query().Get("source") != "" && snap == nil {
 		http.NotFound(rw, r)
-		return
-	}
-	ratings, err := w.Store.Ratings(id)
-	if err != nil {
-		http.Error(rw, "сховище недоступне", 500)
 		return
 	}
 	jobs, err := w.Store.Jobs(id)
@@ -533,7 +520,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 		assessed = Assess(*snap)
 	}
 	diagnosis, canConfirm := assessed.Diagnosis, assessed.CanConfirm
-	w.render(rw, "detail", pageData{CanConfirmCompleteness: canConfirm, SourceDiagnosis: diagnosis, DiagnosedDigestShown: diagnosis != nil && digest != nil, DigestSkipped: digestSkipped, DigestIsTranslation: digest != nil && isTranslationPrompt(digest.PromptVersion), KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Ratings: ratings, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
+	w.render(rw, "detail", pageData{CanConfirmCompleteness: canConfirm, SourceDiagnosis: diagnosis, DiagnosedDigestShown: diagnosis != nil && digest != nil, DigestSkipped: digestSkipped, DigestIsTranslation: digest != nil && isTranslationPrompt(digest.PromptVersion), KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))
@@ -599,28 +586,9 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 	case "rating":
 		var score int64
 		score, err = strconv.ParseInt(form.Get("score"), 10, 64)
-		if err != nil || score < 0 {
-			err = errors.New("оцінка має бути цілим 0..9223372036854775807")
+		if err != nil || score < 0 || score > 6 {
+			err = errors.New("оберіть один із семи рівнів особистої корисності")
 			break
-		}
-		var source *int64
-		if raw := form.Get("source"); raw != "" {
-			var sid int64
-			sid, err = strconv.ParseInt(raw, 10, 64)
-			if err != nil || sid <= 0 {
-				err = errors.New("некоректна версія тексту")
-				break
-			}
-			source = &sid
-		}
-		var digest *int64
-		if raw := form.Get("digest"); raw != "" {
-			did, e := strconv.ParseInt(raw, 10, 64)
-			if e != nil || did <= 0 {
-				err = errors.New("некоректна версія дайджесту")
-				break
-			}
-			digest = &did
 		}
 		now := time.Now()
 		var assessed *time.Time = &now
@@ -635,14 +603,7 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 			}
 			assessed = &t
 		}
-		switch form.Get("scale") {
-		case UsefulnessScale:
-			err = w.Store.RateUsefulnessShown(id, score, source, digest, assessed, form.Get("reason"))
-		case "", LegacyRatingScale:
-			err = w.Store.RateShown(id, score, source, digest, assessed, form.Get("reason"))
-		default:
-			err = errors.New("невідома шкала корисності")
-		}
+		err = w.Store.Rate(id, score, assessed)
 	default:
 		http.NotFound(rw, r)
 		return

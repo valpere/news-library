@@ -17,7 +17,7 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	snapshots, _ := s.Snapshots(id)
 	sid := snapshots[0].ID
 	d, _ := s.DigestForSnapshot(sid)
-	if e := s.RateShown(id, 3, &sid, &d.ID, nil, "useful material"); e != nil {
+	if e := s.Rate(id, 3, nil); e != nil {
 		t.Fatal(e)
 	}
 	post(t, w, "/items/1/feedback", url.Values{"digest": {strconv.FormatInt(d.ID, 10)}, "quality": {"inaccurate"}, "note": {"A bad digest does not make the source uninteresting"}})
@@ -56,7 +56,7 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 		t.Fatal("feedback moved", history, e)
 	}
 	ratings, _ := s.Ratings(id)
-	if len(ratings) != 1 || ratings[0].DigestID.Int64 != d.ID {
+	if len(ratings) != 1 {
 		t.Fatal("rating relinked")
 	}
 	rw = webRequest(w, "GET", "/items/1?source="+strconv.FormatInt(sid, 10)+"&digest="+strconv.FormatInt(d.ID, 10), nil, nil)

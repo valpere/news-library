@@ -46,7 +46,7 @@ func TestTrashMissingPageIsSeparateAndDeduplicated(t *testing.T) {
 	if err = s.SetRead(id, true); err == nil {
 		t.Fatal("trash accepts normal mutation")
 	}
-	if err = s.Rate(id, 3, nil, nil, ""); err == nil {
+	if err = s.Rate(id, 3, nil); err == nil {
 		t.Fatal("trash accepts rating")
 	}
 	next, err := s.Claim(context.Background(), time.Now(), time.Minute, 3)

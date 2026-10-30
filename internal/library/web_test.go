@@ -65,7 +65,7 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 	sid := strconv.FormatInt(vs[0].ID, 10)
 	post(t, w, base+"rating", url.Values{"score": {"3"}, "source": {sid}, "reason": {"useful"}})
 	post(t, w, base+"tags", url.Values{"tags": {"go, reading"}})
-	rw = webRequest(w, "GET", "/?q=knowledge&rating=3&tags=go&read=0&sort=relevance", nil, nil)
+	rw = webRequest(w, "GET", "/?q=knowledge&usefulness=3&tags=go&read=0&sort=relevance", nil, nil)
 	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "/items/1") {
 		t.Fatal("UI search", rw.Code, rw.Body.String())
 	}
@@ -86,7 +86,7 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 	manual(t, s, id, "updated manual text")
 	post(t, w, base+"rating", url.Values{"score": {"0"}, "unknown_date": {"1"}})
 	ratings, _ := s.Ratings(id)
-	if len(ratings) != 2 || ratings[1].SourceVersionID.Int64 != vs[0].ID || !ratings[1].AssessedAt.Valid || ratings[0].AssessedAt.Valid {
+	if len(ratings) != 1 || ratings[0].Score != 0 || ratings[0].AssessedAt.Valid {
 		t.Fatal("UI rating provenance")
 	}
 	post(t, w, base+"read", url.Values{"read": {"1"}})
@@ -109,28 +109,24 @@ func TestWebRejectsInvalidScoresAndForeignContext(t *testing.T) {
 	b := add(t, s, "https://example.com/b")
 	manual(t, s, b, "foreign text")
 	vs, _ := s.Snapshots(b)
-	for _, score := range []string{"-1", "1.5", "9223372036854775808", "NaN", ""} {
+	for _, score := range []string{"-1", "7", "1.5", "9223372036854775808", "NaN", ""} {
 		rw := webRequest(w, "POST", fmt.Sprintf("/items/%d/rating", a), url.Values{"csrf": {w.CSRF}, "score": {score}}, nil)
 		if rw.Code != 400 {
 			t.Fatal("score accepted", score, rw.Code)
 		}
 	}
-	rw := webRequest(w, "POST", "/items/1/rating", url.Values{"csrf": {w.CSRF}, "score": {"3"}, "source": {strconv.FormatInt(vs[0].ID, 10)}}, nil)
-	if rw.Code != 400 {
-		t.Fatal("foreign snapshot accepted")
-	}
 	events, _ := s.Ratings(a)
 	if len(events) != 0 {
 		t.Fatal("invalid score inserted event")
 	}
-	rw = webRequest(w, "GET", "/items/1?source="+strconv.FormatInt(vs[0].ID, 10), nil, nil)
+	rw := webRequest(w, "GET", "/items/1?source="+strconv.FormatInt(vs[0].ID, 10), nil, nil)
 	if rw.Code != 404 {
 		t.Fatal("foreign version shown")
 	}
-	post(t, w, "/items/1/rating", url.Values{"score": {"9223372036854775807"}})
+	post(t, w, "/items/1/rating", url.Values{"score": {"6"}})
 	events, _ = s.Ratings(a)
-	if len(events) != 1 || events[0].Score != 9223372036854775807 {
-		t.Fatal("int64 maximum rejected")
+	if len(events) != 1 || events[0].Score != 6 {
+		t.Fatal("top level rejected")
 	}
 }
 func protectedTestWeb(t *testing.T) (*Store, *Web) {
@@ -288,14 +284,14 @@ func TestWebShowsContentBeforeRating(t *testing.T) {
 	}
 	post(t, w, "/items/1/rating", url.Values{"score": {"3"}})
 	events, _ = s.Ratings(id)
-	if len(events) != 1 || events[0].SourceVersionID.Valid {
+	if len(events) != 1 {
 		t.Fatal("invented text provenance for external reading")
 	}
 	manual(t, s, id, "Read this available text first")
 	rw = webRequest(w, "GET", "/items/1", nil, nil)
 	html := rw.Body.String()
 	textPos, ratePos := strings.Index(html, "Read this available text first"), strings.Index(html, `action="/items/1/rating"`)
-	if rw.Code != 200 || textPos < 0 || ratePos < textPos || !strings.Contains(html, `name="source"`) || strings.Contains(html, `src="/static/progress.js"`) {
+	if rw.Code != 200 || textPos < 0 || ratePos < textPos || strings.Contains(html, `src="/static/progress.js"`) {
 		t.Fatal("rating does not follow available text")
 	}
 }

@@ -19,13 +19,13 @@ func TestMarkJunkRatesZeroAndMovesToTrash(t *testing.T) {
 		t.Fatal(err)
 	}
 	var score int
-	var scale, reason string
-	var source sql.NullInt64
-	if err := s.DB.QueryRow("SELECT score,scale,reason,source_version_id FROM rating_events WHERE item_id=?", id).Scan(&score, &scale, &reason, &source); err != nil {
+	var reason string
+	var rated sql.NullString
+	if err := s.DB.QueryRow("SELECT i.rating,i.rated_at,t.reason FROM items i JOIN trash_entries t ON t.item_id=i.id WHERE i.id=?", id).Scan(&score, &rated, &reason); err != nil {
 		t.Fatal(err)
 	}
-	if score != 0 || scale != UsefulnessScale || !strings.Contains(reason, "неоформлений переклад") || !source.Valid {
-		t.Fatalf("rating %d %q %q %v", score, scale, reason, source)
+	if score != 0 || !rated.Valid || !strings.Contains(reason, "неоформлений переклад") {
+		t.Fatalf("rating %d %v %q", score, rated, reason)
 	}
 	if why, _ := s.TrashReason(id); !strings.Contains(why, "сміття") || !strings.Contains(why, "неоформлений переклад") {
 		t.Fatalf("trash reason %q", why)
@@ -51,7 +51,7 @@ func TestMarkJunkRatesZeroAndMovesToTrash(t *testing.T) {
 		t.Fatalf("repeat must be idempotent: %v", err)
 	}
 	var n int
-	s.DB.QueryRow("SELECT count(*) FROM rating_events WHERE item_id=?", id).Scan(&n)
+	s.DB.QueryRow("SELECT count(*) FROM items WHERE rating=0 AND id=?", id).Scan(&n)
 	if n != 1 {
 		t.Fatalf("repeat must not add rating events, got %d", n)
 	}

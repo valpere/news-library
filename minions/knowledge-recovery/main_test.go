@@ -28,7 +28,7 @@ func TestDefaultAuditDoesNotModifyDatabaseOrGenerate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Rate(id, 95, nil, nil, "historical"); err != nil {
+	if err := s.Rate(id, 5, nil); err != nil {
 		t.Fatal(err)
 	}
 	before, err := ratingsHash(s.DB)

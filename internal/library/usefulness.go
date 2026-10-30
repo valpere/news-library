@@ -6,11 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
-
-const UsefulnessScale = "estimative_usefulness_v1"
-const LegacyRatingScale = "legacy_numeric"
 
 type UsefulnessLevel struct {
 	Score          int64
@@ -39,31 +35,24 @@ func parseUsefulness(label string) (int64, bool) {
 	return 0, false
 }
 
-func ratingLabel(score sql.NullInt64, scale string) string {
+func ratingLabel(score sql.NullInt64) string {
 	if !score.Valid {
 		return "Ще не оцінено"
 	}
-	if scale == UsefulnessScale && score.Int64 >= 0 && score.Int64 < 7 {
+	if score.Int64 >= 0 && score.Int64 < 7 {
 		return usefulnessLevels()[score.Int64].Label
 	}
-	return fmt.Sprintf("Історична числова оцінка: %d", score.Int64)
+	return fmt.Sprintf("Оцінка поза шкалою: %d", score.Int64)
 }
 
 func usefulnessFilterLabel(raw string) string {
 	if raw == "unrated" {
 		return "Ще не оцінено"
 	}
-	if raw == "legacy" {
-		return "Історичні числові оцінки"
-	}
 	if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n >= 0 && n <= 6 {
 		return usefulnessLevels()[n].Label
 	}
 	return raw
-}
-
-func (s *Store) RateUsefulnessShown(id, score int64, source, digest *int64, assessed *time.Time, reason string) error {
-	return s.rateShown(id, score, source, digest, assessed, reason, UsefulnessScale)
 }
 
 // A model may extract a label only when the user's own rating request supplied
@@ -105,5 +94,5 @@ func usefulnessGuide() string {
 	for _, level := range usefulnessLevels() {
 		lines = append(lines, level.Label+" — "+level.Meaning+".")
 	}
-	return strings.Join(lines, "\n") + "\nЩе не оцінено — окремий стан. Старі числові оцінки не переосмислюються. Прочитання й корисність незалежні."
+	return strings.Join(lines, "\n") + "\nЩе не оцінено — окремий стан. Прочитання й корисність незалежні."
 }

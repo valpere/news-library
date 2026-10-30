@@ -257,7 +257,7 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 		from *string
 		to   *string
 		max  int
-	}{{p.Query, &f.Query, 4096}, {p.Category, &f.Category, 600}, {p.Read, &f.Read, 8}, {p.Rating, &f.Rating, 24}, {p.Usefulness, &f.Usefulness, 64}, {p.State, &f.State, 32}, {p.Filter, &f.Filter, 32}, {p.ConfidenceMin, &f.ConfidenceMin, 16}, {p.ConfidenceMax, &f.ConfidenceMax, 16}, {p.Sort, &f.Sort, 32}, {p.Direction, &f.Direction, 8}, {p.Mode, &state.Mode, 16}} {
+	}{{p.Query, &f.Query, 4096}, {p.Category, &f.Category, 600}, {p.Read, &f.Read, 8}, {p.Usefulness, &f.Usefulness, 64}, {p.State, &f.State, 32}, {p.Filter, &f.Filter, 32}, {p.ConfidenceMin, &f.ConfidenceMin, 16}, {p.ConfidenceMax, &f.ConfidenceMax, 16}, {p.Sort, &f.Sort, 32}, {p.Direction, &f.Direction, 8}, {p.Mode, &state.Mode, 16}} {
 		if pair.from != nil {
 			if len(*pair.from) > pair.max || !utf8.ValidString(*pair.from) {
 				return errors.New("критерій пошуку завеликий")
@@ -284,7 +284,7 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 	for _, pair := range []struct {
 		value   string
 		allowed []string
-	}{{f.Read, []string{"", "0", "1"}}, {f.Filter, []string{"", "passed", "rejected", "overridden", "not_checked"}}, {f.State, []string{"", "queued", "fetching", "ready", "enriching", "needs_input", "retry_wait", "digest_failed", "digest_retry_wait", "filtered", "failed"}}, {f.Sort, []string{"", "added", "rating", "usefulness", "confidence", "relevance"}}, {f.Direction, []string{"", "asc", "desc"}}} {
+	}{{f.Read, []string{"", "0", "1"}}, {f.Filter, []string{"", "passed", "rejected", "overridden", "not_checked"}}, {f.State, []string{"", "queued", "fetching", "ready", "enriching", "needs_input", "retry_wait", "digest_failed", "digest_retry_wait", "filtered", "failed"}}, {f.Sort, []string{"", "added", "usefulness", "confidence", "relevance"}}, {f.Direction, []string{"", "asc", "desc"}}} {
 		valid := false
 		for _, v := range pair.allowed {
 			if v == pair.value {
@@ -295,19 +295,13 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 			return errors.New("невідомий критерій пошуку")
 		}
 	}
-	if f.Usefulness != "" && f.Usefulness != "unrated" && f.Usefulness != "legacy" {
+	if f.Usefulness != "" && f.Usefulness != "unrated" {
 		if n, ok := parseUsefulness(f.Usefulness); ok {
 			f.Usefulness = strconv.FormatInt(n, 10)
 		}
 		n, e := strconv.ParseInt(f.Usefulness, 10, 64)
 		if e != nil || n < 0 || n > 6 {
 			return errors.New("невідомий рівень корисності")
-		}
-	}
-	if f.Rating != "" && f.Rating != "unrated" {
-		n, e := strconv.ParseInt(f.Rating, 10, 64)
-		if e != nil || n < 0 {
-			return errors.New("власна оцінка має бути невід'ємним цілим або «неоцінене»")
 		}
 	}
 	if _, e := searchMode(state.Mode); e != nil {
@@ -619,17 +613,12 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 			if card.SourceID == 0 || !card.CanRate {
 				return ChatReply{Message: "Текст або дайджест цього матеріалу не було показано. Спершу відкрийте картку й доповніть текст або відновіть файли, щоб оцінити побачене."}, nil
 			}
-			var digest *int64
-			if card.DigestID > 0 {
-				digest = &card.DigestID
+			score := usefulnessScore
+			if !explicitUsefulness {
+				score = *command.Score
 			}
-			var ratingError error
-			if explicitUsefulness {
-				now := time.Now()
-				ratingError = w.Store.RateUsefulnessShown(id, usefulnessScore, &card.SourceID, digest, &now, "Особиста корисність через діалог")
-			} else {
-				ratingError = w.Store.RateShown(id, *command.Score, &card.SourceID, digest, nil, "Історична числова оцінка через діалог")
-			}
+			now := time.Now()
+			ratingError := w.Store.Rate(id, score, &now)
 			if err := ratingError; err != nil {
 				return ChatReply{}, err
 			}

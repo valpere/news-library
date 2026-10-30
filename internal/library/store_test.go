@@ -198,35 +198,30 @@ func TestNeedsInputAndManualWinsRace(t *testing.T) {
 		t.Fatal("explicit newer refresh not selected")
 	}
 }
-func TestRatingHistoryAndIndependentActions(t *testing.T) {
+func TestRatingReplacementAndIndependentActions(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/a")
 	other := add(t, s, "https://example.com/b")
 	manual(t, s, id, "first text")
-	vs, _ := s.Snapshots(id)
-	sid := vs[0].ID
 	now := time.Now()
-	if e := s.Rate(id, 3, &sid, &now, "useful"); e != nil {
+	if e := s.Rate(id, 3, &now); e != nil {
 		t.Fatal(e)
+	}
+	if r, _ := s.Ratings(id); len(r) != 1 || r[0].Score != 3 || !r[0].AssessedAt.Valid {
+		t.Fatal("rating not stored", r)
 	}
 	manual(t, s, id, "second version")
-	if e := s.Rate(id, 0, nil, nil, "historical unknown date"); e != nil {
+	if e := s.Rate(id, 0, nil); e != nil {
 		t.Fatal(e)
 	}
-	for _, e := range []error{s.Rate(id, -1, nil, nil, ""), s.Rate(other, 2, &sid, nil, "")} {
-		if e == nil {
+	for _, score := range []int64{-1, 7} {
+		if s.Rate(other, score, nil) == nil {
 			t.Fatal("invalid rating accepted")
 		}
 	}
 	history, e := s.Ratings(id)
-	if e != nil || len(history) != 2 || history[1].Score != 3 || history[1].SourceVersionID.Int64 != sid || history[0].AssessedAt.Valid {
-		t.Fatal("history modified", e)
-	}
-	if _, e = s.DB.Exec("UPDATE rating_events SET score=8"); e == nil {
-		t.Fatal("rating mutable")
-	}
-	if _, e = s.DB.Exec("DELETE FROM rating_events"); e == nil {
-		t.Fatal("rating deletable")
+	if e != nil || len(history) != 1 || history[0].Score != 0 || history[0].AssessedAt.Valid {
+		t.Fatal("new rating did not replace the old one", e)
 	}
 	if e = s.SetRead(id, true); e != nil {
 		t.Fatal(e)
@@ -254,22 +249,22 @@ func TestFTSFiltersAndStableOrder(t *testing.T) {
 	for _, id := range []int64{a, b, c} {
 		manual(t, s, id, "Ukraine knowledge store")
 	}
-	s.Rate(a, 0, nil, nil, "")
-	s.Rate(b, 0, nil, nil, "")
+	s.Rate(a, 0, nil)
+	s.Rate(b, 0, nil)
 	s.SetTags(a, []string{"one"})
 	s.SetTags(b, []string{"two"})
 	s.SetRead(b, true)
 	for _, dir := range []string{"asc", "desc"} {
-		got, e := s.Search(Filters{Sort: "rating", Direction: dir})
+		got, e := s.Search(Filters{Sort: "usefulness", Direction: dir})
 		if e != nil || len(got) != 3 || got[0].ID != a || got[1].ID != b || got[2].ID != c {
 			t.Fatal("stable null order", e)
 		}
 	}
-	got, e := s.Search(Filters{Query: "knowledge", Tags: []string{"one", "two"}, Read: "0", Rating: "0", State: "ready"})
+	got, e := s.Search(Filters{Query: "knowledge", Tags: []string{"one", "two"}, Read: "0", Usefulness: "0", State: "ready"})
 	if e != nil || len(got) != 1 || got[0].ID != a {
 		t.Fatal("AND/OR filters", e)
 	}
-	got, e = s.Search(Filters{Rating: "unrated"})
+	got, e = s.Search(Filters{Usefulness: "unrated"})
 	if e != nil || len(got) != 1 || got[0].ID != c {
 		t.Fatal("unrated filter", e)
 	}

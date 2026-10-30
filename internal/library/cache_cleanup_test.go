@@ -67,7 +67,7 @@ func TestCacheEvictionRetainsPrimaryAndSharedBodies(t *testing.T) {
 	if kept, e := s.Digest(digest.ID, id); e != nil || kept.Markdown != fixtureDigest {
 		t.Fatal("primary digest evicted", e)
 	}
-	s.DB.QueryRow("SELECT count(*) FROM rating_events").Scan(&count)
+	s.DB.QueryRow("SELECT count(*) FROM items WHERE rating IS NOT NULL").Scan(&count)
 	if count != 0 {
 		t.Fatal("cache changed ratings")
 	}

@@ -4,8 +4,9 @@ CREATE TABLE items (
  id INTEGER PRIMARY KEY, original_url TEXT NOT NULL, canonical_url TEXT NOT NULL UNIQUE,
  title TEXT NOT NULL DEFAULT '', added_at TEXT NOT NULL,
  is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0,1)),
- state TEXT NOT NULL DEFAULT 'queued', error TEXT NOT NULL DEFAULT '', selected_snapshot INTEGER
-, filter_state TEXT NOT NULL DEFAULT 'not_checked' CHECK(filter_state IN ('not_checked','passed','rejected','overridden')));
+ state TEXT NOT NULL DEFAULT 'queued', error TEXT NOT NULL DEFAULT '', selected_snapshot INTEGER,
+ rating INTEGER CHECK(rating BETWEEN 0 AND 6), rated_at TEXT CHECK(rated_at IS NULL OR rating IS NOT NULL),
+ filter_state TEXT NOT NULL DEFAULT 'not_checked' CHECK(filter_state IN ('not_checked','passed','rejected','overridden')));
 CREATE TABLE source_aliases (
  url TEXT PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id)
 );
@@ -32,13 +33,6 @@ CREATE TABLE generated_artifacts (
  prompt_version TEXT NOT NULL, created_at TEXT NOT NULL, input_tokens INTEGER NOT NULL DEFAULT 0,
  output_tokens INTEGER NOT NULL DEFAULT 0
 , markdown_path TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL DEFAULT '', chunk_count INTEGER NOT NULL DEFAULT 1);
-CREATE TABLE rating_events (
- id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL REFERENCES items(id),
- score INTEGER NOT NULL CHECK(typeof(score)='integer' AND score>=0), recorded_at TEXT NOT NULL,
- assessed_at TEXT, source_version_id INTEGER REFERENCES source_versions(id),
- digest_id INTEGER REFERENCES generated_artifacts(id), reason TEXT NOT NULL
-, scale TEXT NOT NULL DEFAULT 'legacy_numeric'
- CHECK(scale IN ('legacy_numeric','estimative_usefulness_v1') AND (scale='legacy_numeric' OR score BETWEEN 0 AND 6)));
 CREATE VIRTUAL TABLE item_fts USING fts5(title,text,url,content='',contentless_delete=1,tokenize='unicode61');
 CREATE TABLE cache_entries (url TEXT PRIMARY KEY,final_url TEXT NOT NULL,content_type TEXT NOT NULL,body_path TEXT NOT NULL,hash TEXT NOT NULL,fetched_at TEXT NOT NULL,expires_at INTEGER NOT NULL,partial INTEGER NOT NULL, last_accessed INTEGER NOT NULL DEFAULT 0, response_headers TEXT NOT NULL DEFAULT '{}', checked_at TEXT NOT NULL DEFAULT '');
 CREATE TABLE filter_rule_versions (version TEXT PRIMARY KEY,config TEXT NOT NULL,created_at TEXT NOT NULL);
@@ -176,13 +170,6 @@ CREATE INDEX completeness_confirmations_snapshot ON completeness_confirmations(s
 CREATE TRIGGER artifact_source_owner BEFORE INSERT ON generated_artifacts
 WHEN NOT EXISTS(SELECT 1 FROM source_versions WHERE id=NEW.snapshot_id AND item_id=NEW.item_id)
 BEGIN SELECT RAISE(ABORT,'artifact snapshot belongs to another item'); END;
-CREATE TRIGGER immutable_rating_update BEFORE UPDATE ON rating_events BEGIN SELECT RAISE(ABORT,'immutable rating'); END;
-CREATE TRIGGER rating_source_owner BEFORE INSERT ON rating_events
-WHEN NEW.source_version_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM source_versions WHERE id=NEW.source_version_id AND item_id=NEW.item_id)
-BEGIN SELECT RAISE(ABORT,'snapshot belongs to another item'); END;
-CREATE TRIGGER rating_digest_owner BEFORE INSERT ON rating_events
-WHEN NEW.digest_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE id=NEW.digest_id AND item_id=NEW.item_id AND (NEW.source_version_id IS NULL OR snapshot_id=NEW.source_version_id))
-BEGIN SELECT RAISE(ABORT,'digest context mismatch'); END;
 CREATE TRIGGER immutable_snapshot_update BEFORE UPDATE ON source_versions BEGIN SELECT RAISE(ABORT,'immutable snapshot'); END;
 CREATE TRIGGER immutable_artifact_update BEFORE UPDATE ON generated_artifacts BEGIN SELECT RAISE(ABORT,'immutable artifact'); END;
 CREATE TRIGGER immutable_rules_update BEFORE UPDATE ON filter_rule_versions BEGIN SELECT RAISE(ABORT,'immutable rules'); END;
@@ -225,9 +212,6 @@ CREATE TRIGGER immutable_snapshot_delete BEFORE DELETE ON source_versions
 CREATE TRIGGER immutable_artifact_delete BEFORE DELETE ON generated_artifacts
  WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=OLD.item_id)
  BEGIN SELECT RAISE(ABORT,'immutable artifact'); END;
-CREATE TRIGGER immutable_rating_delete BEFORE DELETE ON rating_events
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=OLD.item_id)
- BEGIN SELECT RAISE(ABORT,'immutable rating'); END;
 CREATE TRIGGER immutable_filter_delete BEFORE DELETE ON filter_decisions
  WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=OLD.item_id)
  BEGIN SELECT RAISE(ABORT,'immutable decision'); END;
