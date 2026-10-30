@@ -11,7 +11,12 @@ news-library та відповідність реалізації. Codex вик�
 python3 minions/consilium/run.py --dry-run
 python3 minions/consilium/run.py --run-agents
 python3 minions/consilium/run.py --run-agents --agents agy,opencode --timeout 600
+python3 minions/consilium/run.py --run-agents --document docs/HLD.md --context minions/consilium/context-redesign.md
 ```
+
+`--context` — закомічений Markdown із додатковими вказівками замовника (наприклад, що
+розбіжність документів і коду очікувана); він додається до завдання як дані й записується
+в `manifest.json`.
 
 Типовий склад: OpenCode (Nemotron free; модель змінюється `--opencode-model`) і Antigravity
 (Gemini). Потрібні встановлені
