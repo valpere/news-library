@@ -8,7 +8,7 @@ YouTube-субтитри, ручний текст, незалежні оцінк
 FTS і фільтри. Додано дайджести Ollama cloud, окремі файли текстів та
 спільний HTTP-кеш, пояснювані правила відсіву, окремі відгуки про
 дайджести й прогноз інтересу за явно заданим профілем. Free-only резерв дайджестів
-реалізовано, типово вимкнений і потребує приватного налаштування. M3 semantic search/read API та M4 Telegram/backup tooling реалізовані; Telegram потребує приватного налаштування.
+реалізовано, типово вимкнений і потребує приватного налаштування. M3 semantic search/read API та M4 backup/restore tooling реалізовані; Telegram-бот планується (`docs/REDESIGN_DECISIONS.md`).
 
 [Керівництво користувача українською](docs/USER_GUIDE.md): щоденна робота
 через чат, читання, оцінювання, пошук, зв’язки та відновлення.
@@ -37,7 +37,7 @@ make build
 ./build/news-library -help
 ```
 
-Щоденна Telegram-добірка працює лише поки сервер запущений, тож його варто тримати як
+Фонова обробка працює лише поки сервер запущений, тож його варто тримати як
 користувацьку службу systemd (`~/.config/systemd/user/news-library.service`, поза репозиторієм:
 `WorkingDirectory` — корінь проєкту, `ExecStart` — `build/news-library`, `Restart=on-failure`,
 лог у `tmp/site/agent.log`, `systemctl --user enable --now news-library`). Після `make build`
@@ -336,43 +336,19 @@ Offline M3 browser/API smoke: `python3 scripts/smoke_m3_ui.py`.
 ./build/news-library backup -source data -output tmp/my-backup
 ./build/news-library verify-backup -source tmp/my-backup
 ./build/news-library restore -source tmp/my-backup -output tmp/my-restored-library
-./build/news-library -data tmp/my-restored-library  # workers/delivery paused
+./build/news-library -data tmp/my-restored-library  # workers paused
 # Після перевірки відновленої копії та зупинки старого instance:
 ./build/news-library -data tmp/my-restored-library -resume-restored
 ```
 
 Вказуйте фактичний каталог даних у `-source`; output має не існувати.
 Backup працює з live SQLite snapshot, не мігрує source, включає referenced
-texts/digests/checkpoints/frozen messages та metadata/history/queue.
+texts/digests/checkpoints/metadata/history/queue.
 Cache/config/.env не копіюються. SHA/integrity/foreign-key checks відхиляють
 corruption, missing files або symlinks. Невдалий transfer лишає marker і не
 відкривається сервісом; повтор потребує нового output. Restore зберігає source
-queue і human history, ставить background pause. Усі unfinished imported
-Telegram deliveries стають unknown, бо після snapshot вони могли вже надійти;
-confirmed message IDs залишаються. Automatic replay немає.
+queue і human history, ставить background pause.
 
-Telegram: сторінка **Telegram-добірки** готує immutable preview зі saved digests
-без AI викликів. Вибираються latest unread, без rejected/rating0 і вже
-confirmed/active/unknown digest-to-recipient; send не ставить read. Перед ручною
-відправкою видно саме збережені messages і recipient; частини мають незалежні
-states/message IDs. Failed retry не повторює sent parts, unknown лише manual
-перевірка без retry. Daily пропущені випуски не надолужуються автоматично.
-
-Налаштування лише у приватному `.env`:
-
-```dotenv
-NEWS_LIBRARY_TELEGRAM_ENABLED=false
-NEWS_LIBRARY_TELEGRAM_BOT_TOKEN=
-NEWS_LIBRARY_TELEGRAM_CHAT_ID=
-NEWS_LIBRARY_TELEGRAM_DAILY=09:00
-NEWS_LIBRARY_TELEGRAM_SIZE=5
-```
-
-Погоджений розклад — 09:00 Europe/Kyiv, до 5 матеріалів. Заповніть bot token і numeric chat ID приватно,
-потім увімкніть ENABLED=true. Порожній DAILY означає лише на вимогу. Due window
-5min; поза ним або без готових матеріалів persisted missed, без late catchup.
-Bot token не копіюється в backup і не показується у UI/help/errors. Реальних
-Telegram повідомлень у розробці не надсилали; приймання з mock API.
 Offline browser/CLI smoke: `python3 scripts/smoke_m4_ui.py`.
 
 ## Нотатки-зв’язкові
@@ -546,7 +522,7 @@ Browser smoke використовує ізольовану DB, paused workers �
 `gemma4:31b-cloud`, сумісний із `gemma4:cloud` у конфігурації сервісу; `--model` дозволяє вибрати іншу
 зареєстровану cloud-модель. Тільки loopback Ollama endpoint, без fallback.
 Helper запускає окремий сервіс/синтетичну DB у `./tmp/`, workers paused,
-embeddings/Telegram disabled, перевіряє 13 ходів і зберігає `report.json`
+embeddings disabled, перевіряє 13 ходів і зберігає `report.json`
 із намірами, відповідями, actual model/remote identity і тривалістю.
 Приватний `.env` читає сам застосунок, секрети не копіюються у звіт.
 Зупиняється лише власний subprocess; реальна бібліотека не змінюється.

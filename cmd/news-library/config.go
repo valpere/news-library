@@ -27,8 +27,6 @@ type config struct {
 	YTDLP, YouTubeLanguages  string
 	FetchUserAgent           string
 
-	Telegram                                              library.TelegramConfig
-	TelegramTimeout                                       time.Duration
 	Embeddings                                            bool
 	ResumeRestored                                        bool
 	EmbedURL, ReadToken                                   string
@@ -79,7 +77,6 @@ func readConfig(args []string) (config, error) {
 		"knowledge":                  "NEWS_LIBRARY_KNOWLEDGE",
 		"chat":                       "NEWS_LIBRARY_CHAT", "chat-model": "NEWS_LIBRARY_CHAT_MODEL", "chat-timeout": "NEWS_LIBRARY_CHAT_TIMEOUT",
 		"fetch-user-agent": "NEWS_LIBRARY_FETCH_USER_AGENT", "yt-dlp": "NEWS_LIBRARY_YT_DLP", "youtube-languages": "NEWS_LIBRARY_YOUTUBE_LANGUAGES",
-		"telegram": "NEWS_LIBRARY_TELEGRAM_ENABLED", "telegram-chat": "NEWS_LIBRARY_TELEGRAM_CHAT_ID", "telegram-daily": "NEWS_LIBRARY_TELEGRAM_DAILY", "telegram-size": "NEWS_LIBRARY_TELEGRAM_SIZE",
 		"embeddings": "NEWS_LIBRARY_EMBEDDINGS", "embed-url": "NEWS_LIBRARY_EMBED_URL", "embed-timeout": "NEWS_LIBRARY_EMBED_TIMEOUT", "read-token": "NEWS_LIBRARY_READ_TOKEN",
 		"chunk-max-parts": "NEWS_LIBRARY_CHUNK_MAX_PARTS", "cache-max-bytes": "NEWS_LIBRARY_CACHE_MAX_BYTES", "cache-retention": "NEWS_LIBRARY_CACHE_RETENTION", "cache-cleanup-interval": "NEWS_LIBRARY_CACHE_CLEANUP_INTERVAL",
 		"interests": "NEWS_LIBRARY_INTERESTS", "filter-rules": "NEWS_LIBRARY_FILTER_RULES", "filter-threshold": "NEWS_LIBRARY_FILTER_THRESHOLD",
@@ -99,7 +96,7 @@ func readConfig(args []string) (config, error) {
 			continue
 		}
 		if !hasValue {
-			if name == "openrouter" || name == "chat" || name == "knowledge" || name == "no-worker" || name == "no-digests" || name == "embeddings" || name == "telegram" {
+			if name == "openrouter" || name == "chat" || name == "knowledge" || name == "no-worker" || name == "no-digests" || name == "embeddings" {
 				value = "true"
 			} else if i+1 < len(args) {
 				i++
@@ -189,19 +186,6 @@ func readConfig(args []string) (config, error) {
 		return c, e
 	}
 	c.InputLimit = int(limit)
-	c.Telegram.Enabled, e = boolean("NEWS_LIBRARY_TELEGRAM_ENABLED", "false")
-	if e != nil {
-		return c, e
-	}
-	c.Telegram.Token = get("NEWS_LIBRARY_TELEGRAM_BOT_TOKEN", "")
-	c.Telegram.ChatID = get("NEWS_LIBRARY_TELEGRAM_CHAT_ID", "")
-	c.Telegram.DailyTime = get("NEWS_LIBRARY_TELEGRAM_DAILY", "")
-	size, e := integer("NEWS_LIBRARY_TELEGRAM_SIZE", "5")
-	if e != nil || size < 1 || size > 20 {
-		return c, errors.New("telegram size must be 1..20")
-	}
-	c.Telegram.Size = int(size)
-	c.TelegramTimeout = 15 * time.Second
 	c.Embeddings, e = boolean("NEWS_LIBRARY_EMBEDDINGS", "false")
 	if e != nil {
 		return c, e
@@ -259,10 +243,6 @@ func readConfig(args []string) (config, error) {
 	flags.StringVar(&c.FetchUserAgent, "fetch-user-agent", c.FetchUserAgent, "User-Agent for source HTTP requests")
 	flags.StringVar(&c.YTDLP, "yt-dlp", c.YTDLP, "yt-dlp executable for YouTube metadata fallback; empty disables")
 	flags.StringVar(&c.YouTubeLanguages, "youtube-languages", c.YouTubeLanguages, "preferred subtitle languages, comma-separated")
-	flags.BoolVar(&c.Telegram.Enabled, "telegram", c.Telegram.Enabled, "увімкнути Telegram доставку")
-	flags.StringVar(&c.Telegram.ChatID, "telegram-chat", c.Telegram.ChatID, "numeric destination chat ID")
-	flags.StringVar(&c.Telegram.DailyTime, "telegram-daily", c.Telegram.DailyTime, "щоденна добірка HH:MM за Києвом; порожньо = лише вручну")
-	flags.IntVar(&c.Telegram.Size, "telegram-size", c.Telegram.Size, "матеріалів у добірці 1..20")
 	flags.BoolVar(&c.ResumeRestored, "resume-restored", false, "явно відновити workers після restore")
 	flags.BoolVar(&c.Embeddings, "embeddings", c.Embeddings, "локальна bge-m3 індексація")
 	flags.StringVar(&c.EmbedURL, "embed-url", c.EmbedURL, "локальний Ollama /api/embed")
@@ -304,9 +284,6 @@ func readConfig(args []string) (config, error) {
 		return c, errors.New("неочікувані аргументи")
 	}
 	if _, e = library.ParseYouTubeLanguages(c.YouTubeLanguages); e != nil {
-		return c, e
-	}
-	if e = c.Telegram.Validate(); e != nil {
 		return c, e
 	}
 	if c.EmbedTimeout <= 0 || c.EmbedTimeout > 10*time.Minute {

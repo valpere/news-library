@@ -43,7 +43,7 @@ semantic режими потребують local embeddings, FTS — ні. Се�
 | v5 | контрольні точки дайджесту довгих текстів, поля кешу | «Schema v5: частини та очищення кешу» |
 | v6 | заголовки валідації HTTP-кешу (ETag/Last-Modified) | «Реалізована генерація та HTTP-кеш» |
 | v7 | embeddings: `embedding_runs`, `embedding_chunks` | «Schema v7: індексація, пошук і read API» |
-| v8 | доставка: `deliveries`, `delivery_parts` | «M4: резервна копія та доставка» |
+| v8 | доставка Telegram (прибрана) | «M4: резервна копія та доставка» |
 | v9 | нотатки-зв'язкові: `connection_*` | «Нотатки-зв'язкові» |
 | v10 | `job_failures`: типізовані причини збоїв дайджесту | «Валідація дайджестів та історія відмов» |
 | v11 | `knowledge_runs`, `article_knowledge`, `knowledge_failures` | «Автоматичне розуміння й зв'язки» |
@@ -79,7 +79,6 @@ flowchart LR
     E --> D
     S --> D
     S --> E
-    W --> T[Telegram]
     H --> S
 ```
 
@@ -102,8 +101,6 @@ flowchart LR
    до snapshot і версії запиту; він не змінює власну оцінку користувача.
 5. Індексувати chunks через `bge-m3` (M3, реалізовано; див. розділ про пошук за змістом).
    Помилка embeddings не перешкоджає FTS, збереженню та перегляду.
-6. Telegram використовує збережені результати; не переоцінює матеріали
-   заново лише для доставки.
 
 Після перезапуску виконувати тільки незавершені етапи. Зміна правил або
 моделі не запускає автоматично переобробку всієї бібліотеки.
@@ -157,8 +154,7 @@ SQLite містить метадані, чергу й історію. Текст
 `texts/aa/bb/cc/dd/<sha256>.txt`, дайджести —
 `digests/aa/bb/cc/dd/<sha256>.md`, де `aa/bb/cc/dd` — перші чотири
 пари символів SHA-256. Інших розкладок немає (плоских шляхів і `repack-files` більше не підтримується).
-Незавершений результат restore блокується `.transfer-in-progress`; успішний — з paused workers
-такою самою карантинізацією незавершених Telegram-доставок.
+Незавершений результат restore блокується `.transfer-in-progress`; успішний — з paused workers.
 Посилання відносні до каталогу даних. Raw HTTP-кеш має окремі `cache/http/<sha256>.body`.
 Атомарний запис і fsync файла/каталогу передують commit DB-посилання.
 Rollback може лишити файл без посилання, але не публікує невдалий запис.
@@ -176,7 +172,6 @@ Rollback може лишити файл без посилання, але не �
 | tags, item_tags | Теги та походження; модельні пропозиції відрізняються від користувацьких |
 | filter_rules, filter_decisions | Версії правил, збіги, внески, сумарний R, T, override |
 | chunks, embeddings, FTS | Похідні індекси з посиланням на snapshot; embeddings також мають model/version |
-| deliveries | Добірка, адресат, тригер, стан, спроби, Telegram message IDs за наявності |
 
 Пошукові індекси відновлюються зі збережених snapshots. Історію
 користувача неможливо відновити з моделей, тому вона входить у backup
@@ -215,10 +210,7 @@ Rollback може лишити файл без посилання, але не �
 - **Пошук:** спочатку FTS; далі vector і поєднання результатів за рангами.
   Не додавати напряму BM25 і cosine як однаково масштабовані числа.
   Відсіяні без embeddings доступні через FTS; покриття vector явне.
-- **Telegram:** відправлення зі збереженої добірки. Неоднозначний timeout
-  після запиту позначає доставку unknown; автоматичний сліпий повтор
-  може дати дублі, тому потрібна явна політика. Час і розмір добірки
-  задаються конфігурацією перед увімкненням розкладу.
+- **Telegram:** бот (планується, FUN-NL-DELIVERY); добірок і розкладу немає.
 
 ## Інтерфейси та доступ
 
@@ -238,7 +230,7 @@ URL-fetcher не повинен діставатися loopback/private/link-loc
 ## Конфігурація та відновлення
 
 Окремо задавати каталог даних, Ollama URL/model, резервні моделі,
-таймаути/спроби, обмеження fetch, Telegram destination/schedule і read token.
+таймаути/спроби, обмеження fetch, read token.
 Секрети в оточенні або локальному файлі поза Git. Налаштування, що
 змінюють результати, мають версії; перемикання профілю не переписує історію.
 
@@ -335,7 +327,7 @@ Telegram-бот (планується): приймає повідомлення 
 додає посилання як матеріали, надсилає дайджест один раз Markdown-повідомленням із кнопками
 (оцінка 0–6, «Сміття», посилання на картку); на матеріалі позначка «надіслано», яка лишається й після перерахунку дайджесту (повторно не
 надсилається). Добірок і
-розкладу немає (чинна реалізація до v19 ще їх має).
+розкладу немає.
 
 ### FUN-NL-BACKUP
 
@@ -413,7 +405,7 @@ append-only `completeness_confirmations` (`complete` 1 — підтвердже�
 чинна остання). `Store.Snapshot/Snapshots` накладають її на читання: поки остання
 подія 1, `completeness`=`full`, а `warning` починається з «Повноту підтвердив
 користувач <дата>». Власне значення витягу й текст у `source_versions` не змінюються;
-оверлей бачать і дайджест, і Telegram, і контекст агента, бо вони читають через
+оверлей бачать і дайджест, і контекст агента, бо вони читають через
 `Snapshot`. Кнопка «Підтвердити повноту» є лише тоді, коли `Assess` (completeness_assess.go) бачить
 ознаку неповності в тексті (зараз — маркер «Read more» наприкінці) і статус не `partial`; не для
 «лише copyright» чи сторінки перевірки. Після підтвердження м'яка діагностика зникає.
@@ -567,7 +559,7 @@ truncation і text_kind: offsets digest не видаються за source offs
 `backup.go` відкриває source DB mode=ro, робить
 [SQLite VACUUM INTO](https://www.sqlite.org/lang_vacuum.html#vacuuminto) consistent
 snapshot і читає refs уже з нього. Immutable primary files копіюються після
-snapshot: тексти, digests, digest checkpoints і wire payloads delivery_parts.
+snapshot: тексти, digests, digest checkpoints.
 Manifest SHA/size, integrity_check/foreign_key_check і exact ref set перевіряють
 повноту. Schema1/2 з inline text також підтримані без source migration; schema3+
 має canonical hashed primary paths. Cache bodies та .env не включаються.
@@ -576,38 +568,7 @@ incomplete marker до успішного завершення; failures лиш�
 output і не видаляють чужий directory. `Open` відмовляє incomplete root.
 Restore перевіряє source bundle й copied hashes, створює persistent pause marker,
 зберігає original IDs/events/source queue. Новий root можна відкрити без network
-execution; explicit resume знімає marker. Imported unfinished deliveries
-консервативно unknown, бо original міг доставити після backup snapshot.
-
-`delivery.go` / schema8 мають deliveries і delivery_parts із source/digest FKs,
-recipient+bot identity, ordinal, state, updated_at, random attempt token та
-nullable confirmed message ID. Wire texts immutable hashed files в digests/;
-вони входять у backup. Selection із saved unread digests, explicit rating0/reject
-виключаються, delivered/active/uncertain digest-to-chat не повторюється.
-Preview/schedule share builder; selection/message/provenance фіксуються до send.
-Manual queue rechecks overlap у transaction; scheduled builder rechecks reservation
-перед insert. Немає нової AI обробки й жодної mutation людських judgments/read.
-
-Telegram adapter використовує fixed HTTPS api.telegram.org/sendMessage, proxy/
-redirect disabled, bounded request, plain text без parse_mode, link previews off.
-API звірено з [Telegram sendMessage](https://core.telegram.org/bots/api#sendmessage).
-UTF16-budgeted components з truncation marker не перевищують API text limit.
-Bot token тільки private config; не в UI/help/DB/logs/errors. Invalid token
-не стає bot ID. Typed false API response — definite failed; transport/malformed
-або втрачений acknowledgement — unknown. Статус sending фіксується до HTTP;
-response/message ID і наступний aggregate state commit разом, наступна part
-тільки після commit. Crash або persistence error після send не спричиняє replay;
-recovery переводить interrupted sending в unknown. Manual failed retry залишає
-sent parts недоторканими. Unknown немає кнопки retry, visible manual verification.
-
-Scheduler: один local-date slot, due HH:MM Europe/Kyiv; 5-minute startup/tick
-window, no catchup. Missed today або empty eligible selection має persisted
-missed row; дні offline не генерують retrospective batches. За погодженням user
-private .env daily 09:00/size5; default template disabled/no destination. При
-missing credentials нема network delivery; UI preview працює. NoWorker і
-restore pause блокують sender/scheduler разом із source/embedding workers.
-UI /deliveries preview/history/state protected shared Host/CSRF (для нелокального origin)/auth
-mutation guards. Agent read API не має delivery mutation capabilities.
+execution; explicit resume знімає marker.
 
 ## Нотатки-зв’язкові (schema v9)
 
@@ -957,7 +918,7 @@ Links instruction окремо вимагає у кожного link непор�
 
 **Де статус використовується далі.** Єдиний вхід — `Assess(Snapshot)`. Люди читають
 `Assess(...).Label()`: «повний текст», «частковий текст», «схоже на неповний текст («Read more»)»
-або нічого для `unknown` без ознак (Telegram-добірка, експорт Markdown). Агентський API
+або нічого для `unknown` без ознак (експорт Markdown). Агентський API
 повертає `completeness` (статус) і `incomplete_signs` (список `{kind, detail}`, порожній масив, якщо ознак
 немає). Запит до моделі дайджесту («Повнота: <статус>») і контекст знань беруть сам статус з
 накладеним підтвердженням і не змінені, бо їхній текст є частиною версії промпту. Частини
@@ -967,7 +928,7 @@ Links instruction окремо вимагає у кожного link непор�
 підтверджувати повноту». Від `unknown` саме по собі не випливає нічого: рішення залежить
 від ознак у тексті (п. 2–3) або від вашого погляду. Показ кнопки «Підтвердити повноту»
 рахує `Assess(Snapshot)`: ознака неповності в тексті, не підтверджено, статус не `partial`.
-Сторінка читає саме його, решта споживачів (дайджест, Telegram, API) переводяться на нього далі
+Сторінка читає саме його, решта споживачів (дайджест, API) переводяться на нього далі
 (див. `docs/BACKLOG.md`).
 
 ## Окрема помийка (schema v15)
@@ -993,7 +954,7 @@ Links instruction окремо вимагає у кожного link непор�
 й дайджести content-addressed, тож однакові ділять один файл); кеш HTTP для URL також видаляється.
 Захисні тригери `immutable_*_delete` цих таблиць у v18 пропускають `DELETE` тільки доки є
 `trash_entries` матеріалу, тож історія живих матеріалів лишається незмінною. Тригери нотаток-зв'язок
-(`connection_*`) безумовні: матеріал, згаданий у нотатці, або такий, що мав частини Telegram-добірок,
+(`connection_*`) безумовні: матеріал, згаданий у нотатці, 
 видалити не можна — картка пояснює чому, а «Очистити список» його пропускає й повідомляє, скільки лишилось.
 Відкладено: знеособлення таких матеріалів (стерти файли, лишити рядки-ідентифікатори).
 

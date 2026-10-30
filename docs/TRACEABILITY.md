@@ -20,7 +20,7 @@
 | FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | passed offline M1/M2: [lease/restart/idempotency](../internal/library/store_test.go), [digest restart/retry](../internal/library/digest_test.go), [chunk checkpoint reuse](../internal/library/chunk_digest_test.go), [human judgment across recovery](../internal/library/acceptance_test.go); [звірка AT-10](ACCEPTANCE_AUDIT.md) |
 | FR-11 | UC-05 | M1, M3 | AT-11 | passed M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
 | FR-12 | UC-09, UC-14 | M3 | AT-12 | passed: [read authentication/denied mutations](../internal/library/semantic_test.go) |
-| FR-13 | UC-08 | M4 | AT-13 | passed offline: [preview/partial retry, unknown/no replay, Kyiv slots](../internal/library/delivery_test.go) |
+| FR-13 | UC-08 | M4 | AT-13 | Telegram-бот ще не реалізований; попередні добірки прибрано |
 | FR-14 | UC-12 | M4 | AT-14 | passed: [live backup/restore primary/history/queue/checkpoints and corruption guards](../internal/library/backup_test.go), [CLI/paused activation](../cmd/news-library/archive_test.go) |
 | FR-15 | UC-03 | M1, M2 | AT-15 | passed offline M1/M2: [rating history/null/context](../internal/library/store_test.go), [source/digest ownership](../internal/library/digest_test.go), [scale/legacy dates](../internal/library/usefulness_test.go), [exact event across new snapshot](../internal/library/acceptance_test.go); [звірка AT-15](ACCEPTANCE_AUDIT.md) |
 | FR-16 | UC-10 | M1, M2 | AT-16 | passed offline M1/M2: [manual wins fetch race](../internal/library/store_test.go), [missing text/manual provenance/zero generator calls](../internal/library/acceptance_test.go), [long source persistence](../internal/library/chunk_digest_test.go); [звірка AT-16](ACCEPTANCE_AUDIT.md) |
@@ -86,11 +86,8 @@ model/snapshot isolation, metadata filters, FTS fallback and read API](../intern
 [browser/API fixture](../scripts/smoke_m3_ui.py).
 Explicit real local embedding integration: [synthetic multilingual retrieval smoke](../minions/live_semantic_smoke.go).
 
-M4: [Telegram statuses/secret-safe adapter/agent denial/restored delivery quarantine](../internal/library/delivery_test.go),
-[backup integrity and no-overwrite/no-symlink](../internal/library/backup_test.go),
-[Telegram config errors/precedence](../cmd/news-library/config_test.go),
+M4: [backup integrity and no-overwrite/no-symlink](../internal/library/backup_test.go),
 [browser preview and real CLI restore smoke](../scripts/smoke_m4_ui.py).
-Real bot/destination activation is pending private setup; no live Telegram calls in acceptance.
 
 Нотатки-зв’язкові розширюють FR-04/11/12/14: immutable source provenance,
 версії та актуальні backlinks, Ukrainian metadata/body search, агентський

@@ -120,11 +120,7 @@ func run() error {
 		web.ChatPlanner = planner
 	}
 	web.Cache = cache
-	web.Telegram = c.Telegram
 	web.BackgroundPaused = c.NoWorker
-	if err = s.RecoverDeliveries(); err != nil {
-		return err
-	}
 	web.ReadToken = c.ReadToken
 	var semantic *library.Semantic
 	if c.Embeddings {
@@ -146,17 +142,6 @@ func run() error {
 		go func() { defer close(knowledgeDone); kw.Run(ctx) }()
 	} else {
 		close(knowledgeDone)
-	}
-	deliveryDone := make(chan struct{})
-	if c.Telegram.Enabled && !c.NoWorker {
-		sender, e := library.NewTelegram(c.Telegram.Token, c.TelegramTimeout)
-		if e != nil {
-			return e
-		}
-		delivery := &library.DeliveryWorker{Store: s, Sender: sender, Config: c.Telegram, Timeout: c.TelegramTimeout}
-		go func() { defer close(deliveryDone); delivery.Run(ctx) }()
-	} else {
-		close(deliveryDone)
 	}
 	embeddingDone := make(chan struct{})
 	if semantic != nil && !c.NoWorker {
@@ -189,7 +174,6 @@ func run() error {
 	<-done
 	<-cleanupDone
 	<-embeddingDone
-	<-deliveryDone
 	<-knowledgeDone
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil

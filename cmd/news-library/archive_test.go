@@ -33,9 +33,9 @@ func TestArchiveCLIAndRestorePause(t *testing.T) {
 			t.Fatal(command.name, err)
 		}
 	}
-	c := config{Telegram: library.TelegramConfig{Enabled: true}, NoWorker: false}
+	c := config{NoWorker: false}
 	if err = applyRestorePause(&c, restored); err != nil || !c.NoWorker {
-		t.Fatal("restored worker/delivery gate not applied", err)
+		t.Fatal("restored worker gate not applied", err)
 	}
 	c.ResumeRestored = true
 	c.NoWorker = false

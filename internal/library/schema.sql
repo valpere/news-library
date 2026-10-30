@@ -80,20 +80,6 @@ CREATE TABLE embedding_chunks (
  PRIMARY KEY(snapshot_id,version,part),
  FOREIGN KEY(snapshot_id,version) REFERENCES embedding_runs(snapshot_id,version) ON DELETE CASCADE
 );
-CREATE TABLE deliveries (
- id INTEGER PRIMARY KEY, chat_id TEXT NOT NULL, bot_id TEXT NOT NULL,
- trigger TEXT NOT NULL CHECK(trigger IN ('manual','schedule')), slot TEXT UNIQUE,
- state TEXT NOT NULL CHECK(state IN ('preview','queued','sending','sent','failed','unknown','missed')),
- created_at TEXT NOT NULL, error TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE delivery_parts (
- delivery_id INTEGER NOT NULL REFERENCES deliveries(id), ordinal INTEGER NOT NULL,
- item_id INTEGER NOT NULL REFERENCES items(id), snapshot_id INTEGER NOT NULL REFERENCES source_versions(id),
- digest_id INTEGER NOT NULL REFERENCES generated_artifacts(id), text_path TEXT NOT NULL, hash TEXT NOT NULL,
- state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','sending','sent','failed','unknown')),
- message_id INTEGER, token TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL,
- PRIMARY KEY(delivery_id,ordinal)
-);
 CREATE TABLE connection_notes (
  id INTEGER PRIMARY KEY, stable_id TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL
 );
@@ -212,9 +198,6 @@ BEGIN SELECT RAISE(ABORT,'feedback digest belongs to another item'); END;
 CREATE TRIGGER immutable_feedback_update BEFORE UPDATE ON digest_feedback BEGIN SELECT RAISE(ABORT,'immutable feedback'); END;
 CREATE TRIGGER immutable_prediction_update BEFORE UPDATE ON interest_predictions BEGIN SELECT RAISE(ABORT,'immutable prediction'); END;
 CREATE TRIGGER immutable_checkpoint_update BEFORE UPDATE ON digest_checkpoints BEGIN SELECT RAISE(ABORT,'immutable checkpoint'); END;
-CREATE TRIGGER delivery_source_owner BEFORE INSERT ON delivery_parts
-WHEN NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE id=NEW.digest_id AND item_id=NEW.item_id AND snapshot_id=NEW.snapshot_id)
-BEGIN SELECT RAISE(ABORT,'delivery source ownership mismatch'); END;
 CREATE TRIGGER connection_member_owner BEFORE INSERT ON connection_members
 WHEN NOT EXISTS(SELECT 1 FROM source_versions WHERE id=NEW.snapshot_id AND item_id=NEW.item_id)
  OR (NEW.digest_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE id=NEW.digest_id AND item_id=NEW.item_id AND snapshot_id=NEW.snapshot_id))

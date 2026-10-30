@@ -16,7 +16,7 @@ def diagnose(settings, data, probe=False):
     result = ops.report('library-doctor')
     checks = {}
     for key in ('NEWS_LIBRARY_NO_WORKER', 'NEWS_LIBRARY_NO_DIGESTS', 'NEWS_LIBRARY_KNOWLEDGE',
-                'NEWS_LIBRARY_EMBEDDINGS', 'NEWS_LIBRARY_TELEGRAM_ENABLED', 'NEWS_LIBRARY_OPENROUTER_ENABLED'):
+                'NEWS_LIBRARY_EMBEDDINGS', 'NEWS_LIBRARY_OPENROUTER_ENABLED'):
         value = settings[key].lower()
         checks[key] = value if value in ('true', 'false', '1', '0', 't', 'f') else 'invalid_boolean'
     enabled = settings['NEWS_LIBRARY_OPENROUTER_ENABLED'].lower() in ('true', '1', 't')
