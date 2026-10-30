@@ -71,8 +71,8 @@ Keep extracted text immediately; saving to the library is a separate user
 action. Model failures must not lose a submitted URL or existing text.
 Agent access is read-only. Never modify source Obsidian/LLM Wiki collections.
 
-Do not invent commit conventions: upstream currently has only its initial
-commit. Describe concrete changes and validation in commits or pull requests.
+Describe concrete changes and validation in commits and pull requests; every change
+goes through a branch and PR (see the user-level Git rules).
 Full-data rollback copies live in gitignored `snapshots/` (see `minions/snapshots.py`);
 live `data/` and snapshots are never modified or deleted without the user's explicit instruction.
 Keep secrets and runtime data out of source control. Do not publish or push
