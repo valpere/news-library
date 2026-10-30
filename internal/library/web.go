@@ -430,7 +430,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 				}
 			}
 			// The newest job determines whether an old regeneration error is relevant.
-			if job.State == "done" || job.State == "failed" {
+			if job.State == "failed" {
 				break
 			}
 		}

@@ -9,7 +9,6 @@ import (
 
 type JobFailure struct {
 	ID, JobID                                            int64
-	Attempt                                              int
 	Kind, Message, RecordedAt, Response, DiagnosticError string
 	Retryable                                            bool
 }

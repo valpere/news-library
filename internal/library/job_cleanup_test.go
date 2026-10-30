@@ -72,3 +72,19 @@ func TestManualTextDeletesFailedFetchAndItsFailure(t *testing.T) {
 		t.Fatal("failed fetch kept after manual text", n)
 	}
 }
+
+func TestRetryDigestRefusesWhenDigestExists(t *testing.T) {
+	s := testStore(t)
+	enableDigests(t, s)
+	id := add(t, s, "https://example.com/ready")
+	manual(t, s, id, "Ready text")
+	completeFixtureDigest(t, s)
+	if err := s.RetryDigest(id); err == nil {
+		t.Fatal("retry queued a second generation for a ready digest")
+	}
+	var n int
+	s.DB.QueryRow("SELECT count(*) FROM jobs WHERE item_id=?", id).Scan(&n)
+	if n != 0 {
+		t.Fatal("job queued", n)
+	}
+}

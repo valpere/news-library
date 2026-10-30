@@ -280,6 +280,14 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 	if rejected {
 		return false, nil
 	}
+	var ready int
+	// A digest made with the current model and prompt is ready; a changed configuration may regenerate it.
+	if err = tx.QueryRow("SELECT count(*) FROM digests WHERE item_id=? AND model=? AND prompt_version=?", sid, s.DigestConfig.Model, s.DigestConfig.PromptVersion).Scan(&ready); err != nil {
+		return false, err
+	}
+	if ready > 0 {
+		return false, errors.New("дайджест уже готовий")
+	}
 	var active int
 	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE stage='digest' AND item_id=? AND state IN ('queued','running','retry_wait')", sid).Scan(&active); err != nil {
 		return false, err
