@@ -22,7 +22,7 @@ type DigestRetryResult struct {
 	Reason string
 }
 
-const failedDigestSelection = `SELECT i.id,i.id,j.id,i.title,i.original_url,j.error,j.config_version,j.token,coalesce((SELECT kind FROM job_failures WHERE job_id=j.id AND message=j.error ORDER BY id DESC LIMIT 1),'') FROM active_items i JOIN jobs j ON j.item_id=i.id AND j.stage='digest' WHERE j.id=(SELECT max(id) FROM jobs WHERE item_id=i.id AND stage='digest') AND j.state='failed' AND EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM jobs WHERE jobs.item_id=i.id AND stage='digest' AND state IN ('queued','running','retry_wait'))`
+const failedDigestSelection = `SELECT i.id,i.id,j.id,i.title,i.original_url,j.error,j.config_version,j.token,j.failure_kind FROM active_items i JOIN jobs j ON j.item_id=i.id AND j.stage='digest' WHERE j.id=(SELECT max(id) FROM jobs WHERE item_id=i.id AND stage='digest') AND j.state='failed' AND EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM jobs WHERE jobs.item_id=i.id AND stage='digest' AND state IN ('queued','running','retry_wait'))`
 
 func scanRetryCandidate(row interface{ Scan(...any) error }) (DigestRetryCandidate, error) {
 	var c DigestRetryCandidate

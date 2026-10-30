@@ -75,9 +75,12 @@ func TestLongDigestResumesSavedPartsAndPreservesSource(t *testing.T) {
 		t.Fatal("no multi-part digest", e)
 	}
 	s.DB.QueryRow("SELECT count(*) FROM digest_checkpoints").Scan(&checkpoints)
-	// One failed leaf call + one final synthesis; every successful checkpoint is reused.
-	if calls != checkpoints+2 || d.InputTokens != int64((checkpoints+1)*10) {
-		t.Fatal("parts repeated or usage lost", calls, checkpoints, d.InputTokens)
+	if checkpoints != 0 {
+		t.Fatal("checkpoints of the finished job kept", checkpoints)
+	}
+	// Every successful call is counted in the usage once (parts are reused, not repeated); one call failed.
+	if calls != int(d.InputTokens/10)+1 {
+		t.Fatal("parts repeated or usage lost", calls, d.InputTokens)
 	}
 }
 func TestLongDigestBoundsAndFencing(t *testing.T) {

@@ -315,7 +315,7 @@ func TestReadContextUsesSavedDigestAndCorrectBounds(t *testing.T) {
 		t.Fatal(got)
 	}
 	jobs, _ := s.Jobs(id)
-	if len(jobs) != 2 {
+	if len(jobs) != 0 {
 		t.Fatal("read queued generation", jobs)
 	}
 }

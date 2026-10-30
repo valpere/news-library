@@ -425,7 +425,7 @@ func primaryTables() []primaryTable {
 		{"digests", "markdown_path"},
 		{"digest_checkpoints", "markdown_path"},
 		{"connection_versions", "markdown_path"},
-		{"job_failures", "response_path"},
+		{"jobs", "response_path"},
 		{"article_knowledge", "markdown_path"},
 		{"knowledge_failures", "response_path"},
 	}

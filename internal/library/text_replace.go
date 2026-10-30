@@ -59,7 +59,7 @@ func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) 
 		`SELECT markdown_path FROM digests WHERE item_id=?`,
 		`SELECT markdown_path FROM article_knowledge WHERE item_id=?`,
 		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
-		`SELECT response_path FROM job_failures WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
+		`SELECT response_path FROM jobs WHERE item_id=? AND stage='digest'`,
 		`SELECT response_path FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
 	} {
 		rows, err := tx.Query(q, itemID)
@@ -89,7 +89,6 @@ func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) 
 		`DELETE FROM interest_predictions WHERE item_id=?`,
 		`DELETE FROM digest_feedback WHERE item_id=?`,
 		`DELETE FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
-		`DELETE FROM job_failures WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
 		`UPDATE filter_decisions SET override_of=NULL WHERE override_of IN (SELECT id FROM filter_decisions WHERE item_id=? AND stage='source')`,
 		`DELETE FROM filter_decisions WHERE item_id=? AND stage='source'`,
 		`DELETE FROM completeness_confirmations WHERE item_id=?`,
@@ -116,7 +115,7 @@ func (s *Store) eraseDigest(tx *sql.Tx, itemID, keepJob int64) (map[string]bool,
 		`SELECT markdown_path FROM digests WHERE item_id=?`,
 		`SELECT markdown_path FROM article_knowledge WHERE item_id=?`,
 		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN ` + idList(jobs),
-		`SELECT response_path FROM job_failures WHERE job_id IN ` + idList(jobs),
+		`SELECT response_path FROM jobs WHERE id IN ` + idList(jobs),
 		`SELECT response_path FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
 	} {
 		var rows *sql.Rows
@@ -152,7 +151,6 @@ func (s *Store) eraseDigest(tx *sql.Tx, itemID, keepJob int64) (map[string]bool,
 		{`DELETE FROM interest_predictions WHERE item_id=?`, []any{itemID}},
 		{`DELETE FROM digest_feedback WHERE item_id=?`, []any{itemID}},
 		{`DELETE FROM digest_checkpoints WHERE job_id IN ` + idList(jobs), nil},
-		{`DELETE FROM job_failures WHERE job_id IN ` + idList(jobs), nil},
 		{`DELETE FROM digests WHERE item_id=?`, []any{itemID}},
 		{`DELETE FROM jobs WHERE id IN ` + idList(jobs), nil},
 	} {
@@ -190,4 +188,37 @@ func idList(ids []int64) string {
 		parts[i] = fmt.Sprint(id)
 	}
 	return "(" + strings.Join(parts, ",") + ")"
+}
+
+// finishJob deletes a finished job with its checkpoints and last failure and returns
+// their files (to be removed after the commit). Only failed jobs stay in the table.
+func finishJob(tx *sql.Tx, jobID int64) (map[string]bool, error) {
+	paths := map[string]bool{}
+	for _, q := range []string{
+		`SELECT markdown_path FROM digest_checkpoints WHERE job_id=?`,
+		`SELECT response_path FROM jobs WHERE id=?`,
+	} {
+		rows, err := tx.Query(q, jobID)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var p string
+			if err = rows.Scan(&p); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if p != "" {
+				paths[p] = true
+			}
+		}
+		if err = rows.Close(); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM digest_checkpoints WHERE job_id=?`, jobID); err != nil {
+		return nil, err
+	}
+	_, err := tx.Exec(`DELETE FROM jobs WHERE id=?`, jobID)
+	return paths, err
 }
