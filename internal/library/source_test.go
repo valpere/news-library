@@ -222,7 +222,7 @@ func TestWorkerFailureAndStoredText(t *testing.T) {
 		t.Fatal("failed item stalled next")
 	}
 	fixture.Close()
-	text, _ := s.Snapshots(ok)
+	text, _ := s.Texts(ok)
 	if len(text) != 1 || text[0].Text != "searchable offline knowledge" {
 		t.Fatal("available text lost")
 	}

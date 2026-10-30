@@ -24,7 +24,7 @@ func storePredicted(t *testing.T, s *Store, id int64, probability float64) *Dige
 	if e := s.CompleteDigest(j, Digest{Markdown: fixtureDigest, ActualModel: j.Model, Provider: "fixture", Prediction: &InterestPrediction{Probability: probability, Reason: "Matches the configured fixture interests", Profile: j.Interests}}); e != nil {
 		t.Fatal(e)
 	}
-	d, e := s.DigestForSnapshot(j.SnapshotID.Int64)
+	d, e := s.DigestOf(j.ItemID)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -36,7 +36,7 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 	a := add(t, s, "https://example.com/a")
 	da := storePredicted(t, s, a, 0)
 	b := add(t, s, "https://example.com/b")
-	db := storePredicted(t, s, b, .9)
+	storePredicted(t, s, b, .9)
 	c := add(t, s, "https://example.com/c")
 	storePredicted(t, s, c, .9)
 	// A source with no profile has no prediction, not a prediction of zero.
@@ -87,7 +87,7 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 	if e = s.CompleteDigest(j, Digest{Markdown: fixtureDigest, ActualModel: j.Model, Provider: "fixture", Prediction: &InterestPrediction{Probability: .1, Reason: "A changed fixture profile predicts less interest", Profile: j.Interests}}); e != nil {
 		t.Fatal(e)
 	}
-	if cur, e := s.Digest(db.ID, b); e != nil || cur.Prediction == nil || cur.Prediction.Probability != .1 || cur.Prediction.Profile != "Different fixture profile" {
+	if cur, e := s.DigestOf(b); e != nil || cur == nil || cur.Prediction == nil || cur.Prediction.Probability != .1 || cur.Prediction.Profile != "Different fixture profile" {
 		t.Fatal("prediction of the replaced digest kept", e)
 	}
 	i, _ = s.Item(b)
@@ -128,12 +128,12 @@ func TestPredictedCloudResponseValidation(t *testing.T) {
 		t.Fatal(e)
 	}
 	j := Job{Model: "fixture:cloud", PromptVersion: DigestPredictionPromptVersion, Interests: "Fixture profile", InputLimit: 4096}
-	d, e := o.Generate(context.Background(), j, Snapshot{Text: "Source data"})
+	d, e := o.Generate(context.Background(), j, SourceText{Text: "Source data"})
 	if e != nil || d.Markdown != fixtureDigest || d.Prediction.Probability != .73 || calls != 1 {
 		t.Fatal("prediction response", d, e)
 	}
 	bad = true
-	if _, e = o.Generate(context.Background(), j, Snapshot{Text: "Source data"}); e == nil {
+	if _, e = o.Generate(context.Background(), j, SourceText{Text: "Source data"}); e == nil {
 		t.Fatal("invalid probability accepted")
 	}
 	for _, raw := range []string{`{"markdown":"x","prediction":{"reason":"no probability"}}`, `{"markdown":"x","prediction":{"probability":null,"reason":"bad null"}}`, `{"markdown":"x","prediction":{"probability":0,"reason":5}}`, `{"markdown":"x","prediction":{"probability":0.4,"reason":"ok reason"}} {}`} {
@@ -173,7 +173,7 @@ func TestQueuedPredictionCapturesProfileAcrossRestart(t *testing.T) {
 	if e = restarted.CompleteDigest(j, d); e != nil {
 		t.Fatal(e)
 	}
-	saved, e := restarted.DigestForSnapshot(j.SnapshotID.Int64)
+	saved, e := restarted.DigestOf(j.ItemID)
 	if e != nil || saved.Prediction.Profile != j.Interests {
 		t.Fatal("profile provenance lost", e)
 	}

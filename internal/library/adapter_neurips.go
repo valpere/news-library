@@ -58,19 +58,19 @@ type neuripsPaper struct {
 
 var nextChunk = regexp.MustCompile(`self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)`)
 
-func (a neuripsAdapter) Extract(ctx context.Context, f *Fetcher, u *url.URL) (Snapshot, error) {
+func (a neuripsAdapter) Extract(ctx context.Context, f *Fetcher, u *url.URL) (SourceText, error) {
 	m := neuripsPosterPath.FindStringSubmatch(u.Path)
 	paperURL := a.paperBase + "/docs/neurips/" + m[1] + "/paper"
 	data, _, _, partial, err := f.get(ctx, paperURL)
 	if err != nil {
-		return Snapshot{}, err
+		return SourceText{}, err
 	}
 	if partial {
-		return Snapshot{}, errors.New("відповідь читалки обрізана")
+		return SourceText{}, errors.New("відповідь читалки обрізана")
 	}
 	paper, err := parseNeuripsPaper(data)
 	if err != nil {
-		return Snapshot{}, err
+		return SourceText{}, err
 	}
 	var b strings.Builder
 	words := 0
@@ -97,9 +97,9 @@ func (a neuripsAdapter) Extract(ctx context.Context, f *Fetcher, u *url.URL) (Sn
 		words += len(strings.Fields(strings.Join(paras, " ")))
 	}
 	if words == 0 {
-		return Snapshot{}, errors.New("у відповіді читалки немає тексту статті")
+		return SourceText{}, errors.New("у відповіді читалки немає тексту статті")
 	}
-	return Snapshot{
+	return SourceText{
 		Text: strings.TrimSpace(b.String()), Title: paper.Title, Completeness: "unknown",
 		Warning: fmt.Sprintf("Повний текст статті з читалки Bytez (%d слів)", words),
 	}, nil

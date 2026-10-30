@@ -22,7 +22,7 @@ import (
 type result struct {
 	ID                      int64
 	State, Error, Knowledge string
-	Snapshot, Digest        int64
+	HasText, HasDigest      bool
 }
 
 func plan(s *library.Store, ids string, limit int) ([]int64, error) {
@@ -208,9 +208,9 @@ func run() error {
 			if e != nil {
 				return e
 			}
-			fetch := !item.Selected.Valid
-			if item.Selected.Valid {
-				snap, e := s.Snapshot(item.Selected.Int64)
+			fetch := !item.HasText
+			if item.HasText {
+				snap, e := s.SourceText(item.ID)
 				if e != nil {
 					return e
 				}
@@ -219,7 +219,7 @@ func run() error {
 			if fetch {
 				e = s.Retry(id)
 			} else if *cloud {
-				d, er := s.DigestForSnapshot(item.Selected.Int64)
+				d, er := s.DigestOf(item.ID)
 				if er != nil {
 					return er
 				}
@@ -259,19 +259,19 @@ func run() error {
 					return e
 				}
 				entry.State = item.State
-				entry.Snapshot = item.Selected.Int64
+				entry.HasText = true
 				if entry.Error == "" {
 					entry.Error = item.Error
 				}
-				if item.Selected.Valid {
-					d, er := s.DigestForSnapshot(item.Selected.Int64)
+				if item.HasText {
+					d, er := s.DigestOf(item.ID)
 					if er != nil {
 						return er
 					}
 					if d != nil {
-						entry.Digest = d.ID
+						entry.HasDigest = true
 					}
-					k, er := s.KnowledgeStatus(id, item.Selected.Int64)
+					k, er := s.KnowledgeStatus(id)
 					if er != nil {
 						return er
 					}
@@ -294,7 +294,7 @@ func run() error {
 			if before != after {
 				return errors.New("human judgments or reading state changed")
 			}
-			fmt.Printf("item=%d state=%s digest=%d knowledge=%s\n", id, entry.State, entry.Digest, entry.Knowledge)
+			fmt.Printf("item=%d state=%s digest=%t knowledge=%s\n", id, entry.State, entry.HasDigest, entry.Knowledge)
 		}
 		return nil
 	}

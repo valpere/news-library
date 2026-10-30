@@ -48,7 +48,7 @@ func TestSuccessfulFetchDeletesJobAndFailure(t *testing.T) {
 	if err := s.Retry(id); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Complete(claim(t, s), Snapshot{Title: "T", Text: "Recovered text", Origin: "fetched", Extractor: "fixture", Completeness: "complete"}); err != nil {
+	if err := s.Complete(claim(t, s), SourceText{Title: "T", Text: "Recovered text", Origin: "fetched", Extractor: "fixture", Completeness: "complete"}); err != nil {
 		t.Fatal(err)
 	}
 	var n int
@@ -93,7 +93,7 @@ func TestInformationalDatesAreGoneFromTheSchema(t *testing.T) {
 	s := testStore(t)
 	for table, column := range map[string]string{
 		"digests": "created_at", "digest_checkpoints": "created_at", "article_knowledge": "created_at",
-		"knowledge_runs": "created_at", "knowledge_failures": "recorded_at", "knowledge_batches": "created_at",
+		"knowledge_runs": "created_at", "knowledge_batches": "created_at",
 	} {
 		var n int
 		if err := s.DB.QueryRow("SELECT count(*) FROM pragma_table_info(?) WHERE name=?", table, column).Scan(&n); err != nil || n != 0 {
@@ -104,6 +104,39 @@ func TestInformationalDatesAreGoneFromTheSchema(t *testing.T) {
 		var n int
 		if err := s.DB.QueryRow("SELECT count(*) FROM pragma_table_info(?) WHERE name=?", table, column).Scan(&n); err != nil || n != 1 {
 			t.Fatal("kept date missing", table, column)
+		}
+	}
+}
+
+func TestKnowledgeKeepsOnlyTheLastFailureAndForgetsItAfterSuccess(t *testing.T) {
+	s := testStore(t)
+	enableDigests(t, s)
+	s.KnowledgeEnabled = true
+	id := knowledgeArticle(t, s, "last-failure")
+	fail := func(diagnostic string) string {
+		job, err := s.claimKnowledge(time.Second)
+		if err != nil || job == nil {
+			t.Fatal(job, err)
+		}
+		if err = s.failKnowledge(*job, &SourceError{Kind: "format", Message: "bad", Diagnostic: diagnostic}); err != nil {
+			t.Fatal(err)
+		}
+		var path string
+		s.DB.QueryRow("SELECT response_path FROM knowledge_runs WHERE id=?", job.ID).Scan(&path)
+		return path
+	}
+	first := fail("first rejected reply")
+	if err := s.RetryKnowledge(id); err != nil {
+		t.Fatal(err)
+	}
+	second := fail("second rejected reply")
+	failures, err := s.KnowledgeFailures(id)
+	if err != nil || len(failures) != 1 || failures[0].Response != "second rejected reply" {
+		t.Fatal(failures, err)
+	}
+	if first != second {
+		if _, err = os.Stat(filepath.Join(s.Files.Root, first)); !os.IsNotExist(err) {
+			t.Fatal("replaced diagnostic kept", err)
 		}
 	}
 }

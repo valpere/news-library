@@ -126,7 +126,7 @@ func (s *Semantic) schedule(revision string) error {
 }
 
 type embeddingRun struct {
-	SnapshotID                             int64
+	ItemID                                 int64
 	Version, Revision, Token               string
 	Part, Attempts, ChunkBytes, Dimensions int
 }
@@ -147,7 +147,7 @@ func (s *Semantic) claim(revision string) (*embeddingRun, error) {
 		return nil, err
 	}
 	var j embeddingRun
-	err = tx.QueryRow(`SELECT item_id,version,model_revision,next_part,attempts,chunk_bytes,dimensions FROM embedding_runs WHERE version=? AND ((state IN ('queued','retry_wait') AND next_attempt<=?) OR (state='running' AND lease_until<=? AND attempts<3)) ORDER BY item_id LIMIT 1`, s.version(revision), now, now).Scan(&j.SnapshotID, &j.Version, &j.Revision, &j.Part, &j.Attempts, &j.ChunkBytes, &j.Dimensions)
+	err = tx.QueryRow(`SELECT item_id,version,model_revision,next_part,attempts,chunk_bytes,dimensions FROM embedding_runs WHERE version=? AND ((state IN ('queued','retry_wait') AND next_attempt<=?) OR (state='running' AND lease_until<=? AND attempts<3)) ORDER BY item_id LIMIT 1`, s.version(revision), now, now).Scan(&j.ItemID, &j.Version, &j.Revision, &j.Part, &j.Attempts, &j.ChunkBytes, &j.Dimensions)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}
@@ -156,7 +156,7 @@ func (s *Semantic) claim(revision string) (*embeddingRun, error) {
 	}
 	j.Token = rand.Text()
 	j.Attempts++
-	_, err = tx.Exec(`UPDATE embedding_runs SET state='running',token=?,attempts=?,lease_until=? WHERE item_id=? AND version=?`, j.Token, j.Attempts, time.Now().Add(s.Timeout+time.Minute).UnixMilli(), j.SnapshotID, j.Version)
+	_, err = tx.Exec(`UPDATE embedding_runs SET state='running',token=?,attempts=?,lease_until=? WHERE item_id=? AND version=?`, j.Token, j.Attempts, time.Now().Add(s.Timeout+time.Minute).UnixMilli(), j.ItemID, j.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (s *Semantic) claim(revision string) (*embeddingRun, error) {
 }
 func embeddingLease(tx *sql.Tx, j embeddingRun) error {
 	var n int
-	err := tx.QueryRow(`SELECT count(*) FROM embedding_runs WHERE item_id=? AND version=? AND token=? AND state='running' AND lease_until>?`, j.SnapshotID, j.Version, j.Token, time.Now().UnixMilli()).Scan(&n)
+	err := tx.QueryRow(`SELECT count(*) FROM embedding_runs WHERE item_id=? AND version=? AND token=? AND state='running' AND lease_until>?`, j.ItemID, j.Version, j.Token, time.Now().UnixMilli()).Scan(&n)
 	if err != nil {
 		return err
 	}
@@ -183,24 +183,24 @@ func (s *Semantic) finish(j embeddingRun, parts []string, vector []float64) erro
 		return err
 	}
 	var allowed int
-	if err = tx.QueryRow(`SELECT count(*) FROM items WHERE id=? AND filter_state IN ('passed','overridden')`, j.SnapshotID).Scan(&allowed); err != nil {
+	if err = tx.QueryRow(`SELECT count(*) FROM items WHERE id=? AND filter_state IN ('passed','overridden')`, j.ItemID).Scan(&allowed); err != nil {
 		return err
 	}
 	if allowed == 0 {
-		_, err = tx.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE item_id=? AND version=?`, j.SnapshotID, j.Version)
+		_, err = tx.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE item_id=? AND version=?`, j.ItemID, j.Version)
 	} else {
 		start := 0
 		for _, part := range parts[:j.Part] {
 			start += len(part)
 		}
 		data, _ := json.Marshal(vector)
-		_, err = tx.Exec(`INSERT INTO embedding_chunks(item_id,version,part,start_byte,end_byte,vector) VALUES(?,?,?,?,?,?)`, j.SnapshotID, j.Version, j.Part, start, start+len(parts[j.Part]), string(data))
+		_, err = tx.Exec(`INSERT INTO embedding_chunks(item_id,version,part,start_byte,end_byte,vector) VALUES(?,?,?,?,?,?)`, j.ItemID, j.Version, j.Part, start, start+len(parts[j.Part]), string(data))
 		if err == nil {
 			state := "queued"
 			if j.Part+1 == len(parts) {
 				state = "done"
 			}
-			_, err = tx.Exec(`UPDATE embedding_runs SET state=?,next_part=?,total_parts=?,attempts=0,next_attempt=0,lease_until=0,error='' WHERE item_id=? AND version=?`, state, j.Part+1, len(parts), j.SnapshotID, j.Version)
+			_, err = tx.Exec(`UPDATE embedding_runs SET state=?,next_part=?,total_parts=?,attempts=0,next_attempt=0,lease_until=0,error='' WHERE item_id=? AND version=?`, state, j.Part+1, len(parts), j.ItemID, j.Version)
 		}
 	}
 	if err != nil {
@@ -222,7 +222,7 @@ func (s *Semantic) Step(ctx context.Context) (bool, error) {
 	if err != nil || j == nil {
 		return false, err
 	}
-	snap, err := s.Store.Snapshot(j.SnapshotID)
+	snap, err := s.Store.SourceText(j.ItemID)
 	if err == nil {
 		err = ValidateSourceContent(snap)
 	}
@@ -236,10 +236,10 @@ func (s *Semantic) Step(ctx context.Context) (bool, error) {
 	}
 	var allowed int
 	if err == nil {
-		err = s.Store.DB.QueryRow(`SELECT count(*) FROM items WHERE id=? AND filter_state IN ('passed','overridden')`, j.SnapshotID).Scan(&allowed)
+		err = s.Store.DB.QueryRow(`SELECT count(*) FROM items WHERE id=? AND filter_state IN ('passed','overridden')`, j.ItemID).Scan(&allowed)
 	}
 	if err == nil && allowed == 0 { // No inference after an already recorded rejection.
-		_, err = s.Store.DB.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE item_id=? AND version=? AND token=?`, j.SnapshotID, j.Version, j.Token)
+		_, err = s.Store.DB.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE item_id=? AND version=? AND token=?`, j.ItemID, j.Version, j.Token)
 		return true, err
 	}
 	if err == nil {
@@ -260,7 +260,7 @@ func (s *Semantic) Step(ctx context.Context) (bool, error) {
 		state = "failed"
 	}
 	// Generic diagnostic avoids leaking provider data; primary state is untouched.
-	result, saveErr := s.Store.DB.Exec(`UPDATE embedding_runs SET state=?,error='embedding failed; retry or check local bge-m3',next_attempt=?,lease_until=0 WHERE item_id=? AND version=? AND token=? AND state='running' AND lease_until>?`, state, time.Now().Add(10*time.Second).UnixMilli(), j.SnapshotID, j.Version, j.Token, time.Now().UnixMilli())
+	result, saveErr := s.Store.DB.Exec(`UPDATE embedding_runs SET state=?,error='embedding failed; retry or check local bge-m3',next_attempt=?,lease_until=0 WHERE item_id=? AND version=? AND token=? AND state='running' AND lease_until>?`, state, time.Now().Add(10*time.Second).UnixMilli(), j.ItemID, j.Version, j.Token, time.Now().UnixMilli())
 	if saveErr == nil {
 		n, e := result.RowsAffected()
 		if e != nil {
@@ -321,7 +321,7 @@ func (s *Store) RebuildEmbeddings() error {
 	// A migrated snapshot gets its first recorded rule decision before inference;
 	// existing decisions are never rescanned just because configuration changed.
 	for _, ids := range legacy {
-		if _, err = s.ensureFilterForSnapshot(tx, ids[0], ids[1]); err != nil {
+		if _, err = s.ensureFilter(tx, ids[0], ids[1]); err != nil {
 			return err
 		}
 	}

@@ -23,7 +23,7 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 	manual(t, s, id, "Persistent searchable database source")
 	job := completeFixtureDigest(t, s)
 	item, _ := s.Item(id)
-	sid := item.Selected.Int64
+	sid := item.ID
 	s.Rate(id, 3, nil)
 	// A pending regeneration with a saved digest checkpoint must survive.
 	s.RegenerateDigest(id)
@@ -59,11 +59,11 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 	if len(history) != 1 || history[0].AssessedAt.Valid {
 		t.Fatal("history changed")
 	}
-	source, err := restored.Snapshot(sid)
+	source, err := restored.SourceText(sid)
 	if err != nil || source.Text != "Persistent searchable database source" {
 		t.Fatal(source, err)
 	}
-	if digest, err := restored.DigestForSnapshot(sid); err != nil || digest == nil || digest.Markdown != fixtureDigest {
+	if digest, err := restored.DigestOf(sid); err != nil || digest == nil || digest.Markdown != fixtureDigest {
 		t.Fatal(digest, err)
 	}
 	if got, err := restored.DigestCheckpoint(pending, 0, 0, "input"); err != nil || got == nil || got.Markdown != fixtureDigest {
@@ -113,9 +113,9 @@ func TestBackupRejectsCorruptionSymlinksAndOverwrite(t *testing.T) {
 		t.Fatal("invalid restore reserved destination")
 	}
 	item, _ := s.Item(id)
-	source, _ := s.Snapshot(item.Selected.Int64)
+	source, _ := s.SourceText(item.ID)
 	var sourcePath string
-	s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", source.ID).Scan(&sourcePath)
+	s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", source.ItemID).Scan(&sourcePath)
 	os.Remove(filepath.Join(s.Files.Root, sourcePath))
 	outside := filepath.Join(root, "outside")
 	os.WriteFile(outside, []byte(source.Text), 0600)

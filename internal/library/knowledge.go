@@ -14,25 +14,25 @@ import (
 const KnowledgePromptVersion = "article-connections-v2"
 
 type ArticleKnowledge struct {
-	FileError                               string `json:"file_error,omitempty"`
-	ID, RunID, ItemID, SnapshotID, DigestID int64
-	Category                                string   `json:"category"`
-	Tags                                    []string `json:"tags"`
-	Questions                               []string `json:"questions"`
-	Markdown, Model, PromptVersion          string
+	FileError                      string `json:"file_error,omitempty"`
+	ID, RunID, ItemID              int64
+	Category                       string   `json:"category"`
+	Tags                           []string `json:"tags"`
+	Questions                      []string `json:"questions"`
+	Markdown, Model, PromptVersion string
 }
 type KnowledgeRun struct {
-	ID, ItemID, SnapshotID, DigestID                int64
+	ID, ItemID                                      int64
 	Model, PromptVersion, Token, State, Error, Kind string
 	Attempts, LinkedCount                           int
 }
 type KnowledgeContext struct {
-	EvidenceVersion              string
-	ItemID, SnapshotID, DigestID int64
-	Title, URL, Text, Coverage   string
-	Category                     string
-	Tags, Questions              []string
-	Evidence                     []KnowledgeEvidence
+	EvidenceVersion            string
+	ItemID                     int64
+	Title, URL, Text, Coverage string
+	Category                   string
+	Tags, Questions            []string
+	Evidence                   []KnowledgeEvidence
 }
 type KnowledgeLink struct {
 	EvidenceVersion   string   `json:"evidence_version,omitempty"`
@@ -104,15 +104,15 @@ func (s *Store) RetryKnowledge(item int64) error {
 	return tx.Commit()
 }
 
-const knowledgeRunSelect = `SELECT id,item_id,item_id,item_id,model,prompt_version,token,state,error,kind,attempts,linked_count FROM knowledge_runs`
+const knowledgeRunSelect = `SELECT id,item_id,model,prompt_version,token,state,error,kind,attempts,linked_count FROM knowledge_runs`
 
 func scanKnowledgeRun(row interface{ Scan(...any) error }) (KnowledgeRun, error) {
 	var j KnowledgeRun
-	err := row.Scan(&j.ID, &j.ItemID, &j.SnapshotID, &j.DigestID, &j.Model, &j.PromptVersion, &j.Token, &j.State, &j.Error, &j.Kind, &j.Attempts, &j.LinkedCount)
+	err := row.Scan(&j.ID, &j.ItemID, &j.Model, &j.PromptVersion, &j.Token, &j.State, &j.Error, &j.Kind, &j.Attempts, &j.LinkedCount)
 	return j, err
 }
-func (s *Store) KnowledgeStatus(item, snapshot int64) (*KnowledgeRun, error) {
-	j, err := scanKnowledgeRun(s.DB.QueryRow(knowledgeRunSelect+" WHERE item_id=? ORDER BY updated_at DESC,id DESC LIMIT 1", item, snapshot))
+func (s *Store) KnowledgeStatus(item int64) (*KnowledgeRun, error) {
+	j, err := scanKnowledgeRun(s.DB.QueryRow(knowledgeRunSelect+" WHERE item_id=? ORDER BY updated_at DESC,id DESC LIMIT 1", item))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -132,10 +132,7 @@ func (s *Store) claimKnowledge(timeout time.Duration, target ...int64) (*Knowled
 	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','running','retry_wait') AND (?=0 OR item_id=?) AND NOT EXISTS(SELECT 1 FROM active_items i WHERE i.id=knowledge_runs.item_id AND i.filter_state IN ('passed','overridden') AND EXISTS(SELECT 1 FROM digests WHERE digests.item_id=i.id))`, itemID, itemID); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(`INSERT INTO knowledge_failures(run_id,kind,message) SELECT id,'unknown','Аналіз не завершено після перезапуску' FROM knowledge_runs WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, now, itemID, itemID); err != nil {
-		return nil, err
-	}
-	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='failed',kind='unknown',error='Аналіз не завершено після перезапуску',lease_until=0 WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, now, itemID, itemID); err != nil {
+	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='failed',kind='unknown',error='Аналіз не завершено після перезапуску',response_path='',hash='',lease_until=0 WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, now, itemID, itemID); err != nil {
 		return nil, err
 	}
 	j, err := scanKnowledgeRun(tx.QueryRow(knowledgeRunSelect+` WHERE ((state IN ('queued','retry_wait') AND next_attempt<=?) OR (state='running' AND lease_until<=? AND attempts<3)) AND (?=0 OR item_id=?) ORDER BY id LIMIT 1`, now, now, itemID, itemID))
@@ -164,8 +161,8 @@ func knowledgeLease(tx *sql.Tx, j KnowledgeRun) error {
 	}
 	return nil
 }
-func (s *Store) Knowledge(item, snapshot int64) (*ArticleKnowledge, error) {
-	return s.knowledgeRecord(" WHERE k.item_id=? AND k.item_id=? ORDER BY r.updated_at DESC,k.id DESC LIMIT 1", item, snapshot)
+func (s *Store) Knowledge(item int64) (*ArticleKnowledge, error) {
+	return s.knowledgeRecord(" WHERE k.item_id=? ORDER BY r.updated_at DESC,k.id DESC LIMIT 1", item)
 }
 func (s *Store) knowledgeForRun(run int64) (*ArticleKnowledge, error) {
 	return s.knowledgeRecord(" WHERE k.run_id=?", run)
@@ -173,7 +170,7 @@ func (s *Store) knowledgeForRun(run int64) (*ArticleKnowledge, error) {
 func (s *Store) knowledgeRecord(where string, args ...any) (*ArticleKnowledge, error) {
 	var k ArticleKnowledge
 	var tags, questions, path, hash string
-	err := s.DB.QueryRow(`SELECT k.id,k.run_id,k.item_id,k.item_id,k.item_id,k.category,k.tags_json,k.questions_json,k.markdown_path,k.hash,k.model,k.prompt_version FROM article_knowledge k JOIN knowledge_runs r ON r.id=k.run_id`+where, args...).Scan(&k.ID, &k.RunID, &k.ItemID, &k.SnapshotID, &k.DigestID, &k.Category, &tags, &questions, &path, &hash, &k.Model, &k.PromptVersion)
+	err := s.DB.QueryRow(`SELECT k.id,k.run_id,k.item_id,k.category,k.tags_json,k.questions_json,k.markdown_path,k.hash,k.model,k.prompt_version FROM article_knowledge k JOIN knowledge_runs r ON r.id=k.run_id`+where, args...).Scan(&k.ID, &k.RunID, &k.ItemID, &k.Category, &tags, &questions, &path, &hash, &k.Model, &k.PromptVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -205,7 +202,7 @@ func (s *Store) completeKnowledgeMetadata(j KnowledgeRun, k ArticleKnowledge, d 
 	if err = knowledgeLease(tx, j); err != nil {
 		return err
 	}
-	if d.ID != j.DigestID || d.ItemID != j.ItemID || d.SnapshotID != j.SnapshotID {
+	if d.ItemID != j.ItemID {
 		return errors.New("analysis digest ownership mismatch")
 	}
 	var sourceURL, title, sourceHash string
@@ -248,50 +245,40 @@ func (s *Store) failKnowledge(j KnowledgeRun, cause error) error {
 		}
 		hash = textHash(f.Response)
 	}
-	if _, err = tx.Exec("INSERT INTO knowledge_failures(run_id,kind,message,response_path,hash) VALUES(?,?,?,?,?)", j.ID, f.Kind, f.Message, path, hash); err != nil {
+	// Only the last failure is kept: it replaces the previous one and its diagnostic file.
+	var replaced string
+	if err = tx.QueryRow("SELECT response_path FROM knowledge_runs WHERE id=?", j.ID).Scan(&replaced); err != nil {
 		return err
 	}
-	_, err = tx.Exec("UPDATE knowledge_runs SET state=?,error=?,kind=?,lease_until=0,next_attempt=?,updated_at=? WHERE id=?", state, f.Message, f.Kind, time.Now().Add(time.Duration(j.Attempts)*10*time.Second).UnixMilli(), nowUTC(), j.ID)
+	_, err = tx.Exec("UPDATE knowledge_runs SET state=?,error=?,kind=?,response_path=?,hash=?,lease_until=0,next_attempt=?,updated_at=? WHERE id=?", state, f.Message, f.Kind, path, hash, time.Now().Add(time.Duration(j.Attempts)*10*time.Second).UnixMilli(), nowUTC(), j.ID)
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.removeUnusedFiles(map[string]bool{replaced: replaced != ""}) // best effort
+	return nil
 }
 
-func (s *Store) KnowledgeFailures(item, snapshot int64) ([]JobFailure, error) {
-	rows, err := s.DB.Query(`SELECT f.id,f.run_id,f.kind,f.message,f.response_path,f.hash FROM knowledge_failures f JOIN knowledge_runs r ON r.id=f.run_id WHERE r.item_id=? AND r.item_id=? ORDER BY f.id DESC LIMIT 20`, item, snapshot)
+// KnowledgeFailures returns the last failure of the item's analysis: zero or one element.
+func (s *Store) KnowledgeFailures(item int64) ([]JobFailure, error) {
+	f := JobFailure{}
+	var path, hash string
+	err := s.DB.QueryRow(`SELECT id,kind,error,response_path,hash FROM knowledge_runs WHERE item_id=? AND kind<>'' ORDER BY updated_at DESC,id DESC LIMIT 1`, item).Scan(&f.JobID, &f.Kind, &f.Message, &path, &hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	type record struct {
-		failure    JobFailure
-		path, hash string
-	}
-	records := []record{}
-	for rows.Next() {
-		var r record
-		if err = rows.Scan(&r.failure.ID, &r.failure.JobID, &r.failure.Kind, &r.failure.Message, &r.path, &r.hash); err != nil {
-			rows.Close()
-			return nil, err
+	if path != "" {
+		data, e := s.Files.Read(path, hash)
+		if e != nil {
+			f.DiagnosticError = "Діагностична відповідь недоступна"
+		} else {
+			f.Response = string(data)
 		}
-		records = append(records, r)
 	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return nil, err
-	}
-	out := []JobFailure{}
-	for _, r := range records {
-		if r.path != "" {
-			data, e := s.Files.Read(r.path, r.hash)
-			if e != nil {
-				r.failure.DiagnosticError = "Діагностична відповідь недоступна"
-			} else {
-				r.failure.Response = string(data)
-			}
-		}
-		out = append(out, r.failure)
-	}
-	return out, nil
+	return []JobFailure{f}, nil
 }

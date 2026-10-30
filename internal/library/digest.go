@@ -244,7 +244,7 @@ func (o *Ollama) cloudAlias(ctx context.Context, requested string) (string, erro
 	}
 	return "", &SourceError{Kind: "configuration", Message: "cloud-модель не зареєстрована в Ollama; налаштуйте доступну cloud-модель"}
 }
-func (o *Ollama) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, error) {
+func (o *Ollama) Generate(ctx context.Context, j Job, snap SourceText) (Digest, error) {
 	messages, err := digestMessages(j, snap)
 	if err != nil {
 		return Digest{}, err
@@ -297,7 +297,7 @@ func digestFailureError(err error, raw string) *SourceError {
 	return &SourceError{Kind: kind, Diagnostic: raw, Message: err.Error()}
 }
 
-func digestMessages(j Job, snap Snapshot) ([]map[string]string, error) {
+func digestMessages(j Job, snap SourceText) ([]map[string]string, error) {
 	if err := ValidateSourceContent(snap); err != nil {
 		return nil, err
 	}

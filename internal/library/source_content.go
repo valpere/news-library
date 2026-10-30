@@ -31,7 +31,7 @@ func copyrightOnly(text string) bool {
 }
 
 // Recognize the served interstitial, not articles discussing browser challenges.
-func ValidateSourceContent(s Snapshot) error {
+func ValidateSourceContent(s SourceText) error {
 	title := strings.ToLower(strings.TrimSpace(s.Title))
 	text := strings.ToLower(strings.ReplaceAll(s.Text, "’", "'"))
 	blocked := (title == "client challenge" && strings.Contains(text, "a required part of this site couldn't load")) ||
@@ -56,12 +56,12 @@ type SourceDiagnosis struct {
 	Kind string
 }
 
-func diagnoseSource(s Snapshot) *SourceDiagnosis {
+func diagnoseSource(s SourceText) *SourceDiagnosis {
 	err := ValidateSourceContent(s)
 	var se *SourceError
 	if !errors.As(err, &se) {
 		if signs := incompleteSigns(s.Text); len(signs) > 0 && s.Completeness != "full" {
-			where := fmt.Sprintf("Текст #%d (отримано %s, витяг %s)", s.ID, datePart(s.RetrievedAt), s.Extractor)
+			where := fmt.Sprintf("Текст #%d (отримано %s, витяг %s)", s.ItemID, datePart(s.RetrievedAt), s.Extractor)
 			if signs[0].Kind == reasonTeaser {
 				return &SourceDiagnosis{Soft: true, Kind: reasonTeaser, Title: "Текст, схоже, неповний",
 					Details: where + fmt.Sprintf(" закінчується рядком «%s» — це схоже на посилання на інші сторінки, а не на кінець статті. "+
@@ -73,7 +73,7 @@ func diagnoseSource(s Snapshot) *SourceDiagnosis {
 		}
 		return nil
 	}
-	origin := fmt.Sprintf("Текст #%d (отримано %s, витяг %s)", s.ID, datePart(s.RetrievedAt), s.Extractor)
+	origin := fmt.Sprintf("Текст #%d (отримано %s, витяг %s)", s.ItemID, datePart(s.RetrievedAt), s.Extractor)
 	switch {
 	case se.FooterOnly:
 		line := strings.TrimSpace(strings.Split(strings.TrimSpace(s.Text), "\n")[0])

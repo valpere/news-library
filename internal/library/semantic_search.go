@@ -16,9 +16,9 @@ type SearchResult struct {
 	Indexed, Eligible int
 }
 type semanticHit struct {
-	id, snapshot int64
-	start, end   int
-	score        float64
+	id         int64
+	start, end int
+	score      float64
 }
 
 func searchMode(mode string) (string, error) {
@@ -58,7 +58,7 @@ func (s *Semantic) Search(ctx context.Context, f Filters, mode string) (SearchRe
 	eligible := map[int64]Item{}
 	for _, item := range candidates {
 		eligible[item.ID] = item
-		if item.Selected.Valid && item.FilterState != "rejected" {
+		if item.HasText && item.FilterState != "rejected" {
 			out.Eligible++
 		}
 	}
@@ -114,7 +114,7 @@ func (s *Semantic) Search(ctx context.Context, f Filters, mode string) (SearchRe
 	if err != nil {
 		return fallback()
 	}
-	rows, err = s.Store.DB.QueryContext(ctx, "SELECT i.id,c.item_id,c.start_byte,c.end_byte,c.vector"+join, version)
+	rows, err = s.Store.DB.QueryContext(ctx, "SELECT i.id,c.start_byte,c.end_byte,c.vector"+join, version)
 	if err != nil {
 		return out, err
 	}
@@ -123,7 +123,7 @@ func (s *Semantic) Search(ctx context.Context, f Filters, mode string) (SearchRe
 	for rows.Next() {
 		var hit semanticHit
 		var data string
-		if err = rows.Scan(&hit.id, &hit.snapshot, &hit.start, &hit.end, &data); err != nil {
+		if err = rows.Scan(&hit.id, &hit.start, &hit.end, &data); err != nil {
 			break
 		}
 		if _, ok := eligible[hit.id]; !ok {
@@ -219,7 +219,7 @@ func (s *Semantic) Search(ctx context.Context, f Filters, mode string) (SearchRe
 		if !ok {
 			continue
 		}
-		snapshot, e := s.Store.Snapshot(hit.snapshot)
+		snapshot, e := s.Store.SourceText(hit.id)
 		if e != nil {
 			return out, e
 		}
@@ -236,7 +236,6 @@ func (s *Semantic) Search(ctx context.Context, f Filters, mode string) (SearchRe
 			end = hit.start + len(excerpt)
 		}
 		item.MatchSnippet = excerpt
-		item.MatchSnapshot = hit.snapshot
 		item.MatchStart = hit.start
 		item.MatchEnd = end
 	}

@@ -13,7 +13,7 @@ import (
 )
 
 func TestChallengeNeverGeneratesAndArticleDiscussionIsAllowed(t *testing.T) {
-	blocked := Snapshot{Title: "Client Challenge", Text: "A required part of this site couldn’t load. Please check your connection."}
+	blocked := SourceText{Title: "Client Challenge", Text: "A required part of this site couldn’t load. Please check your connection."}
 	o, _ := NewOllama("http://127.0.0.1:1/api/chat", "", time.Second)
 	calls := 0
 	o.client.Transport = transportFunc(func(r *http.Request) (*http.Response, error) {
@@ -32,7 +32,7 @@ func TestChallengeNeverGeneratesAndArticleDiscussionIsAllowed(t *testing.T) {
 	if _, err := g.Generate(context.Background(), Job{}, blocked); err == nil {
 		t.Fatal("challenge reached chunking")
 	}
-	if err := ValidateSourceContent(Snapshot{Title: "Understanding Client Challenge", Text: blocked.Text + " This article describes the challenge protocol."}); err != nil {
+	if err := ValidateSourceContent(SourceText{Title: "Understanding Client Challenge", Text: blocked.Text + " This article describes the challenge protocol."}); err != nil {
 		t.Fatal("article rejected", err)
 	}
 }
@@ -137,15 +137,15 @@ func TestCopyrightOnlyPreservedBeforeAnyAI(t *testing.T) {
 		t.Fatal(snap, err)
 	}
 	calls := 0
-	worker := Worker{Store: s, Source: sourceFunc(func(context.Context, string) (Snapshot, error) { return snap, nil }), Generator: generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) { calls++; return Digest{}, nil }), Timeout: time.Second, Lease: time.Minute, MaxAttempts: 3}
+	worker := Worker{Store: s, Source: sourceFunc(func(context.Context, string) (SourceText, error) { return snap, nil }), Generator: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) { calls++; return Digest{}, nil }), Timeout: time.Second, Lease: time.Minute, MaxAttempts: 3}
 	if worked, err := worker.Step(context.Background()); err != nil || !worked {
 		t.Fatal(worked, err)
 	}
 	item, _ := s.Item(id)
-	if item.State != "needs_input" || !item.Selected.Valid || !strings.Contains(item.Error, "copyright") {
+	if item.State != "needs_input" || !item.HasText || !strings.Contains(item.Error, "copyright") {
 		t.Fatal(item)
 	}
-	saved, _ := s.Snapshot(item.Selected.Int64)
+	saved, _ := s.SourceText(item.ID)
 	if saved.Text != footer {
 		t.Fatal("extracted notice lost", saved)
 	}
@@ -171,7 +171,7 @@ func TestCopyrightOnlyPreservedBeforeAnyAI(t *testing.T) {
 	if item.State != "enriching" {
 		t.Fatal(item)
 	}
-	snapshots, _ := s.Snapshots(id)
+	snapshots, _ := s.Texts(id)
 	if len(snapshots) != 1 || snapshots[0].Text == footer {
 		t.Fatal("replaced text kept", snapshots)
 	}
@@ -182,19 +182,19 @@ func TestCopyrightOnlyPreservedBeforeAnyAI(t *testing.T) {
 
 func TestCopyrightGuardDoesNotRejectShortContent(t *testing.T) {
 	for _, text := range []string{"Copyright © 2026 Example Project", "© 2026 Example Project\nAll rights reserved.", "Copyright (c) 2026 Example Project. All rights reserved."} {
-		if err := ValidateSourceContent(Snapshot{Text: text}); err == nil {
+		if err := ValidateSourceContent(SourceText{Text: text}); err == nil {
 			t.Fatal("notice accepted", text)
 		}
 	}
 	for _, text := range []string{"AI agents help defenders detect threats.", "An abstract describes a new embedding method.", "Copyright © 2026 Example Project\nThis article explains copyright law.", "Copyright law changed: developers should check licenses.", "The footer says Copyright © 2026 Example Project."} {
-		if err := ValidateSourceContent(Snapshot{Text: text}); err != nil {
+		if err := ValidateSourceContent(SourceText{Text: text}); err != nil {
 			t.Fatal("meaningful short source rejected", text, err)
 		}
 	}
 }
 
 func TestSavedCopyrightMakesZeroGenerationAndEmbeddingCalls(t *testing.T) {
-	footer := Snapshot{Text: "Copyright © 2026 Example Project"}
+	footer := SourceText{Text: "Copyright © 2026 Example Project"}
 	o, _ := NewOllama("http://127.0.0.1:1/api/chat", "", time.Second)
 	calls := 0
 	o.client.Transport = transportFunc(func(*http.Request) (*http.Response, error) { calls++; return nil, errors.New("no model call expected") })
@@ -210,7 +210,7 @@ func TestSavedCopyrightMakesZeroGenerationAndEmbeddingCalls(t *testing.T) {
 	if worked, err := sem.Step(context.Background()); err != nil || !worked || f.calls != 0 {
 		t.Fatal(worked, err, f.calls)
 	}
-	if _, err := s.knowledgeContext(id, 1, 0); err == nil {
+	if _, err := s.knowledgeContext(id); err == nil {
 		t.Fatal("footer reached knowledge input")
 	}
 }
@@ -220,7 +220,7 @@ func TestFreshFooterKeepsExistingSelectedSource(t *testing.T) {
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/fresh-footer")
 	first, _ := s.Claim(context.Background(), time.Now(), time.Minute, 3)
-	original := Snapshot{Title: "Real article", Text: "AI agents help defenders detect threats.", Origin: "fetch", Extractor: "fixture", Completeness: "full"}
+	original := SourceText{Title: "Real article", Text: "AI agents help defenders detect threats.", Origin: "fetch", Extractor: "fixture", Completeness: "full"}
 	if err := s.Complete(*first, original); err != nil {
 		t.Fatal(err)
 	}
@@ -230,14 +230,14 @@ func TestFreshFooterKeepsExistingSelectedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	fresh, _ := s.Claim(context.Background(), time.Now(), time.Minute, 3)
-	if err := s.Complete(*fresh, Snapshot{Title: "Footer", Text: "Copyright © 2026 Example Project", Origin: "fetch", Extractor: "fixture", Completeness: "unknown"}); err != nil {
+	if err := s.Complete(*fresh, SourceText{Title: "Footer", Text: "Copyright © 2026 Example Project", Origin: "fetch", Extractor: "fixture", Completeness: "unknown"}); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := s.Item(id)
-	if after.Selected != before.Selected || after.State != before.State || after.Title != before.Title {
+	if after.HasText != before.HasText || after.State != before.State || after.Title != before.Title {
 		t.Fatal("good selected source replaced", before, after)
 	}
-	snapshots, _ := s.Snapshots(id)
+	snapshots, _ := s.Texts(id)
 	if len(snapshots) != 1 || strings.Contains(snapshots[0].Text, "Copyright") {
 		t.Fatal("a notice replaced or joined the good source", snapshots)
 	}

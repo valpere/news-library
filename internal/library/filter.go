@@ -71,7 +71,7 @@ func NewRuleSet(threshold float64, rulesJSON string) (RuleSet, error) {
 	}
 	return r, nil
 }
-func (r RuleSet) evaluate(url string, snap *Snapshot) (float64, []Contribution) {
+func (r RuleSet) evaluate(url string, snap *SourceText) (float64, []Contribution) {
 	values := map[string]string{"url": strings.ToLower(url)}
 	if snap != nil {
 		values["title"] = strings.ToLower(snap.Title)
@@ -135,7 +135,7 @@ func filterReason(probability, threshold float64, contributions []Contribution) 
 	}
 	return fmt.Sprintf("R=%s, поріг T=%s · %s", num(probability), num(threshold), strings.Join(parts, "; "))
 }
-func (s *Store) decideFilter(tx *sql.Tx, itemID int64, snap *Snapshot, override bool) (bool, error) {
+func (s *Store) decideFilter(tx *sql.Tx, itemID int64, snap *SourceText, override bool) (bool, error) {
 	var url string
 	if err := tx.QueryRow("SELECT canonical_url FROM items WHERE id=?", itemID).Scan(&url); err != nil {
 		return false, err
@@ -161,8 +161,8 @@ func (s *Store) decideFilter(tx *sql.Tx, itemID int64, snap *Snapshot, override 
 	}
 	return result == "rejected", nil
 }
-func (s *Store) processSnapshot(tx *sql.Tx, itemID, sid int64, snap Snapshot, override bool) error {
-	snap.ID = sid
+func (s *Store) processText(tx *sql.Tx, itemID, sid int64, snap SourceText, override bool) error {
+	snap.ItemID = sid
 	rejected, err := s.decideFilter(tx, itemID, &snap, override)
 	if err != nil || rejected {
 		return err

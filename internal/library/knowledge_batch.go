@@ -26,14 +26,13 @@ type KnowledgeBatchResult struct {
 	Replayed              bool
 }
 type knowledgeBatchCandidate struct {
-	ItemID, SnapshotID, DigestID, RunID    int64
+	ItemID, RunID                          int64
 	Title, URL, State, Kind, Model, Prompt string
 	Checkpoint, Done, Active               bool
 	Error                                  string
-	Failures                               int
 }
 
-const knowledgeBatchSelection = `SELECT i.id,i.id,i.id,i.title,i.original_url,coalesce(r.id,0),coalesce(r.state,''),coalesce(r.kind,''),coalesce(r.model,''),coalesce(r.prompt_version,''),EXISTS(SELECT 1 FROM article_knowledge k WHERE k.run_id=r.id),EXISTS(SELECT 1 FROM knowledge_runs k WHERE k.item_id=i.id AND k.state='done'),EXISTS(SELECT 1 FROM knowledge_runs k WHERE k.item_id=i.id AND k.state IN ('queued','running','retry_wait')),coalesce(r.error,''),(SELECT count(*) FROM knowledge_failures f WHERE f.run_id=r.id) FROM active_items i JOIN digests d ON d.item_id=i.id LEFT JOIN knowledge_runs r ON r.id=(SELECT id FROM knowledge_runs WHERE item_id=i.id ORDER BY updated_at DESC,id DESC LIMIT 1) WHERE i.filter_state IN ('passed','overridden') ORDER BY i.id`
+const knowledgeBatchSelection = `SELECT i.id,i.title,i.original_url,coalesce(r.id,0),coalesce(r.state,''),coalesce(r.kind,''),coalesce(r.model,''),coalesce(r.prompt_version,''),EXISTS(SELECT 1 FROM article_knowledge k WHERE k.run_id=r.id),EXISTS(SELECT 1 FROM knowledge_runs k WHERE k.item_id=i.id AND k.state='done'),EXISTS(SELECT 1 FROM knowledge_runs k WHERE k.item_id=i.id AND k.state IN ('queued','running','retry_wait')),coalesce(r.error,'') FROM active_items i JOIN digests d ON d.item_id=i.id LEFT JOIN knowledge_runs r ON r.id=(SELECT id FROM knowledge_runs WHERE item_id=i.id ORDER BY updated_at DESC,id DESC LIMIT 1) WHERE i.filter_state IN ('passed','overridden') ORDER BY i.id`
 
 func knowledgeBatchCandidates(q interface {
 	Query(string, ...any) (*sql.Rows, error)
@@ -46,7 +45,7 @@ func knowledgeBatchCandidates(q interface {
 	out := []knowledgeBatchCandidate{}
 	for rows.Next() {
 		var c knowledgeBatchCandidate
-		if err = rows.Scan(&c.ItemID, &c.SnapshotID, &c.DigestID, &c.Title, &c.URL, &c.RunID, &c.State, &c.Kind, &c.Model, &c.Prompt, &c.Checkpoint, &c.Done, &c.Active, &c.Error, &c.Failures); err != nil {
+		if err = rows.Scan(&c.ItemID, &c.Title, &c.URL, &c.RunID, &c.State, &c.Kind, &c.Model, &c.Prompt, &c.Checkpoint, &c.Done, &c.Active, &c.Error); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

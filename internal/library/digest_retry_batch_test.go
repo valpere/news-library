@@ -25,7 +25,7 @@ func failedDigestFixture(t *testing.T, s *Store, kind string) DigestRetryCandida
 	if err := s.FailError(j, &SourceError{Kind: kind, Message: "<script>failure</script>", Diagnostic: "rejected reply"}, false, 3, time.Now(), 0); err != nil {
 		t.Fatal(err)
 	}
-	return DigestRetryCandidate{ItemID: id, SnapshotID: j.SnapshotID.Int64, JobID: j.ID, AttemptToken: j.Token}
+	return DigestRetryCandidate{ItemID: id, JobID: j.ID, AttemptToken: j.Token}
 }
 func TestBatchDigestRetryPolicyAndLegacy(t *testing.T) {
 	s := testStore(t)
@@ -95,7 +95,7 @@ func TestBatchDigestRetryHistoryAndDuplicateSubmission(t *testing.T) {
 		}
 	}
 	after, _ := s.Item(a.ItemID)
-	if after.Read != before.Read || after.Score != before.Score || after.Selected != before.Selected {
+	if after.Read != before.Read || after.Score != before.Score || after.HasText != before.HasText {
 		t.Fatal(before, after)
 	}
 	completeFixtureDigest(t, s)
@@ -118,7 +118,7 @@ func TestBatchDigestRetrySkipsChangedAndMissingSources(t *testing.T) {
 	stale := a
 	stale.JobID++
 	var path string
-	if err := s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", b.SnapshotID).Scan(&path); err != nil {
+	if err := s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", b.ItemID).Scan(&path); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(filepath.Join(s.Files.Root, path)); err != nil {
@@ -238,7 +238,7 @@ func TestBatchDigestRetryPaginationAndExistingDigestProtection(t *testing.T) {
 			t.Fatal(e)
 		}
 		id, _ := r.LastInsertId()
-		_, e = tx.Exec(`INSERT INTO texts(item_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning) SELECT ?,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning FROM texts WHERE item_id=?`, id, seed.SnapshotID)
+		_, e = tx.Exec(`INSERT INTO texts(item_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning) SELECT ?,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning FROM texts WHERE item_id=?`, id, seed.ItemID)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -270,7 +270,7 @@ func TestBatchDigestRetryPaginationAndExistingDigestProtection(t *testing.T) {
 	if err = s.FailError(j, &SourceError{Kind: "format", Message: "bad regeneration"}, false, 3, time.Now(), 0); err != nil {
 		t.Fatal(err)
 	}
-	results, err := s.RetryFailedDigests([]DigestRetryCandidate{{ItemID: seed.ItemID, SnapshotID: seed.SnapshotID, JobID: j.ID, AttemptToken: j.Token}})
+	results, err := s.RetryFailedDigests([]DigestRetryCandidate{{ItemID: seed.ItemID, JobID: j.ID, AttemptToken: j.Token}})
 	if err != nil || results[0].Queued {
 		t.Fatal(results, err)
 	}

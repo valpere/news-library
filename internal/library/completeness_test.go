@@ -7,13 +7,13 @@ import (
 	"testing"
 )
 
-func selectedSnapshot(t *testing.T, s *Store, id int64) Snapshot {
+func itemText(t *testing.T, s *Store, id int64) SourceText {
 	t.Helper()
 	i, err := s.Item(id)
-	if err != nil || !i.Selected.Valid {
+	if err != nil || !i.HasText {
 		t.Fatal("no selected snapshot", err)
 	}
-	snap, err := s.Snapshot(i.Selected.Int64)
+	snap, err := s.SourceText(i.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,14 +24,14 @@ func TestConfirmCompletenessOverlaysWithoutChangingTheStoredText(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/a")
 	manual(t, s, id, "Текст, який користувач вважає повним.")
-	before := selectedSnapshot(t, s, id)
+	before := itemText(t, s, id)
 	if before.Completeness != "unknown" || before.UserConfirmed {
 		t.Fatalf("before: %+v", before)
 	}
-	if err := s.ConfirmCompleteness(before.ID, true); err != nil {
+	if err := s.ConfirmCompleteness(before.ItemID, true); err != nil {
 		t.Fatal(err)
 	}
-	after := selectedSnapshot(t, s, id)
+	after := itemText(t, s, id)
 	if after.Completeness != "full" || !after.UserConfirmed || !strings.Contains(after.Warning, "підтвердив користувач") {
 		t.Fatalf("after: %+v", after)
 	}
@@ -39,12 +39,12 @@ func TestConfirmCompletenessOverlaysWithoutChangingTheStoredText(t *testing.T) {
 		t.Fatal("the immutable text must not change")
 	}
 	var raw string
-	s.DB.QueryRow("SELECT completeness FROM texts WHERE item_id=?", before.ID).Scan(&raw)
+	s.DB.QueryRow("SELECT completeness FROM texts WHERE item_id=?", before.ItemID).Scan(&raw)
 	if raw != "unknown" {
 		t.Fatalf("extractor's own value must stay: %q", raw)
 	}
-	if snaps, _ := s.Snapshots(id); len(snaps) != 1 || !snaps[0].UserConfirmed {
-		t.Fatalf("Snapshots must show the overlay: %+v", snaps)
+	if snaps, _ := s.Texts(id); len(snaps) != 1 || !snaps[0].UserConfirmed {
+		t.Fatalf("Texts must show the overlay: %+v", snaps)
 	}
 }
 
@@ -52,12 +52,12 @@ func TestWithdrawingConfirmationRestoresTheStoredValue(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/a")
 	manual(t, s, id, "Текст.")
-	snap := selectedSnapshot(t, s, id)
-	s.ConfirmCompleteness(snap.ID, true)
-	if err := s.ConfirmCompleteness(snap.ID, false); err != nil {
+	snap := itemText(t, s, id)
+	s.ConfirmCompleteness(snap.ItemID, true)
+	if err := s.ConfirmCompleteness(snap.ItemID, false); err != nil {
 		t.Fatal(err)
 	}
-	if got := selectedSnapshot(t, s, id); got.Completeness != "unknown" || got.UserConfirmed {
+	if got := itemText(t, s, id); got.Completeness != "unknown" || got.UserConfirmed {
 		t.Fatalf("%+v", got)
 	}
 }
@@ -69,11 +69,11 @@ func TestConfirmCompletenessRejectsUnknownOrTrashedSnapshots(t *testing.T) {
 	}
 	id := add(t, s, "https://example.com/a")
 	manual(t, s, id, "Текст.")
-	snap := selectedSnapshot(t, s, id)
+	snap := itemText(t, s, id)
 	if err := s.MarkJunk(id, ""); err != nil {
 		t.Fatal(err)
 	}
-	if s.ConfirmCompleteness(snap.ID, true) == nil {
+	if s.ConfirmCompleteness(snap.ItemID, true) == nil {
 		t.Fatal("trashed item accepted")
 	}
 }
@@ -82,13 +82,13 @@ func TestWebConfirmCompletenessFlow(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/series")
 	manual(t, s, id, strings.Repeat("Вступ до серії. ", 12)+"\n\nExplore more articles")
-	snap := selectedSnapshot(t, s, id)
+	snap := itemText(t, s, id)
 	page := "/items/" + strconv.FormatInt(id, 10)
 	body := webRequest(w, "GET", page, nil, nil).Body.String()
 	if !strings.Contains(body, "Підтвердити повноту") || !strings.Contains(body, "Текст, схоже, неповний") {
 		t.Fatalf("button/diagnosis missing:\n%s", body)
 	}
-	post(t, w, page+"/completeness", url.Values{"source": {strconv.FormatInt(snap.ID, 10)}, "action": {"confirm"}})
+	post(t, w, page+"/completeness", url.Values{"source": {strconv.FormatInt(snap.ItemID, 10)}, "action": {"confirm"}})
 	body = webRequest(w, "GET", page, nil, nil).Body.String()
 	if strings.Contains(body, "Текст, схоже, неповний") {
 		t.Fatal("a user-confirmed text must not be flagged as probably incomplete")
@@ -96,7 +96,7 @@ func TestWebConfirmCompletenessFlow(t *testing.T) {
 	if strings.Contains(body, "Зняти підтвердження") || !strings.Contains(body, "підтвердили ви") {
 		t.Fatalf("confirmed state missing:\n%s", body)
 	}
-	post(t, w, page+"/completeness", url.Values{"source": {strconv.FormatInt(snap.ID, 10)}, "action": {"withdraw"}})
+	post(t, w, page+"/completeness", url.Values{"source": {strconv.FormatInt(snap.ItemID, 10)}, "action": {"withdraw"}})
 	if body = webRequest(w, "GET", page, nil, nil).Body.String(); !strings.Contains(body, "Підтвердити повноту") {
 		t.Fatal("withdrawn confirmation must offer the button again")
 	}
@@ -136,7 +136,7 @@ func TestWebCutoffOffersRecoveryStubsNotJunk(t *testing.T) {
 func TestSameTextRefetchKeepsConfirmationChangedTextClearsIt(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/refetch")
-	if err := s.Complete(claim(t, s), Snapshot{Title: "T", Text: "Same text", Origin: "fetched", Extractor: "fixture", Completeness: "unknown"}); err != nil {
+	if err := s.Complete(claim(t, s), SourceText{Title: "T", Text: "Same text", Origin: "fetched", Extractor: "fixture", Completeness: "unknown"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.ConfirmCompleteness(id, true); err != nil {
@@ -145,14 +145,14 @@ func TestSameTextRefetchKeepsConfirmationChangedTextClearsIt(t *testing.T) {
 	if err := s.Retry(id); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Complete(claim(t, s), Snapshot{Title: "T", Text: "Same text", Origin: "fetched", Extractor: "fixture", Completeness: "unknown"}); err != nil {
+	if err := s.Complete(claim(t, s), SourceText{Title: "T", Text: "Same text", Origin: "fetched", Extractor: "fixture", Completeness: "unknown"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := selectedSnapshot(t, s, id); !got.UserConfirmed {
+	if got := itemText(t, s, id); !got.UserConfirmed {
 		t.Fatal("the same text lost its confirmation")
 	}
 	manual(t, s, id, "Changed text")
-	if got := selectedSnapshot(t, s, id); got.UserConfirmed {
+	if got := itemText(t, s, id); got.UserConfirmed {
 		t.Fatal("changed text kept the confirmation")
 	}
 }

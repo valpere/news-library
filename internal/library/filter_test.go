@@ -27,7 +27,7 @@ func TestRulesDeduplicateCausesAndStrictThreshold(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	p, c := r.evaluate("https://example.com/sale", &Snapshot{Title: "Offer", Text: "advertisement"})
+	p, c := r.evaluate("https://example.com/sale", &SourceText{Title: "Offer", Text: "advertisement"})
 	if math.Abs(p-.76) > 1e-9 || len(c) != 2 || len(c[1].RuleIDs) != 2 || c[1].Probability != .6 {
 		t.Fatal("dependent causes counted twice", p, c)
 	}
@@ -55,10 +55,10 @@ func TestURLRejectZeroModelCallsAndExplicitOverride(t *testing.T) {
 	configureRules(t, s, .8, []FilterRule{{ID: "sale", Reason: "advertising", Field: "url", Contains: "/sale", Probability: .95}})
 	id := add(t, s, "https://example.com/sale")
 	sourceCalls, modelCalls := 0, 0
-	worker := Worker{Store: s, Source: sourceFunc(func(context.Context, string) (Snapshot, error) {
+	worker := Worker{Store: s, Source: sourceFunc(func(context.Context, string) (SourceText, error) {
 		sourceCalls++
-		return Snapshot{Text: "Available source", Title: "Sale"}, nil
-	}), Generator: generatorFunc(func(_ context.Context, j Job, s Snapshot) (Digest, error) {
+		return SourceText{Text: "Available source", Title: "Sale"}, nil
+	}), Generator: generatorFunc(func(_ context.Context, j Job, s SourceText) (Digest, error) {
 		modelCalls++
 		return Digest{Markdown: fixtureDigest, ActualModel: j.Model, Provider: "fixture"}, nil
 	}), Timeout: time.Second, Lease: time.Minute, Backoff: time.Second, MaxAttempts: 3}
@@ -95,9 +95,9 @@ func TestURLRejectZeroModelCallsAndExplicitOverride(t *testing.T) {
 	}
 }
 
-type sourceFunc func(context.Context, string) (Snapshot, error)
+type sourceFunc func(context.Context, string) (SourceText, error)
 
-func (f sourceFunc) Fetch(ctx context.Context, url string) (Snapshot, error) { return f(ctx, url) }
+func (f sourceFunc) Fetch(ctx context.Context, url string) (SourceText, error) { return f(ctx, url) }
 func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	s := testStore(t)
 	enableDigests(t, s)
@@ -108,11 +108,11 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	}
 	s.SetRead(id, true)
 	j := claim(t, s)
-	if e := s.Complete(j, Snapshot{Text: "Searchable advertisement", Title: "Source"}); e != nil {
+	if e := s.Complete(j, SourceText{Text: "Searchable advertisement", Title: "Source"}); e != nil {
 		t.Fatal(e)
 	}
 	calls := 0
-	worker := Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) { calls++; return Digest{}, nil }), Timeout: time.Second, Lease: time.Minute, MaxAttempts: 3}
+	worker := Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) { calls++; return Digest{}, nil }), Timeout: time.Second, Lease: time.Minute, MaxAttempts: 3}
 	if worked, e := worker.Step(context.Background()); worked || e != nil || calls != 0 {
 		t.Fatal("rejected source invoked model")
 	}
@@ -120,7 +120,7 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	if e != nil || len(got) != 1 {
 		t.Fatal("filtered text not searchable", e)
 	}
-	snapshots, e := s.Snapshots(id)
+	snapshots, e := s.Texts(id)
 	if e != nil || snapshots[0].Text != "Searchable advertisement" {
 		t.Fatal("filter lost source", e)
 	}
@@ -170,7 +170,7 @@ func TestReplacedTextIsCheckedAgainAndOverrideNotCarriedOver(t *testing.T) {
 	s := testStore(t)
 	configureRules(t, s, .5, []FilterRule{{ID: "ad", Reason: "promotion", Field: "text", Contains: "advertisement", Probability: .9}})
 	id := add(t, s, "https://example.com/replace")
-	if e := s.Complete(claim(t, s), Snapshot{Title: "T", Text: "Pure advertisement", Origin: "fetched", Extractor: "fixture", Completeness: "complete"}); e != nil {
+	if e := s.Complete(claim(t, s), SourceText{Title: "T", Text: "Pure advertisement", Origin: "fetched", Extractor: "fixture", Completeness: "complete"}); e != nil {
 		t.Fatal(e)
 	}
 	if e := s.OverrideFilter(id); e != nil {

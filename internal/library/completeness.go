@@ -7,20 +7,20 @@ import (
 	"strconv"
 )
 
-// snapshotSelect reads a source with the user's completeness confirmation overlaid.
+// textSelect reads a source with the user's completeness confirmation overlaid.
 // The extractor's own value and warning stay untouched in texts; the overlay exists
 // only while the confirmation flag is set.
-const snapshotSelect = `SELECT v.item_id,v.item_id,v.text_path,v.title,v.hash,v.retrieved_at,v.origin,v.extractor,
+const textSelect = `SELECT v.item_id,v.text_path,v.title,v.hash,v.retrieved_at,v.origin,v.extractor,
  CASE WHEN v.complete_confirmed=1 THEN 'full' ELSE v.completeness END,
  CASE WHEN v.complete_confirmed=1 THEN 'Повноту підтвердив користувач; витяг: ' || v.warning ELSE v.warning END,
  v.complete_confirmed
  FROM texts v`
 
-func scanSnapshot(row interface{ Scan(...any) error }) (Snapshot, string, error) {
-	var v Snapshot
+func scanText(row interface{ Scan(...any) error }) (SourceText, string, error) {
+	var v SourceText
 	var path string
 	var confirmed int
-	err := row.Scan(&v.ID, &v.ItemID, &path, &v.Title, &v.Hash, &v.RetrievedAt, &v.Origin, &v.Extractor, &v.Completeness, &v.Warning, &confirmed)
+	err := row.Scan(&v.ItemID, &path, &v.Title, &v.Hash, &v.RetrievedAt, &v.Origin, &v.Extractor, &v.Completeness, &v.Warning, &confirmed)
 	v.UserConfirmed = confirmed == 1
 	return v, path, err
 }

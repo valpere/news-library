@@ -131,27 +131,25 @@ func boundedKnowledgeText(text string, limit int) string {
 	}
 	return text
 }
-func (s *Store) knowledgeContext(item, snapshot, digest int64) (KnowledgeContext, error) {
-	snap, err := s.Snapshot(snapshot)
+func (s *Store) knowledgeContext(item int64) (KnowledgeContext, error) {
+	snap, err := s.SourceText(item)
 	if err != nil {
 		return KnowledgeContext{}, &SourceError{Kind: "source", Message: "Збережений текст для аналізу недоступний"}
 	}
 	if err = ValidateSourceContent(snap); err != nil {
 		return KnowledgeContext{}, err
 	}
-	c := KnowledgeContext{ItemID: item, SnapshotID: snapshot, DigestID: digest, Title: snap.Title, Text: boundedKnowledgeText(snap.Text, 12000), Coverage: "source excerpt; " + snap.Completeness}
+	c := KnowledgeContext{ItemID: item, Title: snap.Title, Text: boundedKnowledgeText(snap.Text, 12000), Coverage: "source excerpt; " + snap.Completeness}
 	if err = s.DB.QueryRow("SELECT original_url FROM items WHERE id=?", item).Scan(&c.URL); err != nil {
 		return c, err
 	}
-	if digest > 0 {
-		d, e := s.Digest(digest, item)
-		if e != nil {
-			return c, e
-		}
+	if d, e := s.DigestOf(item); e != nil {
+		return c, e
+	} else if d != nil {
 		c.Text = boundedKnowledgeText(d.Markdown, 32000) + "\n\nУривок джерела:\n" + c.Text
 		c.Coverage = "saved digest and bounded source excerpt; " + snap.Completeness
 	}
-	k, err := s.Knowledge(item, snapshot)
+	k, err := s.Knowledge(item)
 	if err != nil {
 		return c, err
 	}
@@ -212,7 +210,7 @@ func (s *Store) knowledgeCandidates(c KnowledgeContext) ([]KnowledgeContext, err
 	}
 	out := []KnowledgeContext{}
 	for _, id := range ids {
-		other, e := s.knowledgeContext(id[0], id[1], id[2])
+		other, e := s.knowledgeContext(id[0])
 		if e != nil {
 			var se *SourceError
 			if errors.As(e, &se) && (se.FooterOnly || se.Challenge) {
@@ -375,11 +373,19 @@ func (s *Store) completeKnowledgeLinks(j KnowledgeRun, c KnowledgeContext, candi
 		}
 		count++
 	}
-	_, err = tx.Exec("UPDATE knowledge_runs SET state='done',lease_until=0,error='',kind='',linked_count=?,updated_at=? WHERE id=?", count, nowUTC(), j.ID)
+	var diagnostic string
+	if err = tx.QueryRow("SELECT response_path FROM knowledge_runs WHERE id=?", j.ID).Scan(&diagnostic); err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE knowledge_runs SET state='done',lease_until=0,error='',kind='',response_path='',hash='',linked_count=?,updated_at=? WHERE id=?", count, nowUTC(), j.ID)
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.removeUnusedFiles(map[string]bool{diagnostic: diagnostic != ""}) // the failure is forgotten after success
+	return nil
 }
 func quoteMarkdown(s string) string { return "> " + strings.ReplaceAll(s, "\n", "\n> ") }
 
@@ -403,7 +409,7 @@ func (w *KnowledgeWorker) Step(ctx context.Context) (bool, error) {
 	}
 	task, cancel := context.WithTimeout(ctx, w.Timeout)
 	defer cancel()
-	c, err := w.Store.knowledgeContext(j.ItemID, j.SnapshotID, j.DigestID)
+	c, err := w.Store.knowledgeContext(j.ItemID)
 	if err == nil {
 		k, e := w.Store.knowledgeForRun(j.ID)
 		err = e
@@ -414,10 +420,13 @@ func (w *KnowledgeWorker) Step(ctx context.Context) (bool, error) {
 				metadata, e := w.Generator.Metadata(task, j.Model, c, vocabulary)
 				err = e
 				if err == nil {
-					d, e := w.Store.Digest(j.DigestID, j.ItemID)
+					d, e := w.Store.DigestOf(j.ItemID)
 					err = e
+					if err == nil && d == nil {
+						err = errors.New("analysis digest missing")
+					}
 					if err == nil {
-						err = w.Store.completeKnowledgeMetadata(*j, metadata, d)
+						err = w.Store.completeKnowledgeMetadata(*j, metadata, *d)
 					}
 				}
 			}

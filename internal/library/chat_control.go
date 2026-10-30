@@ -320,23 +320,18 @@ func (w *Web) chatCards(refs []ChatReference) ([]ChatCard, error) {
 		if err != nil {
 			return nil, err
 		}
-		if ref.SourceID == 0 && item.Selected.Valid {
-			ref.SourceID = item.Selected.Int64
-		}
-		card := ChatCard{Item: item, SourceID: ref.SourceID}
-		if ref.SourceID > 0 {
-			source, sourceErr := w.Store.Snapshot(ref.SourceID)
+		card := ChatCard{Item: item, HasText: item.HasText}
+		if item.HasText {
+			source, sourceErr := w.Store.SourceText(item.ID)
 			if sourceErr == nil && source.Title != "" {
 				card.Item.Title = source.Title
 			}
-			if d, e := w.Store.DigestForSnapshot(ref.SourceID); e == nil && d != nil && isTranslationPrompt(d.PromptVersion) {
+			if d, e := w.Store.DigestOf(item.ID); e == nil && d != nil && isTranslationPrompt(d.PromptVersion) {
 				card.Summary = boundedKnowledgeText(d.Markdown, 700)
-				card.DigestID = d.ID
 				card.CanRate = true
 			} else if e == nil && d != nil {
 				if sections, e := SplitDigest(d.Markdown); e == nil && len(sections) > 0 {
 					card.Summary = boundedKnowledgeText(sections[0].Markdown, 700)
-					card.DigestID = d.ID
 					card.CanRate = true
 				}
 			}
@@ -371,7 +366,7 @@ func (w *Web) chatSearch(r *http.Request, state *ChatState) (ChatReply, error) {
 		if i == 1000 {
 			break
 		}
-		state.Results = append(state.Results, ChatReference{ItemID: item.ID, SourceID: chatResultSource(item)})
+		state.Results = append(state.Results, ChatReference{ItemID: item.ID})
 	}
 	reply, err := w.chatPageResults(state)
 	if result.Warning != "" {
@@ -480,9 +475,8 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 				}
 			}
 			if row.ItemID > 0 && len(refs) < 5 {
-				item, e := w.Store.Item(row.ItemID)
-				if e == nil {
-					refs = append(refs, ChatReference{row.ItemID, item.Selected.Int64})
+				if _, e := w.Store.Item(row.ItemID); e == nil {
+					refs = append(refs, ChatReference{row.ItemID})
 				}
 			}
 		}
@@ -610,7 +604,7 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 				}
 				return ChatReply{Kind: "question", Message: fmt.Sprintf("Яка особиста корисність матеріалу №%d для вас зараз? Оберіть рівень або напишіть його назву. Ще не оцінено — окремий стан, не нульова корисність.", command.Index), Actions: actions}, nil
 			}
-			if card.SourceID == 0 || !card.CanRate {
+			if !card.HasText || !card.CanRate {
 				return ChatReply{Message: "Текст або дайджест цього матеріалу не було показано. Спершу відкрийте картку й доповніть текст або відновіть файли, щоб оцінити побачене."}, nil
 			}
 			score := usefulnessScore
@@ -665,7 +659,7 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 				}
 			}
 		}
-		refreshed, err := w.chatCards([]ChatReference{{id, card.SourceID}})
+		refreshed, err := w.chatCards([]ChatReference{{id}})
 		if err != nil {
 			return ChatReply{}, err
 		}
@@ -774,13 +768,6 @@ func chatExplicitNumber(text string, score int64) bool {
 		}
 	}
 	return false
-}
-
-func chatResultSource(item Item) int64 {
-	if item.MatchSnapshot > 0 {
-		return item.MatchSnapshot
-	}
-	return item.Selected.Int64
 }
 func chatCommandLabel(c ChatCommand) string {
 	switch c.Action {

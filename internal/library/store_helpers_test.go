@@ -22,16 +22,16 @@ func (s *Store) Ratings(id int64) ([]ratingRow, error) {
 	return []ratingRow{r}, nil
 }
 
-// Snapshots returns the item's stored texts (at most one in production).
-func (s *Store) Snapshots(id int64) ([]Snapshot, error) {
-	rows, err := s.DB.Query(snapshotSelect+" WHERE v.item_id=?", id)
+// Texts returns the item's stored texts (at most one in production).
+func (s *Store) Texts(id int64) ([]SourceText, error) {
+	rows, err := s.DB.Query(textSelect+" WHERE v.item_id=?", id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var result []Snapshot
+	var result []SourceText
 	for rows.Next() {
-		v, path, err := scanSnapshot(rows)
+		v, path, err := scanText(rows)
 		if err != nil {
 			return nil, err
 		}

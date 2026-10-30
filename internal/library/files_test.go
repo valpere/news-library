@@ -16,8 +16,8 @@ func TestFailedFileWriteDoesNotPublishSnapshot(t *testing.T) {
 		t.Fatal("failed write accepted")
 	}
 	i, _ := s.Item(id)
-	snapshots, e := s.Snapshots(id)
-	if e != nil || i.Selected.Valid || len(snapshots) != 0 {
+	snapshots, e := s.Texts(id)
+	if e != nil || i.HasText || len(snapshots) != 0 {
 		t.Fatal("failed write published metadata")
 	}
 }

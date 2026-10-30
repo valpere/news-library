@@ -7,13 +7,10 @@ import (
 )
 
 // Feedback sets (or, with "", clears) the digest's quality flag (one current value; a new digest starts without it).
-func (s *Store) Feedback(itemID, digestID int64, quality string) error {
+func (s *Store) Feedback(itemID int64, quality string) error {
 	// An empty quality clears the flag.
 	if quality != "" && quality != "good" && quality != "inaccurate" && quality != "incomplete" && quality != "unclear" {
 		return errors.New("оберіть якість дайджесту")
-	}
-	if digestID != itemID {
-		return errors.New("дайджест не належить цьому матеріалу")
 	}
 	r, err := s.DB.Exec("UPDATE digests SET feedback=? WHERE item_id=?", quality, itemID)
 	if err != nil {
@@ -55,7 +52,7 @@ func (s *Store) RegenerateDigest(itemID int64) error {
 	if active > 0 {
 		return errors.New("генерація вже активна")
 	}
-	if rejected, e := s.ensureFilterForSnapshot(tx, itemID, snapshotID); e != nil {
+	if rejected, e := s.ensureFilter(tx, itemID, snapshotID); e != nil {
 		return e
 	} else if rejected {
 		return tx.Commit()

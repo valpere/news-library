@@ -12,7 +12,7 @@ import (
 const DigestRetryBatchLimit = 500
 
 type DigestRetryCandidate struct {
-	ItemID, SnapshotID, JobID                                    int64
+	ItemID, JobID                                                int64
 	Title, URL, Kind, Error, ConfigVersion, Reason, AttemptToken string
 	Selectable, Checked                                          bool
 }
@@ -22,11 +22,11 @@ type DigestRetryResult struct {
 	Reason string
 }
 
-const failedDigestSelection = `SELECT i.id,i.id,j.id,i.title,i.original_url,j.error,j.config_version,j.token,j.failure_kind FROM active_items i JOIN jobs j ON j.item_id=i.id AND j.stage='digest' WHERE j.id=(SELECT max(id) FROM jobs WHERE item_id=i.id AND stage='digest') AND j.state='failed' AND EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM jobs WHERE jobs.item_id=i.id AND stage='digest' AND state IN ('queued','running','retry_wait'))`
+const failedDigestSelection = `SELECT i.id,j.id,i.title,i.original_url,j.error,j.config_version,j.token,j.failure_kind FROM active_items i JOIN jobs j ON j.item_id=i.id AND j.stage='digest' WHERE j.id=(SELECT max(id) FROM jobs WHERE item_id=i.id AND stage='digest') AND j.state='failed' AND EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM jobs WHERE jobs.item_id=i.id AND stage='digest' AND state IN ('queued','running','retry_wait'))`
 
 func scanRetryCandidate(row interface{ Scan(...any) error }) (DigestRetryCandidate, error) {
 	var c DigestRetryCandidate
-	err := row.Scan(&c.ItemID, &c.SnapshotID, &c.JobID, &c.Title, &c.URL, &c.Error, &c.ConfigVersion, &c.AttemptToken, &c.Kind)
+	err := row.Scan(&c.ItemID, &c.JobID, &c.Title, &c.URL, &c.Error, &c.ConfigVersion, &c.AttemptToken, &c.Kind)
 	if c.Kind == "" {
 		c.Kind = legacyFailureKind(c.Error)
 	}
@@ -104,8 +104,8 @@ func (s *Store) retryFailedDigest(selected DigestRetryCandidate) error {
 	if err != nil {
 		return err
 	}
-	if current.SnapshotID != selected.SnapshotID || current.JobID != selected.JobID || current.AttemptToken != selected.AttemptToken {
-		return errors.New("версія тексту або спроба змінилася; оновіть список")
+	if current.JobID != selected.JobID || current.AttemptToken != selected.AttemptToken {
+		return errors.New("спроба змінилася; оновіть список")
 	}
 	var filter, path, hash string
 	if err = tx.QueryRow(`SELECT i.filter_state,v.text_path,v.hash FROM active_items i JOIN texts v ON v.item_id=i.id WHERE i.id=?`, selected.ItemID).Scan(&filter, &path, &hash); err != nil {
@@ -136,7 +136,7 @@ func (s *Store) RetryFailedDigests(selected []DigestRetryCandidate) ([]DigestRet
 	}
 	seen := map[int64]bool{}
 	for _, c := range selected {
-		if c.ItemID <= 0 || c.SnapshotID <= 0 || c.JobID <= 0 || seen[c.ItemID] {
+		if c.ItemID <= 0 || c.JobID <= 0 || seen[c.ItemID] {
 			return nil, errors.New("некоректний або повторний вибір")
 		}
 		seen[c.ItemID] = true
@@ -186,13 +186,13 @@ func (w *Web) digestRetryBatchSubmit(rw http.ResponseWriter, r *http.Request) {
 	selected := []DigestRetryCandidate{}
 	for _, value := range r.PostForm["selection"] {
 		parts := strings.Split(value, ":")
-		if len(parts) != 4 {
+		if len(parts) != 3 {
 			http.Error(rw, "некоректний вибір", 400)
 			return
 		}
 		var c DigestRetryCandidate
-		c.AttemptToken = parts[3]
-		for i, target := range []*int64{&c.ItemID, &c.SnapshotID, &c.JobID} {
+		c.AttemptToken = parts[2]
+		for i, target := range []*int64{&c.ItemID, &c.JobID} {
 			v, err := strconv.ParseInt(parts[i], 10, 64)
 			if err != nil {
 				http.Error(rw, "некоректний вибір", 400)
@@ -216,5 +216,5 @@ func (w *Web) digestRetryBatchSubmit(rw http.ResponseWriter, r *http.Request) {
 	w.render(rw, "digestRetryBatchResult", pageData{DigestRetryResults: results, DigestRetryQueued: queued, DigestRetrySkipped: len(results) - queued})
 }
 func retrySelection(c DigestRetryCandidate) string {
-	return fmt.Sprintf("%d:%d:%d:%s", c.ItemID, c.SnapshotID, c.JobID, c.AttemptToken)
+	return fmt.Sprintf("%d:%d:%s", c.ItemID, c.JobID, c.AttemptToken)
 }

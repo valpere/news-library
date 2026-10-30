@@ -22,14 +22,14 @@ type fakeAdapter struct {
 func (a fakeAdapter) Hosts() []string       { return a.hosts }
 func (a fakeAdapter) Name() string          { return a.name }
 func (a fakeAdapter) Match(u *url.URL) bool { return u.Path == a.path }
-func (a fakeAdapter) Extract(context.Context, *Fetcher, *url.URL) (Snapshot, error) {
+func (a fakeAdapter) Extract(context.Context, *Fetcher, *url.URL) (SourceText, error) {
 	if a.calls != nil {
 		*a.calls++
 	}
 	if a.err != nil {
-		return Snapshot{}, a.err
+		return SourceText{}, a.err
 	}
-	return Snapshot{Text: "Повний текст від адаптера " + a.name, Title: "T", Origin: "fetch", Completeness: "unknown", Warning: "adapter"}, nil
+	return SourceText{Text: "Повний текст від адаптера " + a.name, Title: "T", Origin: "fetch", Completeness: "unknown", Warning: "adapter"}, nil
 }
 
 func adapterFixture(t *testing.T) *httptest.Server {
@@ -172,7 +172,7 @@ type toggleAdapter struct {
 	fail bool
 }
 
-func (a *toggleAdapter) Extract(ctx context.Context, f *Fetcher, u *url.URL) (Snapshot, error) {
+func (a *toggleAdapter) Extract(ctx context.Context, f *Fetcher, u *url.URL) (SourceText, error) {
 	a.fakeAdapter.err = nil
 	if a.fail {
 		a.fakeAdapter.err = errors.New("збій")

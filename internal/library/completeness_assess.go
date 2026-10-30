@@ -9,7 +9,7 @@ import (
 // Completeness is the one answer to "how complete is this saved text": the
 // extractor's status, what the text itself suggests, and the user's verdict.
 // Pages, digests, Telegram and the agent API read it instead of combining
-// Snapshot.Completeness with their own heuristics.
+// SourceText.Completeness with their own heuristics.
 type Completeness struct {
 	// Status is the extractor's claim (full, partial or unknown) with the user's
 	// confirmation overlaid; unknown means "no claim", not "probably incomplete".
@@ -58,7 +58,7 @@ func incompleteSigns(text string) []Reason {
 	return signs
 }
 
-func Assess(s Snapshot) Completeness {
+func Assess(s SourceText) Completeness {
 	a := Completeness{Status: s.Completeness, Reasons: []Reason{}, Confirmed: s.UserConfirmed, Diagnosis: diagnoseSource(s)}
 	if a.Diagnosis != nil && a.Diagnosis.Soft {
 		a.Reasons = incompleteSigns(s.Text)
@@ -87,12 +87,12 @@ func (c Completeness) Label() string {
 // ShownWarning is the warning as readers see it. Texts saved before extractors
 // stopped judging completeness carry "; повноту оригіналу не підтверджено" in the
 // stored warning; versions are immutable, so it is dropped at display time.
-func (s Snapshot) ShownWarning() string {
+func (s SourceText) ShownWarning() string {
 	return strings.TrimSuffix(s.Warning, "; повноту оригіналу не підтверджено")
 }
 
 // completenessSuffix is " · <label>" for summaries, or "" when there is nothing to say.
-func completenessSuffix(snapshot Snapshot) string {
+func completenessSuffix(snapshot SourceText) string {
 	if label := Assess(snapshot).Label(); label != "" {
 		return " · " + label
 	}

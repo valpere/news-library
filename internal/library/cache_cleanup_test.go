@@ -16,8 +16,6 @@ func TestCacheEvictionRetainsPrimaryAndSharedBodies(t *testing.T) {
 	manual(t, s, id, "Primary immutable text")
 	enableDigests(t, s)
 	completeFixtureDigest(t, s)
-	snapshots, _ := s.Snapshots(id)
-	digest, _ := s.DigestForSnapshot(snapshots[0].ID)
 	f := &Fetcher{MaxBytes: 4096, client: &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
 		body := "shared"
 		if r.URL.Path == "/different" {
@@ -61,10 +59,10 @@ func TestCacheEvictionRetainsPrimaryAndSharedBodies(t *testing.T) {
 	if _, e = os.Stat(filepath.Join(s.Files.Root, orphan)); !os.IsNotExist(e) {
 		t.Fatal("orphan not removed")
 	}
-	if snap, e := s.Snapshot(snapshots[0].ID); e != nil || snap.Text != "Primary immutable text" {
+	if snap, e := s.SourceText(id); e != nil || snap.Text != "Primary immutable text" {
 		t.Fatal("primary text evicted", e)
 	}
-	if kept, e := s.Digest(digest.ID, id); e != nil || kept.Markdown != fixtureDigest {
+	if kept, e := s.DigestOf(id); e != nil || kept == nil || kept.Markdown != fixtureDigest {
 		t.Fatal("primary digest evicted", e)
 	}
 	s.DB.QueryRow("SELECT count(*) FROM items WHERE rating IS NOT NULL").Scan(&count)
@@ -88,7 +86,7 @@ func TestCacheWriteFailureStillReturnsAvailableSource(t *testing.T) {
 	if e = s.Complete(claim(t, s), source); e != nil {
 		t.Fatal(e)
 	}
-	if v, e := s.Snapshots(id); e != nil || len(v) != 1 {
+	if v, e := s.Texts(id); e != nil || len(v) != 1 {
 		t.Fatal("source not preserved", e)
 	}
 }

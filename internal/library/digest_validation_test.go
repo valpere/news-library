@@ -52,7 +52,7 @@ func TestGenerationFailureKindsHistoryAndBackup(t *testing.T) {
 	id := add(t, s, "https://example.com/failure")
 	manual(t, s, id, "A saved source survives malformed model replies.")
 	calls := 0
-	worker := &Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) {
+	worker := &Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 		calls++
 		return Digest{}, &SourceError{Kind: "format", Message: "Секція порожня", Diagnostic: "<script>untrusted()</script> raw model reply"}
 	}), Timeout: time.Second, Lease: time.Second, MaxAttempts: 3}
@@ -113,7 +113,7 @@ func TestGenerationFailureKindsHistoryAndBackup(t *testing.T) {
 		t.Fatal("diagnostic error hid metadata", events, err)
 	}
 	item, _ := s.Item(id)
-	if !item.Selected.Valid || item.Score.Valid || item.Read {
+	if !item.HasText || item.Score.Valid || item.Read {
 		t.Fatal(item)
 	}
 }
@@ -129,7 +129,7 @@ func TestGenerationFailureAdviceAndTemporaryRetry(t *testing.T) {
 	id := add(t, s, "https://example.com/temporary")
 	manual(t, s, id, "Persisted source")
 	calls := 0
-	worker := &Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) {
+	worker := &Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 		calls++
 		return Digest{}, &SourceError{Kind: "temporary", Message: "Ollama HTTP 429", Retry: true}
 	}), Timeout: time.Second, Lease: time.Second, MaxAttempts: 3}
@@ -157,7 +157,7 @@ func TestDigestFailureUIAndNonRetryableCategories(t *testing.T) {
 			enableDigests(t, s)
 			id := add(t, s, "https://example.com/"+kind)
 			manual(t, s, id, "Primary source remains readable")
-			worker := &Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) {
+			worker := &Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 				return Digest{}, &SourceError{Kind: kind, Message: "Fixture refusal", Diagnostic: "<script>untrusted()</script>", Retry: true}
 			}), Timeout: time.Second, Lease: time.Second, MaxAttempts: 3}
 			if _, err := worker.Step(context.Background()); err != nil {

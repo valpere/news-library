@@ -14,15 +14,15 @@ func TestChangedTextErasesEarlierTextAndItsDerivedData(t *testing.T) {
 	completeFixtureDigest(t, s)
 	old, _ := s.Item(id)
 	var textPath, digestPath string
-	s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", old.Selected.Int64).Scan(&textPath)
-	s.DB.QueryRow("SELECT markdown_path FROM digests WHERE item_id=?", old.Selected.Int64).Scan(&digestPath)
+	s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", old.ID).Scan(&textPath)
+	s.DB.QueryRow("SELECT markdown_path FROM digests WHERE item_id=?", old.ID).Scan(&digestPath)
 	if textPath == "" || digestPath == "" {
 		t.Fatal("fixture files missing")
 	}
 	if err := s.Rate(id, 4, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ConfirmCompleteness(old.Selected.Int64, true); err != nil {
+	if err := s.ConfirmCompleteness(old.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	s.SetRead(id, true)
@@ -40,7 +40,7 @@ func TestChangedTextErasesEarlierTextAndItsDerivedData(t *testing.T) {
 	if n := count(t, s, "SELECT count(*) FROM digests WHERE item_id=?", id); n != 0 {
 		t.Fatal("digest of the replaced text kept", n)
 	}
-	if n := count(t, s, "SELECT count(*) FROM texts WHERE item_id=? AND complete_confirmed=1", old.Selected.Int64); n != 0 {
+	if n := count(t, s, "SELECT count(*) FROM texts WHERE item_id=? AND complete_confirmed=1", old.ID); n != 0 {
 		t.Fatal("confirmation kept", n)
 	}
 	if _, err := os.Stat(filepath.Join(s.Files.Root, textPath)); !os.IsNotExist(err) {
@@ -63,7 +63,7 @@ func TestSameTextChangesNothing(t *testing.T) {
 	}
 	manual(t, s, id, "The same text.")
 	after, _ := s.Item(id)
-	if after.Selected != before.Selected || !after.Score.Valid || after.Score.Int64 != 5 || after.State != "ready" {
+	if after.HasText != before.HasText || !after.Score.Valid || after.Score.Int64 != 5 || after.State != "ready" {
 		t.Fatal("identical text invalidated something", before, after)
 	}
 	if n := count(t, s, "SELECT count(*) FROM texts WHERE item_id=?", id); n != 1 {
@@ -75,7 +75,7 @@ func TestRefetchWithChangedTextReplacesTheOldOne(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/refetch")
 	first := claim(t, s)
-	snap := Snapshot{Title: "T", Text: "The original article text, long enough to count as a source.", Origin: "fetch", Extractor: "fixture", Completeness: "full"}
+	snap := SourceText{Title: "T", Text: "The original article text, long enough to count as a source.", Origin: "fetch", Extractor: "fixture", Completeness: "full"}
 	if err := s.Complete(first, snap); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestRefetchWithChangedTextReplacesTheOldOne(t *testing.T) {
 	if r, _ := s.Ratings(id); len(r) != 0 {
 		t.Fatal("changed refetched text kept the rating")
 	}
-	if vs, _ := s.Snapshots(id); len(vs) != 1 || vs[0].Text != snap.Text {
+	if vs, _ := s.Texts(id); len(vs) != 1 || vs[0].Text != snap.Text {
 		t.Fatal("old text kept", vs)
 	}
 }

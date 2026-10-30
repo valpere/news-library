@@ -8,7 +8,7 @@ import (
 func digestSystemFor(t *testing.T, words int, version string) string {
 	t.Helper()
 	msgs, err := digestMessages(Job{PromptVersion: version, InputLimit: 1 << 20, Interests: "тест"},
-		Snapshot{Text: strings.Repeat("слово ", words)})
+		SourceText{Text: strings.Repeat("слово ", words)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestShortSourceBudgetBoundaryAndFloor(t *testing.T) {
 }
 
 func TestPreviousPromptVersionIsRejected(t *testing.T) {
-	_, err := digestMessages(Job{PromptVersion: "uk-sections-v1", InputLimit: 1 << 20}, Snapshot{Text: "текст"})
+	_, err := digestMessages(Job{PromptVersion: "uk-sections-v1", InputLimit: 1 << 20}, SourceText{Text: "текст"})
 	if err == nil || !strings.Contains(err.Error(), "версія промпту") {
 		t.Fatalf("%v", err)
 	}

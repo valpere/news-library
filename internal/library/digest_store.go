@@ -30,7 +30,7 @@ func (c DigestConfig) Version() string {
 }
 
 type Digest struct {
-	ID, ItemID, SnapshotID                                int64
+	ItemID                                                int64
 	Markdown, Model, ActualModel, Provider, PromptVersion string
 	InputTokens, OutputTokens                             int64
 	Prediction                                            *InterestPrediction
@@ -92,7 +92,7 @@ func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
 	if s.DigestConfig == nil {
 		return nil
 	}
-	rejected, err := s.ensureFilterForSnapshot(tx, itemID, snapshotID)
+	rejected, err := s.ensureFilter(tx, itemID, snapshotID)
 	if err != nil || rejected {
 		return err
 	}
@@ -130,8 +130,8 @@ func snapshotText(tx *sql.Tx, f Files, snapshotID int64) (string, error) {
 	data, err := f.Read(path, hash)
 	return string(data), err
 }
-func (s *Store) Snapshot(id int64) (Snapshot, error) {
-	v, path, err := scanSnapshot(s.DB.QueryRow(snapshotSelect+` WHERE v.item_id=?`, id))
+func (s *Store) SourceText(id int64) (SourceText, error) {
+	v, path, err := scanText(s.DB.QueryRow(textSelect+` WHERE v.item_id=?`, id))
 	if err != nil {
 		return v, err
 	}
@@ -140,7 +140,7 @@ func (s *Store) Snapshot(id int64) (Snapshot, error) {
 	return v, err
 }
 func (s *Store) CompleteDigest(j Job, d Digest) error {
-	if j.Stage != "digest" || !j.SnapshotID.Valid {
+	if j.Stage != "digest" {
 		return errors.New("not a digest job")
 	}
 	translation := isTranslationPrompt(j.PromptVersion)
@@ -212,12 +212,12 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	return nil
 }
 
-const digestSelect = `SELECT item_id,item_id,item_id,markdown_path,model,actual_model,provider,prompt_version,input_tokens,output_tokens,hash,chunk_count,feedback FROM digests`
+const digestSelect = `SELECT item_id,markdown_path,model,actual_model,provider,prompt_version,input_tokens,output_tokens,hash,chunk_count,feedback FROM digests`
 
 func (s *Store) scanDigest(row interface{ Scan(...any) error }) (Digest, error) {
 	var d Digest
 	var path, hash string
-	err := row.Scan(&d.ID, &d.ItemID, &d.SnapshotID, &path, &d.Model, &d.ActualModel, &d.Provider, &d.PromptVersion, &d.InputTokens, &d.OutputTokens, &hash, &d.ChunkCount, &d.Feedback)
+	err := row.Scan(&d.ItemID, &path, &d.Model, &d.ActualModel, &d.Provider, &d.PromptVersion, &d.InputTokens, &d.OutputTokens, &hash, &d.ChunkCount, &d.Feedback)
 	if err != nil {
 		return d, err
 	}
@@ -225,22 +225,15 @@ func (s *Store) scanDigest(row interface{ Scan(...any) error }) (Digest, error) 
 	d.Markdown = string(data)
 	return d, err
 }
-func (s *Store) DigestForSnapshot(id int64) (*Digest, error) {
+func (s *Store) DigestOf(id int64) (*Digest, error) {
 	d, e := s.scanDigest(s.DB.QueryRow(digestSelect+" WHERE item_id=?", id))
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if e == nil {
-		d.Prediction, e = s.Prediction(d.ID)
+		d.Prediction, e = s.Prediction(d.ItemID)
 	}
 	return &d, e
-}
-func (s *Store) Digest(id, itemID int64) (Digest, error) {
-	d, e := s.scanDigest(s.DB.QueryRow(digestSelect+" WHERE item_id=? AND item_id=?", id, itemID))
-	if e == nil {
-		d.Prediction, e = s.Prediction(d.ID)
-	}
-	return d, e
 }
 func (s *Store) RetryDigest(itemID int64) error {
 	if s.DigestConfig == nil {
@@ -274,7 +267,7 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 	if filtered == "rejected" {
 		return false, errors.New("спершу явно поверніть матеріал до обробки")
 	}
-	rejected, e := s.ensureFilterForSnapshot(tx, itemID, sid.Int64)
+	rejected, e := s.ensureFilter(tx, itemID, sid.Int64)
 	if e != nil {
 		return false, e
 	}
@@ -317,13 +310,13 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 
 // An item whose text was never checked by the rules is evaluated before its first
 // generation; configuration changes leave existing verdicts alone.
-func (s *Store) ensureFilterForSnapshot(tx *sql.Tx, itemID, snapshotID int64) (bool, error) {
+func (s *Store) ensureFilter(tx *sql.Tx, itemID, snapshotID int64) (bool, error) {
 	var checked string
 	if err := tx.QueryRow("SELECT filter_state FROM items WHERE id=?", itemID).Scan(&checked); err != nil {
 		return false, err
 	}
 	if checked == "not_checked" {
-		var snap Snapshot
+		var snap SourceText
 		var path, hash string
 		if err := tx.QueryRow("SELECT text_path,hash,title FROM texts WHERE item_id=?", itemID).Scan(&path, &hash, &snap.Title); err != nil {
 			return false, err
@@ -333,7 +326,7 @@ func (s *Store) ensureFilterForSnapshot(tx *sql.Tx, itemID, snapshotID int64) (b
 			return false, err
 		}
 		snap.Text = string(data)
-		snap.ID = snapshotID
+		snap.ItemID = snapshotID
 		if rejected, err := s.decideFilter(tx, itemID, &snap, false); err != nil || rejected {
 			return rejected, err
 		}

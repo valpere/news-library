@@ -61,8 +61,8 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 		t.Fatal("GET mutated item")
 	}
 	post(t, w, base+"manual", url.Values{"text": {"offline useful knowledge <script>alert(1)</script>"}})
-	vs, _ := s.Snapshots(id)
-	sid := strconv.FormatInt(vs[0].ID, 10)
+	vs, _ := s.Texts(id)
+	sid := strconv.FormatInt(vs[0].ItemID, 10)
 	post(t, w, base+"rating", url.Values{"score": {"3"}, "source": {sid}, "reason": {"useful"}})
 	post(t, w, base+"tags", url.Values{"tags": {"go, reading"}})
 	rw = webRequest(w, "GET", "/?q=knowledge&usefulness=3&tags=go&read=0&sort=relevance", nil, nil)
@@ -296,7 +296,7 @@ func TestProgressPageReadsDoNotChangeState(t *testing.T) {
 	}
 	i, _ := s.Item(id)
 	jobs, _ := s.Jobs(id)
-	snapshots, _ := s.Snapshots(id)
+	snapshots, _ := s.Texts(id)
 	ratings, _ := s.Ratings(id)
 	if i.Read || i.Score.Valid || i.State != "queued" || len(jobs) != 1 || jobs[0].Attempts != 0 || len(snapshots) != 0 || len(ratings) != 0 {
 		t.Fatal("progress polling mutates library state")

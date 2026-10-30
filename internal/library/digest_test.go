@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -71,7 +70,7 @@ func TestDigestQueueRecoveryAndRatingContext(t *testing.T) {
 	if e := s.CompleteDigest(next, Digest{Markdown: fixtureDigest, ActualModel: next.Model, Provider: "fixture"}); e != nil {
 		t.Fatal(e)
 	}
-	d, e := s.DigestForSnapshot(next.SnapshotID.Int64)
+	d, e := s.DigestOf(next.ItemID)
 	if e != nil || d == nil {
 		t.Fatal(e)
 	}
@@ -110,23 +109,21 @@ func TestDigestPrimaryUIAndExports(t *testing.T) {
 	completeFixtureDigest(t, s)
 	rw = webRequest(w, "GET", "/items/1", nil, nil)
 	html := rw.Body.String()
-	if rw.Code != 200 || !strings.Contains(html, `id="digest"`) || !strings.Contains(html, `name="digest"`) || strings.Contains(html, `data-pending="true"`) || strings.Contains(html, "<script>alert") {
+	if rw.Code != 200 || !strings.Contains(html, `id="digest"`) || strings.Contains(html, `data-pending="true"`) || strings.Contains(html, "<script>alert") {
 		t.Fatal("digest UI", html)
 	}
-	snapshots, _ := s.Snapshots(id)
-	d, _ := s.DigestForSnapshot(snapshots[0].ID)
-	post(t, w, "/items/1/rating", url.Values{"score": {"3"}, "source": {strconv.FormatInt(d.SnapshotID, 10)}, "digest": {strconv.FormatInt(d.ID, 10)}})
+	post(t, w, "/items/1/rating", url.Values{"score": {"3"}})
 	ratings, _ := s.Ratings(id)
 	if len(ratings) != 1 || ratings[0].Score != 3 {
 		t.Fatal("rating not recorded")
 	}
 	for _, format := range []string{"markdown", "html"} {
-		rw = webRequest(w, "GET", fmt.Sprintf("/items/1/digests/%d/%s", d.ID, format), nil, nil)
+		rw = webRequest(w, "GET", fmt.Sprintf("/items/1/digest/%s", format), nil, nil)
 		if rw.Code != 200 || !strings.Contains(rw.Body.String(), "Ключові тези") || !strings.Contains(rw.Header().Get("Content-Disposition"), "attachment") {
 			t.Fatal("export", format, rw.Code)
 		}
 	}
-	rw = webRequest(w, "GET", fmt.Sprintf("/items/2/digests/%d/html", d.ID), nil, nil)
+	rw = webRequest(w, "GET", "/items/2/digest/html", nil, nil)
 	if rw.Code != 404 {
 		t.Fatal("foreign export")
 	}
@@ -168,7 +165,7 @@ func TestOllamaCloudOnlyAndOutputValidation(t *testing.T) {
 		t.Fatal(e)
 	}
 	j := Job{Model: "fixture:31b-cloud", PromptVersion: DigestPromptVersion, InputLimit: 4096}
-	snap := Snapshot{Text: "Saved source", Completeness: "partial"}
+	snap := SourceText{Text: "Saved source", Completeness: "partial"}
 	d, e := o.Generate(context.Background(), j, snap)
 	if e != nil || d.ActualModel != "fixture:cloud" || chatCalls != 1 {
 		t.Fatal(d, e)
@@ -205,9 +202,9 @@ func TestOllamaCloudOnlyAndOutputValidation(t *testing.T) {
 	}
 }
 
-type generatorFunc func(context.Context, Job, Snapshot) (Digest, error)
+type generatorFunc func(context.Context, Job, SourceText) (Digest, error)
 
-func (f generatorFunc) Generate(ctx context.Context, j Job, s Snapshot) (Digest, error) {
+func (f generatorFunc) Generate(ctx context.Context, j Job, s SourceText) (Digest, error) {
 	return f(ctx, j, s)
 }
 func TestDigestWorkerRestartAndFailurePreservesSource(t *testing.T) {
@@ -224,7 +221,7 @@ func TestDigestWorkerRestartAndFailurePreservesSource(t *testing.T) {
 	defer restarted.Close()
 	enableDigests(t, restarted)
 	calls := 0
-	worker := Worker{Store: restarted, Generator: generatorFunc(func(_ context.Context, j Job, s Snapshot) (Digest, error) {
+	worker := Worker{Store: restarted, Generator: generatorFunc(func(_ context.Context, j Job, s SourceText) (Digest, error) {
 		calls++
 		return Digest{}, &SourceError{Message: "temporary cloud failure", Retry: true}
 	}), Timeout: time.Second, DigestTimeout: time.Second, Lease: time.Minute, Backoff: time.Hour, MaxAttempts: 3}
@@ -235,7 +232,7 @@ func TestDigestWorkerRestartAndFailurePreservesSource(t *testing.T) {
 	if i.State != "digest_retry_wait" {
 		t.Fatal("no digest retry", i)
 	}
-	snapshots, e := restarted.Snapshots(id)
+	snapshots, e := restarted.Texts(id)
 	if e != nil || snapshots[0].Text != "Offline text after generation failure" {
 		t.Fatal("lost source", e)
 	}
@@ -243,7 +240,7 @@ func TestDigestWorkerRestartAndFailurePreservesSource(t *testing.T) {
 		t.Fatal("ignored retry delay", worked, e, calls)
 	}
 	restarted.DB.Exec("UPDATE jobs SET next_attempt=0 WHERE stage='digest'")
-	worker.Generator = generatorFunc(func(_ context.Context, j Job, s Snapshot) (Digest, error) {
+	worker.Generator = generatorFunc(func(_ context.Context, j Job, s SourceText) (Digest, error) {
 		calls++
 		return Digest{Markdown: fixtureDigest, ActualModel: j.Model, Provider: "fixture"}, nil
 	})

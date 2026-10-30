@@ -16,13 +16,13 @@ import (
 
 type sourceFixture struct{}
 
-func (sourceFixture) Fetch(context.Context, string) (library.Snapshot, error) {
-	return library.Snapshot{Title: "Synthetic HTTP cache note", Text: "A personal library stores immutable source text separately from its SQLite metadata. HTTP cache entries are derived data and may be removed without deleting source text. Conditional requests use ETag and Last-Modified to avoid downloading unchanged pages. A backup must include both the database and the primary source and digest files. Rebuilding the cache does not rebuild the primary files.", Origin: "fixture", Extractor: "synthetic-v1", Completeness: "full"}, nil
+func (sourceFixture) Fetch(context.Context, string) (library.SourceText, error) {
+	return library.SourceText{Title: "Synthetic HTTP cache note", Text: "A personal library stores immutable source text separately from its SQLite metadata. HTTP cache entries are derived data and may be removed without deleting source text. Conditional requests use ETag and Last-Modified to avoid downloading unchanged pages. A backup must include both the database and the primary source and digest files. Rebuilding the cache does not rebuild the primary files.", Origin: "fixture", Extractor: "synthetic-v1", Completeness: "full"}, nil
 }
 
 type temporaryPrimary struct{ Calls int }
 
-func (p *temporaryPrimary) Generate(context.Context, library.Job, library.Snapshot) (library.Digest, error) {
+func (p *temporaryPrimary) Generate(context.Context, library.Job, library.SourceText) (library.Digest, error) {
 	p.Calls++
 	return library.Digest{}, &library.SourceError{Kind: "temporary", Retry: true, Message: "synthetic primary HTTP 503 for fallback smoke"}
 }
@@ -95,7 +95,7 @@ func main() {
 	}
 	result := map[string]any{"state": state, "model_requested": *model, "primary_fixture_calls": primary.Calls, "seconds": time.Since(started).Seconds(), "account_without_byok_confirmed": true}
 	result["data_collection"] = *collection
-	digest, err := store.DigestForSnapshot(snapshot)
+	digest, err := store.DigestOf(snapshot)
 	if err == nil && digest != nil {
 		result["actual_model"] = digest.ActualModel
 		result["provider"] = digest.Provider

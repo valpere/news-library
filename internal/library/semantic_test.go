@@ -71,7 +71,7 @@ func TestSemanticSynonymFiltersHybridAndOfflineFTS(t *testing.T) {
 	}
 	before := f.calls
 	got, err := semantic.Search(context.Background(), Filters{Query: "persistent storage", Tags: []string{"systems"}, Usefulness: "unrated"}, "vector")
-	if err != nil || len(got.Items) != 1 || got.Items[0].ID != id || got.Items[0].MatchSnapshot == 0 || !strings.Contains(got.Items[0].MatchSnippet, "database") {
+	if err != nil || len(got.Items) != 1 || got.Items[0].ID != id || !strings.Contains(got.Items[0].MatchSnippet, "database") {
 		t.Fatal(got, err)
 	}
 	if f.calls != before+1 {
@@ -162,7 +162,7 @@ func TestEmbeddingCheckpointRestartRejectAndLeaseFencing(t *testing.T) {
 	if err != nil || job == nil {
 		t.Fatal(job, err)
 	}
-	s.DB.Exec("UPDATE embedding_runs SET lease_until=0 WHERE item_id=? AND version=?", job.SnapshotID, job.Version)
+	s.DB.Exec("UPDATE embedding_runs SET lease_until=0 WHERE item_id=? AND version=?", job.ItemID, job.Version)
 	if err = semantic.finish(*job, []string{"database new source"}, []float64{1, 0}); !errors.Is(err, ErrLeaseLost) {
 		t.Fatal("stale worker published", err)
 	}
@@ -282,7 +282,7 @@ func TestExplicitRebuildPreservesHumanHistoryAndMigratedFilterGuard(t *testing.T
 	id := add(t, s, "https://example.com/rebuild")
 	manual(t, s, id, "database source")
 	item, _ := s.Item(id)
-	sid := item.Selected.Int64
+	sid := item.ID
 	if err := s.Rate(id, 4, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +293,7 @@ func TestExplicitRebuildPreservesHumanHistoryAndMigratedFilterGuard(t *testing.T
 	drainIndex(t, semantic)
 	ratings, _ := s.Ratings(id)
 	after, _ := s.Item(id)
-	if len(ratings) != 1 || ratings[0].AssessedAt.Valid || after.Selected.Int64 != sid || after.Score.Int64 != 4 {
+	if len(ratings) != 1 || ratings[0].AssessedAt.Valid || after.ID != sid || after.Score.Int64 != 4 {
 		t.Fatal("rebuild changed primary context")
 	}
 }
