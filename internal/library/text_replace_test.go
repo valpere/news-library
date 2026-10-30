@@ -22,7 +22,7 @@ func TestChangedTextErasesEarlierTextAndItsDerivedData(t *testing.T) {
 	if err := s.Rate(id, 4, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ConfirmCompleteness(old.Selected.Int64, true, ""); err != nil {
+	if err := s.ConfirmCompleteness(old.Selected.Int64, true); err != nil {
 		t.Fatal(err)
 	}
 	s.SetRead(id, true)
@@ -40,7 +40,7 @@ func TestChangedTextErasesEarlierTextAndItsDerivedData(t *testing.T) {
 	if n := count(t, s, "SELECT count(*) FROM digests WHERE item_id=?", id); n != 0 {
 		t.Fatal("digest of the replaced text kept", n)
 	}
-	if n := count(t, s, "SELECT count(*) FROM completeness_confirmations WHERE item_id=?", old.Selected.Int64); n != 0 {
+	if n := count(t, s, "SELECT count(*) FROM texts WHERE item_id=? AND complete_confirmed=1", old.Selected.Int64); n != 0 {
 		t.Fatal("confirmation kept", n)
 	}
 	if _, err := os.Stat(filepath.Join(s.Files.Root, textPath)); !os.IsNotExist(err) {

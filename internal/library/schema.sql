@@ -24,7 +24,8 @@ CREATE TABLE texts (
  item_id INTEGER PRIMARY KEY REFERENCES items(id), title TEXT NOT NULL,
  hash TEXT NOT NULL, retrieved_at TEXT NOT NULL, origin TEXT NOT NULL,
  extractor TEXT NOT NULL, completeness TEXT NOT NULL, warning TEXT NOT NULL,
- text_path TEXT NOT NULL
+ text_path TEXT NOT NULL,
+ complete_confirmed INTEGER NOT NULL DEFAULT 0 CHECK(complete_confirmed IN (0,1))
 );
 CREATE TABLE item_tags (
  item_id INTEGER NOT NULL REFERENCES items(id), tag TEXT NOT NULL, origin TEXT NOT NULL DEFAULT 'human',
@@ -130,13 +131,6 @@ CREATE TABLE search_judgments (
  score INTEGER NOT NULL CHECK(score BETWEEN 0 AND 2),
  recorded_at TEXT NOT NULL
 );
-CREATE TABLE completeness_confirmations (
- id INTEGER PRIMARY KEY,
- item_id INTEGER NOT NULL REFERENCES texts(item_id),
- complete INTEGER NOT NULL CHECK(complete IN (0,1)),
- note TEXT NOT NULL DEFAULT '',
- recorded_at TEXT NOT NULL
-);
 CREATE VIEW active_items AS SELECT * FROM items
  WHERE NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=items.id);
 CREATE UNIQUE INDEX one_active_fetch ON jobs(item_id) WHERE stage='fetch' AND state IN ('queued','running','retry_wait');
@@ -147,7 +141,6 @@ CREATE INDEX connection_backlinks ON connection_members(item_id,version_id);
 CREATE INDEX knowledge_current ON knowledge_runs(item_id,updated_at DESC,id DESC);
 CREATE INDEX chat_history ON chat_turns(session_id,id DESC);
 CREATE INDEX search_judgments_event ON search_judgments(event_id,item_id,id);
-CREATE INDEX completeness_confirmations_item ON completeness_confirmations(item_id,id);
 CREATE TRIGGER immutable_connection_version_update BEFORE UPDATE ON connection_versions BEGIN SELECT RAISE(ABORT,'immutable connection version'); END;
 CREATE TRIGGER immutable_connection_version_delete BEFORE DELETE ON connection_versions BEGIN SELECT RAISE(ABORT,'immutable connection version'); END;
 CREATE TRIGGER immutable_connection_member_update BEFORE UPDATE ON connection_members BEGIN SELECT RAISE(ABORT,'immutable connection member'); END;
