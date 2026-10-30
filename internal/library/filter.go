@@ -161,8 +161,8 @@ func (s *Store) decideFilter(tx *sql.Tx, itemID int64, snap *SourceText, overrid
 	}
 	return result == "rejected", nil
 }
-func (s *Store) processText(tx *sql.Tx, itemID, sid int64, snap SourceText, override bool) error {
-	snap.ItemID = sid
+func (s *Store) processText(tx *sql.Tx, itemID int64, snap SourceText, override bool) error {
+	snap.ItemID = itemID
 	rejected, err := s.decideFilter(tx, itemID, &snap, override)
 	if err != nil || rejected {
 		return err
@@ -171,7 +171,7 @@ func (s *Store) processText(tx *sql.Tx, itemID, sid int64, snap SourceText, over
 		_, err = tx.Exec("UPDATE items SET state='needs_input',error=? WHERE id=?", contentErr.Error(), itemID)
 		return err
 	}
-	return s.queueDigest(tx, itemID, sid)
+	return s.queueDigest(tx, itemID)
 }
 
 // FilterReason returns why the rules gave the item's current verdict ("" when no rule matched).
@@ -203,7 +203,7 @@ func (s *Store) OverrideFilter(itemID int64) error {
 			return err
 		}
 		if artifacts > 0 && s.DigestConfig != nil {
-			if err = s.queueRegeneration(tx, itemID, sid.Int64); err != nil {
+			if err = s.queueRegeneration(tx, itemID); err != nil {
 				return err
 			}
 		} else {
@@ -212,7 +212,7 @@ func (s *Store) OverrideFilter(itemID int64) error {
 					return err
 				}
 			}
-			if err = s.queueDigest(tx, itemID, sid.Int64); err != nil {
+			if err = s.queueDigest(tx, itemID); err != nil {
 				return err
 			}
 		}

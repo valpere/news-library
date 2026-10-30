@@ -444,7 +444,6 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 			failureAdvice += " Збережена діагностична відповідь недоступна; перевірте каталог даних або backup."
 		}
 	}
-	current := snap != nil && snap.ItemID == i.ID
 	var knowledge *ArticleKnowledge
 	var knowledgeStatus *KnowledgeRun
 	var knowledgeFailures []JobFailure
@@ -478,7 +477,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 		assessed = Assess(*snap)
 	}
 	diagnosis, canConfirm := assessed.Diagnosis, assessed.CanConfirm
-	w.render(rw, "detail", pageData{CanConfirmCompleteness: canConfirm, SourceDiagnosis: diagnosis, DiagnosedDigestShown: diagnosis != nil && digest != nil, DigestSkipped: digestSkipped, DigestIsTranslation: digest != nil && isTranslationPrompt(digest.PromptVersion), KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, ItemText: snap, Digest: digest, Sections: sections, FilterReason: filterReason, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
+	w.render(rw, "detail", pageData{CanConfirmCompleteness: canConfirm, SourceDiagnosis: diagnosis, DiagnosedDigestShown: diagnosis != nil && digest != nil, DigestSkipped: digestSkipped, DigestIsTranslation: digest != nil && isTranslationPrompt(digest.PromptVersion), KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: snap != nil && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, ItemText: snap, Digest: digest, Sections: sections, FilterReason: filterReason, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: snap != nil && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: snap != nil && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))

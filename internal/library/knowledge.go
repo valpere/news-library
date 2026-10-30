@@ -132,7 +132,7 @@ func (s *Store) claimKnowledge(timeout time.Duration, target ...int64) (*Knowled
 	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','running','retry_wait') AND (?=0 OR item_id=?) AND NOT EXISTS(SELECT 1 FROM active_items i WHERE i.id=knowledge_runs.item_id AND i.filter_state IN ('passed','overridden') AND EXISTS(SELECT 1 FROM digests WHERE digests.item_id=i.id))`, itemID, itemID); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='failed',kind='unknown',error='Аналіз не завершено після перезапуску',response_path='',hash='',lease_until=0 WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, now, itemID, itemID); err != nil {
+	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='failed',kind='unknown',error='Аналіз не завершено після перезапуску',lease_until=0 WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, now, itemID, itemID); err != nil {
 		return nil, err
 	}
 	j, err := scanKnowledgeRun(tx.QueryRow(knowledgeRunSelect+` WHERE ((state IN ('queued','retry_wait') AND next_attempt<=?) OR (state='running' AND lease_until<=? AND attempts<3)) AND (?=0 OR item_id=?) ORDER BY id LIMIT 1`, now, now, itemID, itemID))
@@ -265,12 +265,16 @@ func (s *Store) failKnowledge(j KnowledgeRun, cause error) error {
 func (s *Store) KnowledgeFailures(item int64) ([]JobFailure, error) {
 	f := JobFailure{}
 	var path, hash string
-	err := s.DB.QueryRow(`SELECT id,kind,error,response_path,hash FROM knowledge_runs WHERE item_id=? AND kind<>'' ORDER BY updated_at DESC,id DESC LIMIT 1`, item).Scan(&f.JobID, &f.Kind, &f.Message, &path, &hash)
+	err := s.DB.QueryRow(`SELECT id,kind,error,response_path,hash FROM knowledge_runs WHERE item_id=? ORDER BY updated_at DESC,id DESC LIMIT 1`, item).Scan(&f.JobID, &f.Kind, &f.Message, &path, &hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	// Only the latest run counts: a newer success supersedes an older failure.
+	if f.Kind == "" {
+		return nil, nil
 	}
 	if path != "" {
 		data, e := s.Files.Read(path, hash)

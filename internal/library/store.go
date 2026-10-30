@@ -198,14 +198,14 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 	if _, err = tx.ExecContext(ctx, `UPDATE items SET state='needs_input',error='fetch attempts exhausted after restart' WHERE NOT EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id) AND id IN (SELECT item_id FROM jobs WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
 		return nil, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='fetch attempts exhausted after restart',failure_kind='unknown',failure_retryable=0,response_path='',hash='' WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='fetch attempts exhausted after restart',failure_kind='unknown',failure_retryable=0 WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
 		return nil, err
 	}
 	if s.DigestConfig != nil {
 		if _, err = tx.ExecContext(ctx, `UPDATE items SET state='digest_failed',error='digest attempts exhausted after restart' WHERE NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=items.id) AND id IN (SELECT item_id FROM jobs WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
 			return nil, err
 		}
-		if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='digest attempts exhausted after restart',failure_kind='unknown',failure_retryable=0,response_path='',hash='' WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='digest attempts exhausted after restart',failure_kind='unknown',failure_retryable=0 WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
 			return nil, err
 		}
 	}
@@ -298,7 +298,7 @@ func (s *Store) Complete(j Job, snap SourceText) error {
 			if err = indexText(tx, j.ItemID, snap.Title, snap.Text); err != nil {
 				return err
 			}
-			if err = s.processText(tx, j.ItemID, j.ItemID, snap, j.FilterOverride); err != nil {
+			if err = s.processText(tx, j.ItemID, snap, j.FilterOverride); err != nil {
 				return err
 			}
 		}
@@ -483,7 +483,7 @@ func (s *Store) Manual(id int64, text string) error {
 	if err = indexText(tx, id, title, text); err != nil {
 		return err
 	}
-	if err = s.processText(tx, id, id, SourceText{Text: text, Title: title}, false); err != nil {
+	if err = s.processText(tx, id, SourceText{Text: text, Title: title}, false); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {

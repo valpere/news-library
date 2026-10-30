@@ -737,7 +737,7 @@ unknown IDs, unsupported/uncertain, invalid JSON відхиляють увесь
 saveConnectionTx додає immutable revision з author=model/model/prompt; ручне
 редагування додає user revision і зберігає модельну історію. Backlinks derived.
 
-knowledge_failures immutable, class/message/date/optional raw reply file;
+Остання помилка знань зберігається в `knowledge_runs` (клас, повідомлення, необов'язковий файл відповіді); новіший успіх її знімає;
 лише retryable temporary auto-retry, permanent/unknown лишаються failed.
 Метадані/дайджест лишаються доступними після link failure; diagnostics у
 details, file loss показує warning. Backup primaryRefs schema11 додає metadata

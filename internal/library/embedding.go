@@ -298,17 +298,17 @@ func (s *Store) RebuildEmbeddings() error {
 		return err
 	}
 	defer tx.Rollback()
-	rows, err := tx.Query("SELECT id,id FROM items WHERE EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id) AND filter_state='not_checked'")
+	rows, err := tx.Query("SELECT id FROM items WHERE EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id) AND filter_state='not_checked'")
 	if err != nil {
 		return err
 	}
-	var legacy [][2]int64
+	var legacy []int64
 	for rows.Next() {
-		var ids [2]int64
-		if err = rows.Scan(&ids[0], &ids[1]); err != nil {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
 			break
 		}
-		legacy = append(legacy, ids)
+		legacy = append(legacy, id)
 	}
 	rowErr := rows.Err()
 	rows.Close()
@@ -320,8 +320,8 @@ func (s *Store) RebuildEmbeddings() error {
 	}
 	// A migrated snapshot gets its first recorded rule decision before inference;
 	// existing decisions are never rescanned just because configuration changed.
-	for _, ids := range legacy {
-		if _, err = s.ensureFilter(tx, ids[0], ids[1]); err != nil {
+	for _, id := range legacy {
+		if _, err = s.ensureFilter(tx, id); err != nil {
 			return err
 		}
 	}

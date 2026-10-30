@@ -57,18 +57,18 @@ func (s *Store) EnableDigests(c DigestConfig) error {
 		return err
 	}
 	defer tx.Rollback()
-	rows, err := tx.Query(`SELECT id,id FROM items WHERE EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id) AND NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=items.id) AND NOT EXISTS(SELECT 1 FROM jobs WHERE stage='digest' AND jobs.item_id=items.id)`)
+	rows, err := tx.Query(`SELECT id FROM items WHERE EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id) AND NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=items.id) AND NOT EXISTS(SELECT 1 FROM jobs WHERE stage='digest' AND jobs.item_id=items.id)`)
 	if err != nil {
 		return err
 	}
-	var pairs [][2]int64
+	var ids []int64
 	for rows.Next() {
-		var pair [2]int64
-		if err = rows.Scan(&pair[0], &pair[1]); err != nil {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
 			rows.Close()
 			return err
 		}
-		pairs = append(pairs, pair)
+		ids = append(ids, id)
 	}
 	err = rows.Err()
 	rows.Close()
@@ -77,8 +77,8 @@ func (s *Store) EnableDigests(c DigestConfig) error {
 	}
 	old := s.DigestConfig
 	s.DigestConfig = &c
-	for _, pair := range pairs {
-		if err = s.queueDigest(tx, pair[0], pair[1]); err != nil {
+	for _, id := range ids {
+		if err = s.queueDigest(tx, id); err != nil {
 			s.DigestConfig = old
 			return err
 		}
@@ -88,18 +88,18 @@ func (s *Store) EnableDigests(c DigestConfig) error {
 	}
 	return err
 }
-func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
+func (s *Store) queueDigest(tx *sql.Tx, itemID int64) error {
 	if s.DigestConfig == nil {
 		return nil
 	}
-	rejected, err := s.ensureFilter(tx, itemID, snapshotID)
+	rejected, err := s.ensureFilter(tx, itemID)
 	if err != nil || rejected {
 		return err
 	}
 	c := s.DigestConfig
 	prompt, interests, chunkLimit, chunkMaxParts := c.PromptVersion, c.Interests, c.ChunkLimit, c.ChunkMaxParts
 	if c.MinSourceWords > 0 {
-		text, err := snapshotText(tx, s.Files, snapshotID)
+		text, err := snapshotText(tx, s.Files, itemID)
 		if err != nil {
 			return err
 		}
@@ -122,9 +122,9 @@ func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
 
 // snapshotText reads a stored source inside the caller's transaction (the pool
 // has one connection, so s.DB must not be used here).
-func snapshotText(tx *sql.Tx, f Files, snapshotID int64) (string, error) {
+func snapshotText(tx *sql.Tx, f Files, itemID int64) (string, error) {
 	var path, hash string
-	if err := tx.QueryRow(`SELECT text_path,hash FROM texts WHERE item_id=?`, snapshotID).Scan(&path, &hash); err != nil {
+	if err := tx.QueryRow(`SELECT text_path,hash FROM texts WHERE item_id=?`, itemID).Scan(&path, &hash); err != nil {
 		return "", err
 	}
 	data, err := f.Read(path, hash)
@@ -267,7 +267,7 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 	if filtered == "rejected" {
 		return false, errors.New("спершу явно поверніть матеріал до обробки")
 	}
-	rejected, e := s.ensureFilter(tx, itemID, sid.Int64)
+	rejected, e := s.ensureFilter(tx, itemID)
 	if e != nil {
 		return false, e
 	}
@@ -302,7 +302,7 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
-	if err = s.queueDigest(tx, itemID, sid.Int64); err != nil {
+	if err = s.queueDigest(tx, itemID); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -310,7 +310,7 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 
 // An item whose text was never checked by the rules is evaluated before its first
 // generation; configuration changes leave existing verdicts alone.
-func (s *Store) ensureFilter(tx *sql.Tx, itemID, snapshotID int64) (bool, error) {
+func (s *Store) ensureFilter(tx *sql.Tx, itemID int64) (bool, error) {
 	var checked string
 	if err := tx.QueryRow("SELECT filter_state FROM items WHERE id=?", itemID).Scan(&checked); err != nil {
 		return false, err
@@ -326,7 +326,7 @@ func (s *Store) ensureFilter(tx *sql.Tx, itemID, snapshotID int64) (bool, error)
 			return false, err
 		}
 		snap.Text = string(data)
-		snap.ItemID = snapshotID
+		snap.ItemID = itemID
 		if rejected, err := s.decideFilter(tx, itemID, &snap, false); err != nil || rejected {
 			return rejected, err
 		}

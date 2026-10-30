@@ -140,3 +140,16 @@ func TestKnowledgeKeepsOnlyTheLastFailureAndForgetsItAfterSuccess(t *testing.T) 
 		}
 	}
 }
+
+func TestKnowledgeFailureIgnoredWhenNewerRunSucceeded(t *testing.T) {
+	s := testStore(t)
+	id := add(t, s, "https://example.com/newer-run")
+	for _, run := range []struct{ model, state, kind string }{{"old-model", "failed", "format"}, {"new-model", "done", ""}} {
+		if _, err := s.DB.Exec(`INSERT INTO knowledge_runs(item_id,model,prompt_version,updated_at,state,kind,error) VALUES(?,?,?,?,?,?,?)`, id, run.model, "p", "2026-01-01T00:00:00Z", run.state, run.kind, run.kind); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if failures, err := s.KnowledgeFailures(id); err != nil || len(failures) != 0 {
+		t.Fatal("failure of a superseded run shown", failures, err)
+	}
+}

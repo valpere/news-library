@@ -33,40 +33,39 @@ func (s *Store) RegenerateDigest(itemID int64) error {
 		return err
 	}
 	defer tx.Rollback()
-	var selected sql.NullInt64
+	var hasText bool
 	var filtered string
-	if err = tx.QueryRow("SELECT (SELECT item_id FROM texts WHERE texts.item_id=items.id),filter_state FROM items WHERE id=?", itemID).Scan(&selected, &filtered); err != nil {
+	if err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id),filter_state FROM items WHERE id=?", itemID).Scan(&hasText, &filtered); err != nil {
 		return err
 	}
-	if !selected.Valid {
+	if !hasText {
 		return errors.New("спершу потрібен текст матеріалу")
 	}
-	snapshotID := selected.Int64
 	if filtered == "rejected" {
 		return errors.New("спершу явно поверніть матеріал до обробки")
 	}
 	var active int
-	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE item_id=? AND stage='digest' AND state IN ('queued','running','retry_wait')", snapshotID).Scan(&active); err != nil {
+	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE item_id=? AND stage='digest' AND state IN ('queued','running','retry_wait')", itemID).Scan(&active); err != nil {
 		return err
 	}
 	if active > 0 {
 		return errors.New("генерація вже активна")
 	}
-	if rejected, e := s.ensureFilter(tx, itemID, snapshotID); e != nil {
+	if rejected, e := s.ensureFilter(tx, itemID); e != nil {
 		return e
 	} else if rejected {
 		return tx.Commit()
 	}
-	if err = s.queueRegeneration(tx, itemID, snapshotID); err != nil {
+	if err = s.queueRegeneration(tx, itemID); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func (s *Store) queueRegeneration(tx *sql.Tx, itemID, snapshotID int64) error {
+func (s *Store) queueRegeneration(tx *sql.Tx, itemID int64) error {
 	var err error
 	var active int
-	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE item_id=? AND stage='digest' AND state IN ('queued','running','retry_wait')", snapshotID).Scan(&active); err != nil {
+	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE item_id=? AND stage='digest' AND state IN ('queued','running','retry_wait')", itemID).Scan(&active); err != nil {
 		return err
 	}
 	if active > 0 {
