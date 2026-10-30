@@ -194,7 +194,7 @@ func (s *Store) OverrideFilter(itemID int64) error {
 	if state != "rejected" {
 		return errors.New("матеріал уже дозволено до обробки")
 	}
-	if _, err = tx.Exec("UPDATE items SET filter_state='overridden',state='ready',error='' WHERE id=?", itemID); err != nil {
+	if _, err = tx.Exec("UPDATE items SET filter_state='overridden',filter_reason=CASE WHEN filter_reason='' THEN '' ELSE 'повернено вручну; було: '||filter_reason END,state='ready',error='' WHERE id=?", itemID); err != nil {
 		return err
 	}
 	if sid.Valid {

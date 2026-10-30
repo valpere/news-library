@@ -165,3 +165,27 @@ func TestFilterKeepsOnlyCurrentVerdictAndReasonOnItem(t *testing.T) {
 		t.Fatal("reason without matches", reason, err)
 	}
 }
+
+func TestReplacedTextIsCheckedAgainAndOverrideNotCarriedOver(t *testing.T) {
+	s := testStore(t)
+	configureRules(t, s, .5, []FilterRule{{ID: "ad", Reason: "promotion", Field: "text", Contains: "advertisement", Probability: .9}})
+	id := add(t, s, "https://example.com/replace")
+	if e := s.Complete(claim(t, s), Snapshot{Title: "T", Text: "Pure advertisement", Origin: "fetched", Extractor: "fixture", Completeness: "complete"}); e != nil {
+		t.Fatal(e)
+	}
+	if e := s.OverrideFilter(id); e != nil {
+		t.Fatal(e)
+	}
+	if reason, _ := s.FilterReason(id); !strings.Contains(reason, "повернено вручну") {
+		t.Fatal("override does not say it was manual", reason)
+	}
+	manual(t, s, id, "A different and clean text")
+	i, _ := s.Item(id)
+	if reason, _ := s.FilterReason(id); i.FilterState != "passed" || reason != "" {
+		t.Fatal("verdict of the old text survived", i.FilterState, reason)
+	}
+	manual(t, s, id, "Another advertisement")
+	if i, _ = s.Item(id); i.FilterState != "rejected" {
+		t.Fatal("new text not checked by the rules", i.FilterState)
+	}
+}

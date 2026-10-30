@@ -401,7 +401,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 	}
 	filterReason, err := w.Store.FilterReason(id)
 	if err != nil {
-		http.Error(rw, "історія правил недоступна", 500)
+		http.Error(rw, "рішення правил недоступне", 500)
 		return
 	}
 	pending := snap == nil && (i.State == "queued" || i.State == "fetching" || i.State == "retry_wait")
