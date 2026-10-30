@@ -33,16 +33,14 @@ class OperationsTests(unittest.TestCase):
                 CREATE TABLE texts(item_id);
                 CREATE TABLE digests(item_id);
                 CREATE TABLE article_knowledge(id,item_id);
-                CREATE TABLE jobs(id,item_id,stage,state);
-                CREATE TABLE job_failures(id,job_id,kind,retryable);
+                CREATE TABLE jobs(id,item_id,stage,state,failure_kind,failure_retryable);
                 CREATE TABLE knowledge_runs(id,item_id,state,kind);
                 INSERT INTO items VALUES(1,'ready','passed'),(2,'failed','passed'),
                   (3,'failed','passed'),(4,'needs_input','passed'),(99,'failed','passed');
                 INSERT INTO texts VALUES(1),(2),(3),(4);
                 INSERT INTO digests VALUES(1),(2);
                 INSERT INTO article_knowledge VALUES(1,1),(2,2);
-                INSERT INTO jobs VALUES(1,1,'digest','failed'),(3,3,'digest','failed');
-                INSERT INTO job_failures VALUES(1,1,'format',0),(2,2,'format',0),(3,3,'temporary',1);
+                INSERT INTO jobs VALUES(1,1,'digest','failed','format',0),(3,3,'digest','failed','temporary',1);
                 INSERT INTO knowledge_runs VALUES(1,1,'done',''),(2,2,'failed','format');
             ''')
 
@@ -175,8 +173,7 @@ class OperationsTests(unittest.TestCase):
     def test_failed_refresh_preserves_completed_stages_in_plan(self):
         with sqlite3.connect(self.path) as db:
             db.execute("UPDATE items SET state='failed' WHERE id=1")
-            db.execute("INSERT INTO jobs VALUES(4,1,'fetch','failed')")
-            db.execute("INSERT INTO job_failures VALUES(4,4,'source',0)")
+            db.execute("INSERT INTO jobs VALUES(4,1,'fetch','failed','source',0)")
         item = failure_triage.inspect(self.data)['items'][0]
         self.assertTrue(all(item['completed'].values()))
         self.assertEqual('fetch', item['issues'][0]['stage'])

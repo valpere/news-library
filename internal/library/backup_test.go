@@ -73,7 +73,7 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 		t.Fatal(results, err)
 	}
 	jobs, _ := restored.Jobs(id)
-	if len(jobs) != 3 || jobs[0].State != "running" {
+	if len(jobs) != 1 || jobs[0].State != "running" {
 		t.Fatal("queue lost", jobs)
 	}
 	if err := ResumeRestored(target); err != nil || RestoredPaused(target) {

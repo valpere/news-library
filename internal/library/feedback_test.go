@@ -26,7 +26,7 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 		t.Fatal("feedback changed usefulness")
 	}
 	jobs, _ := s.Jobs(id)
-	if jobs[0].State != "done" {
+	if len(jobs) != 0 {
 		t.Fatal("feedback scheduled AI")
 	}
 	if e := s.RegenerateDigest(id); e != nil {

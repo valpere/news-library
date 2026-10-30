@@ -183,9 +183,8 @@ func TestDigestFallbackPolicyPreservesHistoryAndRatings(t *testing.T) {
 		t.Fatal(d, err, post)
 	}
 	jobs, _ := s.Jobs(id)
-	history, err := s.JobFailures(jobs[0].ID)
-	if err != nil || len(history) != 1 || history[0].Kind != "temporary" || jobs[0].State != "done" {
-		t.Fatal(history, jobs, err)
+	if len(jobs) != 0 {
+		t.Fatal("finished job and its failure kept", jobs)
 	}
 	after, _ := s.Ratings(id)
 	if !reflect.DeepEqual(before, after) {
@@ -350,18 +349,16 @@ func TestFreeFallbackChunkCheckpointsKeepActualRoute(t *testing.T) {
 	if err != nil || d == nil || d.ChunkCount < 2 || d.Provider != "openrouter-free" {
 		t.Fatal(d, err)
 	}
-	var total, bad int
-	if err = s.DB.QueryRow("SELECT count(*),sum(CASE WHEN actual_model<>? OR provider<>'openrouter-free' THEN 1 ELSE 0 END) FROM digest_checkpoints", freeFixture).Scan(&total, &bad); err != nil || total < 2 || bad != 0 {
-		t.Fatal(total, bad, err)
+	var left int
+	if err = s.DB.QueryRow("SELECT count(*) FROM digest_checkpoints").Scan(&left); err != nil || left != 0 || d.ActualModel != freeFixture {
+		t.Fatal("checkpoints of the finished job kept or wrong route", left, d.ActualModel, err)
 	}
 	snap, err := s.Snapshot(item.Selected.Int64)
 	if err != nil || snap.Text != source {
 		t.Fatal("source changed", err)
 	}
-	jobs, _ := s.Jobs(id)
-	failures, err := s.JobFailures(jobs[0].ID)
-	if err != nil || len(failures) < 2 {
-		t.Fatal("per-call failures lost", failures, err)
+	if jobs, _ := s.Jobs(id); len(jobs) != 0 {
+		t.Fatal("finished job kept", jobs)
 	}
 }
 
