@@ -21,7 +21,7 @@ class CorpusAuditTests(unittest.TestCase):
         self.db = self.data / 'library.sqlite'
         with sqlite3.connect(self.db) as db:
             db.executescript('''
-                PRAGMA user_version=18;
+                PRAGMA user_version=1;
                 CREATE TABLE items(id PRIMARY KEY,title,selected_snapshot);
                 CREATE VIEW active_items AS SELECT * FROM items;
                 CREATE TABLE source_versions(id PRIMARY KEY,item_id,text_path,hash,completeness,warning);

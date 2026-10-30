@@ -62,7 +62,7 @@ D_pair за замовчуванням не є критерієм прийман
 та межами інтерпретації. Він не є залежністю публічного checkout.
 
 Додаткове приймання погоджених уточнень:
-- [Міграція, відновлення файлів і failure rollback](../internal/library/files_test.go).
+- [Відновлення файлів і failure rollback](../internal/library/files_test.go).
 - [Спільний HTTP-кеш, одночасність, upstream privacy, SSRF і нуль jobs/items](../internal/library/cache_test.go).
 - [Cloud-only adapter, partial/invalid output і safe Markdown](../internal/library/digest_test.go).
 - [Конфігурація та private errors](../cmd/news-library/config_test.go).
@@ -71,12 +71,11 @@ D_pair за замовчуванням не є критерієм прийман
 
 M2 також перевіряють [JSON/probability validation](../internal/library/prediction_test.go),
 [immutable rule history і причина без повторного внеску](../internal/library/filter_test.go),
-[v3 migration без вигаданих прогнозів](../internal/library/files_test.go) та
 [M2 config validation](../cmd/news-library/config_test.go).
 
 Довгі джерела: [UTF-8 coverage, checkpoint restart/retry, bounds/fencing](../internal/library/chunk_digest_test.go).
 HTTP validation: [persisted validators/restart, 304/changed 200/privacy, exact redirect target,
-missing body/unexpected 304, failure/explicit stale, concurrent cleanup, v5 migration](../internal/library/cache_revalidation_test.go).
+missing body/unexpected 304, failure/explicit stale, concurrent cleanup](../internal/library/cache_revalidation_test.go).
 HTTP eviction: [shared physical size/LRU, orphan cleanup, primary preservation, write failure](../internal/library/cache_cleanup_test.go).
 
 [Браузерний multipart/exports/periodic-cleanup smoke](../scripts/smoke_long_digest_ui.py).
@@ -192,8 +191,7 @@ opt-in guard, local endpoint boundary, auth-free recorded evidence й fake
 upstream failure. Live output зберігається локально в tmp, не є routine CI.
 
 
-Додаткове приймання estimative usefulness: TestUsefulnessScaleAndLegacyMigration,
-TestUsefulnessFiltersDoNotReinterpretLegacyNumbers,
+Додаткове приймання estimative usefulness: TestUsefulnessFiltersDoNotReinterpretLegacyNumbers,
 TestChatUsefulnessExplicitLabelsAndAllUnread та TestWebUsefulnessAndReadAPIScale
 перевіряють версії шкали, збереження legacy/unknown dates, explicit provenance,
 словесні фільтри й незалежність прочитання. Приймання FR-10/15/16 звірено окремо у
@@ -202,8 +200,8 @@ TestChatUsefulnessExplicitLabelsAndAllUnread та TestWebUsefulnessAndReadAPISca
 
 Додаткове приймання поза FR-таблицею: помийка недоступних сторінок (UC-16, схема v15) —
 [trash_test.go](../internal/library/trash_test.go): TestTrashMissingPageIsSeparateAndDeduplicated,
-TestTrashPreservesRecoverableAndSavedSources, TestTrashMigrationAndBackup, TestTrashSurvivesBackupRestore; ручне «сміття» — [junk_test.go](../internal/library/junk_test.go): TestMarkJunkRatesZeroAndMovesToTrash, TestMarkJunkCancelsQueuedWork, TestReaddingJunkURLIsRecognisedAsTrashed, TestWebJunkRequiresConfirmation;
-перенесення файлів — [repack_test.go](../internal/library/repack_test.go); відновлення знань —
+TestTrashPreservesRecoverableAndSavedSources, TestTrashSurvivesBackupRestore; ручне «сміття» — [junk_test.go](../internal/library/junk_test.go): TestMarkJunkRatesZeroAndMovesToTrash, TestMarkJunkCancelsQueuedWork, TestReaddingJunkURLIsRecognisedAsTrashed, TestWebJunkRequiresConfirmation;
+покриття файлів резервною копією — [backup_test.go](../internal/library/backup_test.go): TestBackupInventoryCoversEveryStoredPathColumn; відновлення знань —
 [knowledge_recovery_test.go](../internal/library/knowledge_recovery_test.go). UC-16 пов'язано з FR-03
 лише за вимогою «немає тексту — немає вигаданого результату»; сама поведінка помийки приймається цими тестами.
 

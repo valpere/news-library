@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -188,54 +187,27 @@ func mixedLayoutStore(t *testing.T) (*Store, int64, int64) {
 	return s, old, fresh
 }
 
-func TestBackupRestoresMixedFlatAndShardedPrimaryFiles(t *testing.T) {
-	s, old, fresh := mixedLayoutStore(t)
-	root := t.TempDir()
-	backup := filepath.Join(root, "backup")
-	manifest, err := Backup(context.Background(), s.Files.Root, backup)
+// A *_path column the inventory forgets would silently drop files from backups.
+func TestBackupInventoryCoversEveryStoredPathColumn(t *testing.T) {
+	s := backupStore(t)
+	rows, err := s.DB.Query(`SELECT m.name,p.name FROM sqlite_master m, pragma_table_info(m.name) p
+ WHERE m.type='table' AND p.name LIKE '%\_path' ESCAPE '\'`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	flat, nested := false, false
-	for _, file := range manifest.Files {
-		if filepath.Dir(file.Path) == "texts" || filepath.Dir(file.Path) == "digests" {
-			flat = true
-		} else if strings.HasPrefix(file.Path, "texts/") || strings.HasPrefix(file.Path, "digests/") {
-			nested = true
-		}
+	defer rows.Close()
+	listed := map[[2]string]bool{}
+	for _, ref := range primaryTables() {
+		listed[[2]string{ref.table, ref.column}] = true
 	}
-	if !flat || !nested {
-		t.Fatal("fixture did not contain both layouts")
-	}
-	restoredRoot := filepath.Join(root, "restored")
-	if err := Restore(context.Background(), backup, restoredRoot); err != nil {
-		t.Fatal(err)
-	}
-	restored, err := Open(filepath.Join(restoredRoot, "library.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer restored.Close()
-	for _, id := range []int64{old, fresh} {
-		item, err := restored.Item(id)
-		if err != nil {
+	for rows.Next() {
+		var table, column string
+		if err = rows.Scan(&table, &column); err != nil {
 			t.Fatal(err)
 		}
-		if source, err := restored.Snapshot(item.Selected.Int64); err != nil || source.Text == "" {
-			t.Fatal("lost mixed-layout source", err)
+		// The HTTP cache is derived and restorable; everything else is primary.
+		if table != "cache_entries" && !listed[[2]string{table, column}] {
+			t.Errorf("%s.%s is not in the backup inventory", table, column)
 		}
-		if digest, err := restored.DigestForSnapshot(item.Selected.Int64); err != nil || digest == nil || digest.Markdown != fixtureDigest {
-			t.Fatal("lost mixed-layout digest", err)
-		}
-	}
-	// Wrong prefix directories must not become acceptable primary references.
-	if _, err := restored.DB.Exec("DROP TRIGGER immutable_snapshot_update"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := restored.DB.Exec("UPDATE source_versions SET text_path='texts/ff/ff/ff/ff/' || hash || '.txt' WHERE item_id=?", fresh); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Backup(context.Background(), restoredRoot, filepath.Join(root, "invalid")); err == nil {
-		t.Fatal("accepted incorrect hash directories")
 	}
 }
