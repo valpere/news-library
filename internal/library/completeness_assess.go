@@ -90,3 +90,11 @@ func (c Completeness) Label() string {
 func (s Snapshot) ShownWarning() string {
 	return strings.TrimSuffix(s.Warning, "; повноту оригіналу не підтверджено")
 }
+
+// completenessSuffix is " · <label>" for summaries, or "" when there is nothing to say.
+func completenessSuffix(snapshot Snapshot) string {
+	if label := Assess(snapshot).Label(); label != "" {
+		return " · " + label
+	}
+	return ""
+}

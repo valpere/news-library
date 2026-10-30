@@ -424,7 +424,6 @@ func primaryTables() []primaryTable {
 		{"source_versions", "text_path"},
 		{"generated_artifacts", "markdown_path"},
 		{"digest_checkpoints", "markdown_path"},
-		{"delivery_parts", "text_path"},
 		{"connection_versions", "markdown_path"},
 		{"job_failures", "response_path"},
 		{"article_knowledge", "markdown_path"},
@@ -457,10 +456,7 @@ func restore(ctx context.Context, source, destination string) error {
 			return err
 		}
 	}
-	if err = recoverCopiedDeliveries(output); err != nil {
-		return err
-	}
-	if err = syncedWrite(filepath.Join(output, restorePause), []byte("Workers and delivery paused. Resume explicitly with -resume-restored.\n")); err != nil {
+	if err = syncedWrite(filepath.Join(output, restorePause), []byte("Workers paused. Resume explicitly with -resume-restored.\n")); err != nil {
 		return err
 	}
 	if err = syncDirectory(output); err != nil {
@@ -484,31 +480,4 @@ func ResumeRestored(root string) error {
 		return err
 	}
 	return syncDirectory(root)
-}
-
-// Activity after the snapshot cannot be reconstructed. Preserve message IDs
-// already confirmed in it, but quarantine every unfinished imported delivery.
-func recoverCopiedDeliveries(root string) error {
-	u := url.URL{Scheme: "file", Path: filepath.Join(root, "library.sqlite")}
-	q := u.Query()
-	q.Set("mode", "rw")
-	q.Add("_pragma", "synchronous(FULL)")
-	u.RawQuery = q.Encode()
-	db, err := sql.Open("sqlite", u.String())
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err = tx.Exec(`UPDATE deliveries SET state='unknown',error='Відновлено з резервної копії: перевірте Telegram. Повтору немає.' WHERE state IN ('preview','queued','sending','failed','unknown')`); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(`UPDATE delivery_parts SET state='unknown',updated_at=? WHERE state<>'sent' AND delivery_id IN (SELECT id FROM deliveries WHERE state='unknown')`, nowUTC()); err != nil {
-		return err
-	}
-	return tx.Commit()
 }

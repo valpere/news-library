@@ -1,7 +1,6 @@
 package library
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -51,18 +50,6 @@ func TestCompletenessLabel(t *testing.T) {
 		if got := Assess(c.s).Label(); got != c.want {
 			t.Errorf("%s: %q want %q", c.name, got, c.want)
 		}
-	}
-}
-
-func TestDeliveryTextMentionsCompletenessOnlyWhenKnown(t *testing.T) {
-	item, digest := Item{ID: 1, Title: "T", URL: "https://example.com/a", Placement: "inbox"}, Digest{ID: 2, Markdown: "дайджест"}
-	plain := deliveryText(item, Snapshot{ID: 3, Text: "Один.\nДва.", Completeness: "unknown"}, digest)
-	if strings.Contains(plain, "не підтверджено") || strings.HasSuffix(plain, " · ") {
-		t.Fatalf("noise for an ordinary text: %q", plain)
-	}
-	teaser := deliveryText(item, Snapshot{ID: 3, Text: "Один.\nДва.\nRead more", Completeness: "unknown"}, digest)
-	if !strings.Contains(teaser, "схоже на неповний текст") {
-		t.Fatalf("missing sign: %q", teaser)
 	}
 }
 

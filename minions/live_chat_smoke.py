@@ -133,7 +133,7 @@ def main():
         report['cloud_calls'] = recorder.calls
         (data/'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
     command = [str(ROOT/'build/news-library'), '-data', str(data), '-bind', '127.0.0.1:0',
-               '-no-worker', '-no-digests=false', '-knowledge=true', '-embeddings=false', '-telegram=false',
+               '-no-worker', '-no-digests=false', '-knowledge=true', '-embeddings=false'
                '-filter-rules', '[]', '-interests', '', '-chat=true', '-chat-model', args.model,
                '-chat-timeout', str(args.timeout)+'s', '-ollama-url', f'http://127.0.0.1:{gateway.server_port}/api/chat']
     print('Fixture: '+str(data), flush=True)
@@ -214,7 +214,6 @@ def main():
                 state, _ = send('https://example.invalid/new-a https://example.invalid/new-b')
                 check(report['cases'][-1]['calls'] == 0, 'bare URL batch called the planner')
                 check(db.execute('SELECT count(*) FROM generated_artifacts').fetchone()[0] == 0, 'paused fixture generated a digest')
-                check(db.execute('SELECT count(*) FROM deliveries').fetchone()[0] == 0, 'fixture created a delivery')
             actual = {call.get('model') for call in recorder.calls}
             check(actual and all(model and model.endswith(('-cloud', ':cloud')) for model in actual), 'unexpected model or local generation')
             check(all(call.get('remote_model') and urllib.parse.urlsplit(call.get('remote_host', '')).hostname == 'ollama.com' for call in recorder.calls), 'cloud identity not verified')

@@ -17,20 +17,17 @@ type PurgeBlockedError struct{ Why string }
 func (e *PurgeBlockedError) Error() string { return "не можна видалити: " + e.Why }
 
 // PurgeBlocker returns why a trashed material cannot be erased, or "" when it can.
-// Connection notes keep immutable revisions with exact references, and delivered
-// Telegram parts are history, so a material they mention stays in the trash.
+// Connection notes keep immutable revisions with exact references, so a material
+// they mention stays in the trash.
 func (s *Store) PurgeBlocker(id int64) (string, error) {
-	var notes, parts, running int
+	var notes, running int
 	if err := s.DB.QueryRow(`SELECT (SELECT count(DISTINCT version_id) FROM connection_members WHERE item_id=?),
- (SELECT count(*) FROM delivery_parts WHERE item_id=?),
- (SELECT count(*) FROM jobs WHERE item_id=? AND state='running')`, id, id, id).Scan(&notes, &parts, &running); err != nil {
+ (SELECT count(*) FROM jobs WHERE item_id=? AND state='running')`, id, id).Scan(&notes, &running); err != nil {
 		return "", err
 	}
 	switch {
 	case notes > 0:
 		return fmt.Sprintf("матеріал згадано в нотатках-зв'язках (редакцій: %d), їхня історія незмінна", notes), nil
-	case parts > 0:
-		return fmt.Sprintf("матеріал був у Telegram-добірках (частин: %d), їхня історія незмінна", parts), nil
 	case running > 0:
 		return "матеріал зараз обробляється; повторіть пізніше", nil
 	}
@@ -41,7 +38,7 @@ func (s *Store) PurgeBlocker(id int64) (string, error) {
 var purgeFileColumns = [][2]string{
 	{"source_versions", "text_path"}, {"generated_artifacts", "markdown_path"}, {"digest_checkpoints", "markdown_path"},
 	{"article_knowledge", "markdown_path"}, {"job_failures", "response_path"}, {"knowledge_failures", "response_path"},
-	{"connection_versions", "markdown_path"}, {"delivery_parts", "text_path"}, {"cache_entries", "body_path"},
+	{"connection_versions", "markdown_path"}, {"cache_entries", "body_path"},
 }
 
 // PurgeTrashed erases a trashed material for good: every row of its own history

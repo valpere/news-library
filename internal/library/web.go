@@ -44,7 +44,6 @@ type Web struct {
 	Store            *Store
 	Cache            *HTTPCache
 	Semantic         *Semantic
-	Telegram         TelegramConfig
 	BackgroundPaused bool
 	ReadToken        string
 	Origin, CSRF     string
@@ -86,11 +85,6 @@ type pageData struct {
 	ConnectionChoices                []Item
 	ConnectionSlots                  []int
 
-	Deliveries                []Delivery
-	Delivery                  *Delivery
-	DeliveryEnabled           bool
-	DailyTime, DeliveryChat   string
-	DeliverySize              int
 	BackgroundPaused          bool
 	CSRF                      string
 	SearchMode, SearchWarning string
@@ -188,9 +182,6 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 			}
 			return s
 		},
-		"deliveryState": func(s string) string {
-			return map[string]string{"preview": "Попередній перегляд", "queued": "У черзі", "sending": "Відправляється", "sent": "Доставлено", "failed": "Не відправлено", "unknown": "Результат невідомий", "missed": "Випуск пропущено"}[s]
-		},
 		"placement": func(s string) string {
 			switch s {
 			case "inbox":
@@ -258,10 +249,6 @@ func (w *Web) Handler() http.Handler {
 		rw.Write([]byte(chatJS))
 	})
 	mux.HandleFunc("GET /cache", w.cache)
-	mux.HandleFunc("GET /deliveries", w.deliveryList)
-	mux.HandleFunc("GET /deliveries/{id}", w.deliveryDetail)
-	mux.HandleFunc("POST /deliveries/preview", w.deliveryPreview)
-	mux.HandleFunc("POST /deliveries/{id}/{action}", w.deliveryQueue)
 	mux.HandleFunc("/api/read/", w.readAPI)
 	mux.HandleFunc("POST /reindex", func(rw http.ResponseWriter, r *http.Request) {
 		if w.Semantic == nil {
