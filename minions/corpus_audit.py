@@ -53,7 +53,7 @@ def audit(data):
             ('texts', 'text_path', 'texts'),
             ('digests', 'markdown_path', 'digests'),
             ('article_knowledge', 'markdown_path', 'digests'),
-            ('connection_versions', 'markdown_path', 'digests'),
+            ('connection_notes', 'markdown_path', 'digests'),
         ):
             key = 'item_id' if table in ('texts', 'digests') else 'id'
             for row in db.execute(f'SELECT {key},{column},hash FROM {table}'):
@@ -103,27 +103,27 @@ def audit(data):
             metadata = db.execute('SELECT * FROM article_knowledge WHERE item_id=? ORDER BY id DESC LIMIT 1', (iid,)).fetchone()
             if metadata is None:
                 signals.append({'kind': 'missing_current_metadata', 'item_id': iid})
-        current = list(db.execute('SELECT v.* FROM connection_versions v WHERE v.id=(SELECT v2.id FROM connection_versions v2 WHERE v2.note_id=v.note_id ORDER BY revision DESC LIMIT 1) ORDER BY v.id'))
+        current = list(db.execute('SELECT * FROM connection_notes ORDER BY id'))
         current_ids = {r['id'] for r in current}
         members = defaultdict(list)
-        for row in db.execute('SELECT * FROM connection_members ORDER BY version_id,item_id'):
+        for row in db.execute('SELECT * FROM connection_members ORDER BY note_id,item_id'):
             m = dict(row)
-            members[m['version_id']].append(m)
+            members[m['note_id']].append(m)
             if m['item_id'] not in sources:
                 problems.append({'kind': 'connection_ownership', **m})
-            if m['version_id'] in current_ids and m['item_id'] not in active:
+            if m['note_id'] in current_ids and m['item_id'] not in active:
                 signals.append({'kind': 'connection_inactive_member', **m})
         title_groups = defaultdict(list)
         for row in current:
-            vid = row['id']
-            if not 2 <= len(members[vid]) <= 20:
-                problems.append({'kind': 'connection_member_count', 'version_id': vid})
-            title_groups[row['title'].strip().casefold()].append(vid)
-            notes.append({'note_id': row['note_id'], 'version_id': vid, 'title': row['title'],
-                          'path': row['markdown_path'], 'members': members[vid]})
+            nid = row['id']
+            if not 2 <= len(members[nid]) <= 20:
+                problems.append({'kind': 'connection_member_count', 'note_id': nid})
+            title_groups[row['title'].strip().casefold()].append(nid)
+            notes.append({'note_id': nid, 'title': row['title'],
+                          'path': row['markdown_path'], 'members': members[nid]})
         for ids in title_groups.values():
             if len(ids) > 1:
-                signals.append({'kind': 'repeated_connection_title', 'version_ids': ids})
+                signals.append({'kind': 'repeated_connection_title', 'note_ids': ids})
         return {'schema': 'news-library/corpus-audit-v1', 'created_at': datetime.now(timezone.utc).isoformat(),
                 'scope': 'offline read-only; signals are not quality or usefulness ratings',
                 'summary': {'active_items': len(active), 'current_connections': len(current),

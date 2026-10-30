@@ -607,8 +607,8 @@ Vocabulary підказки збираються з item_tags та актуал�
 `GET /api/read/connections[/{id}?version=…]` використовує чинний bearer guard,
 `/api/read/items/{id}` також повертає current backlinks. Views escape HTML.
 
-Backup schema9 додає всі connection_versions Markdown до primaryRefs;
-restore зберігає stable IDs, revisions, members і вихідні статті. Первинні
+Backup додає Markdown поточних нотаток (`connection_notes`) до primaryRefs;
+restore зберігає нотатки, members і вихідні статті (стара схема 9 мала ще редакції та stable IDs). Первинні
 файли зв’язкових не підлягають cache cleanup. Автоматичний конвеєр schema11 описаний нижче; ручний редактор не викликає AI.
 
 ## Пакетне прийняття посилань

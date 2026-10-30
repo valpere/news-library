@@ -226,3 +226,24 @@ func TestConnectionWebLastSaveWinsAndReadOnlyAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestDamagedNoteFileDoesNotBlockTextReplacementOrPurge(t *testing.T) {
+	s, n := connectionFixture(t)
+	third := add(t, s, "https://example.com/damaged-third")
+	manual(t, s, third, "Third text")
+	n.Members = append(n.Members, ConnectionMember{ItemID: third, Role: "Третій"})
+	id, err := s.SaveConnection(n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var path string
+	s.DB.QueryRow("SELECT markdown_path FROM connection_notes WHERE id=?", id).Scan(&path)
+	if err = os.WriteFile(filepath.Join(s.Files.Root, path), []byte("damaged"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manual(t, s, third, "Third text, rewritten")
+	note, err := s.Connection(id)
+	if err != nil || len(note.Members) != 2 {
+		t.Fatal("note not rebuilt after a member left", note, err)
+	}
+}

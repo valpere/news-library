@@ -171,7 +171,8 @@ type rowQuerier interface {
 	Query(string, ...any) (*sql.Rows, error)
 }
 
-func (s *Store) loadConnection(q rowQuerier, id int64) (ConnectionNote, error) {
+// loadConnection reads the note; withFile also loads and verifies its Markdown file.
+func (s *Store) loadConnection(q rowQuerier, id int64, withFile bool) (ConnectionNote, error) {
 	var n ConnectionNote
 	var tags, questions, path, hash string
 	err := q.QueryRow(`SELECT id,title,category,tags_json,questions_json,body,markdown_path,hash,author,model,prompt_version FROM connection_notes WHERE id=?`, id).Scan(&n.ID, &n.Title, &n.Category, &tags, &questions, &n.Body, &path, &hash, &n.Author, &n.Model, &n.PromptVersion)
@@ -184,11 +185,13 @@ func (s *Store) loadConnection(q rowQuerier, id int64) (ConnectionNote, error) {
 	if err = json.Unmarshal([]byte(questions), &n.Questions); err != nil {
 		return n, err
 	}
-	data, err := s.Files.Read(path, hash)
-	if err != nil {
-		return n, err
+	if withFile {
+		data, err := s.Files.Read(path, hash)
+		if err != nil {
+			return n, err
+		}
+		n.Markdown = string(data)
 	}
-	n.Markdown = string(data)
 	rows, err := q.Query(`SELECT m.item_id,v.title,i.original_url,m.role FROM connection_members m JOIN texts v ON v.item_id=m.item_id JOIN items i ON i.id=m.item_id WHERE m.note_id=? ORDER BY m.item_id`, id)
 	if err != nil {
 		return n, err
@@ -203,7 +206,7 @@ func (s *Store) loadConnection(q rowQuerier, id int64) (ConnectionNote, error) {
 	}
 	return n, rows.Err()
 }
-func (s *Store) Connection(id int64) (ConnectionNote, error) { return s.loadConnection(s.DB, id) }
+func (s *Store) Connection(id int64) (ConnectionNote, error) { return s.loadConnection(s.DB, id, true) }
 
 // Connections lists (and with query searches) the current notes; item!=0 keeps the
 // notes that mention that material (its backlinks).
@@ -234,7 +237,8 @@ func (s *Store) removeFromNotes(tx *sql.Tx, itemID int64) (map[string]bool, erro
 		return nil, err
 	}
 	for _, id := range ids {
-		n, err := s.loadConnection(tx, id)
+		// The file is rebuilt from the database fields, so a damaged old file cannot block this.
+		n, err := s.loadConnection(tx, id, false)
 		if err != nil {
 			return nil, err
 		}

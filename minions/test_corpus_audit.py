@@ -27,8 +27,8 @@ class CorpusAuditTests(unittest.TestCase):
                 CREATE TABLE texts(item_id PRIMARY KEY,text_path,hash,completeness,warning);
                 CREATE TABLE digests(item_id PRIMARY KEY,markdown_path,hash);
                 CREATE TABLE article_knowledge(id PRIMARY KEY,item_id,markdown_path,hash);
-                CREATE TABLE connection_versions(id PRIMARY KEY,note_id,revision,title,markdown_path,hash);
-                CREATE TABLE connection_members(version_id,item_id);
+                CREATE TABLE connection_notes(id PRIMARY KEY,title,markdown_path,hash);
+                CREATE TABLE connection_members(note_id,item_id);
             ''')
             source = self.blob('texts/source.txt', 'Copyright only')
             digest = self.blob('digests/digest.md', 'This digest is longer than the source')
@@ -102,22 +102,21 @@ class CorpusAuditTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 corpus_audit.save_report({}, link / 'report')
 
-    def test_current_revisions(self):
+    def test_current_notes(self):
         with sqlite3.connect(self.db) as db:
             source = self.blob('texts/second.txt', 'second source')
             note = self.blob('digests/note.md', 'a synthetic connection')
             db.execute('INSERT INTO texts VALUES(2,?,?,?,?)', (*source, 'unknown', ''))
             db.execute('INSERT INTO items VALUES(2,?)', ('Second item',))
-            for vid, nid, revision in [(1,1,1), (2,1,2), (3,2,1)]:
-                db.execute('INSERT INTO connection_versions VALUES(?,?,?,?,?,?)',
-                           (vid,nid,revision,'Shared title',*note))
-                db.execute('INSERT INTO connection_members VALUES(?,?)', (vid,1))
-                db.execute('INSERT INTO connection_members VALUES(?,?)', (vid,2))
+            for nid in [1, 2]:
+                db.execute('INSERT INTO connection_notes VALUES(?,?,?,?)', (nid,'Shared title',*note))
+                db.execute('INSERT INTO connection_members VALUES(?,?)', (nid,1))
+                db.execute('INSERT INTO connection_members VALUES(?,?)', (nid,2))
         report = corpus_audit.audit(self.data)
         self.assertEqual(0, report['summary']['integrity_problems'])
-        self.assertEqual([2,3], [n['version_id'] for n in report['connections']])
+        self.assertEqual([1,2], [n['note_id'] for n in report['connections']])
         repeated = [s for s in report['signals'] if s['kind'] == 'repeated_connection_title']
-        self.assertEqual([2,3], repeated[0]['version_ids'])
+        self.assertEqual([1,2], repeated[0]['note_ids'])
 
 
 if __name__ == '__main__':
