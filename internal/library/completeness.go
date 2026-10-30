@@ -64,5 +64,5 @@ func (w *Web) confirmCompleteness(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(rw, r, "/items/"+strconv.FormatInt(id, 10)+"", http.StatusSeeOther)
+	http.Redirect(rw, r, "/items/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
