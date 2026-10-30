@@ -8,9 +8,9 @@ import (
 )
 
 type JobFailure struct {
-	ID, JobID                                            int64
-	Kind, Message, RecordedAt, Response, DiagnosticError string
-	Retryable                                            bool
+	ID, JobID                                int64
+	Kind, Message, Response, DiagnosticError string
+	Retryable                                bool
 }
 
 func FailureFromError(err error) JobFailure {

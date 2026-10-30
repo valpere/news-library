@@ -622,7 +622,7 @@ func (w *Web) exportDigest(rw http.ResponseWriter, r *http.Request) {
 	case "markdown":
 		rw.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		rw.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".md"}))
-		fmt.Fprintf(rw, "# %s\n\nURL: %s\n\nМодель: %s · %s\n\nТекст #%d%s · %s · частин: %d\n\n%s\n", item.Title, item.URL, d.ActualModel, d.CreatedAt, snapshot.ID, completenessSuffix(snapshot), snapshot.ShownWarning(), d.ChunkCount, d.Markdown)
+		fmt.Fprintf(rw, "# %s\n\nURL: %s\n\nМодель: %s\n\nТекст #%d%s · %s · частин: %d\n\n%s\n", item.Title, item.URL, d.ActualModel, snapshot.ID, completenessSuffix(snapshot), snapshot.ShownWarning(), d.ChunkCount, d.Markdown)
 	case "html":
 		if isTranslationPrompt(d.PromptVersion) {
 			http.NotFound(rw, r)

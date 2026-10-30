@@ -14,12 +14,12 @@ import (
 const KnowledgePromptVersion = "article-connections-v2"
 
 type ArticleKnowledge struct {
-	FileError                                 string `json:"file_error,omitempty"`
-	ID, RunID, ItemID, SnapshotID, DigestID   int64
-	Category                                  string   `json:"category"`
-	Tags                                      []string `json:"tags"`
-	Questions                                 []string `json:"questions"`
-	Markdown, Model, PromptVersion, CreatedAt string
+	FileError                               string `json:"file_error,omitempty"`
+	ID, RunID, ItemID, SnapshotID, DigestID int64
+	Category                                string   `json:"category"`
+	Tags                                    []string `json:"tags"`
+	Questions                               []string `json:"questions"`
+	Markdown, Model, PromptVersion          string
 }
 type KnowledgeRun struct {
 	ID, ItemID, SnapshotID, DigestID                int64
@@ -70,7 +70,7 @@ func validateKnowledge(k *ArticleKnowledge) error {
 	return nil
 }
 func (s *Store) queueKnowledge(tx *sql.Tx, item int64, model string) error {
-	_, err := tx.Exec(`INSERT INTO knowledge_runs(item_id,model,prompt_version,created_at,updated_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM items WHERE id=? AND filter_state IN ('passed','overridden')) ON CONFLICT DO NOTHING`, item, model, KnowledgePromptVersion, nowUTC(), nowUTC(), item)
+	_, err := tx.Exec(`INSERT INTO knowledge_runs(item_id,model,prompt_version,updated_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM items WHERE id=? AND filter_state IN ('passed','overridden')) ON CONFLICT DO NOTHING`, item, model, KnowledgePromptVersion, nowUTC(), item)
 	return err
 }
 func (s *Store) RetryKnowledge(item int64) error {
@@ -132,7 +132,7 @@ func (s *Store) claimKnowledge(timeout time.Duration, target ...int64) (*Knowled
 	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','running','retry_wait') AND (?=0 OR item_id=?) AND NOT EXISTS(SELECT 1 FROM active_items i WHERE i.id=knowledge_runs.item_id AND i.filter_state IN ('passed','overridden') AND EXISTS(SELECT 1 FROM digests WHERE digests.item_id=i.id))`, itemID, itemID); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(`INSERT INTO knowledge_failures(run_id,kind,message,recorded_at) SELECT id,'unknown','Аналіз не завершено після перезапуску',? FROM knowledge_runs WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, nowUTC(), now, itemID, itemID); err != nil {
+	if _, err = tx.Exec(`INSERT INTO knowledge_failures(run_id,kind,message) SELECT id,'unknown','Аналіз не завершено після перезапуску' FROM knowledge_runs WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, now, itemID, itemID); err != nil {
 		return nil, err
 	}
 	if _, err = tx.Exec(`UPDATE knowledge_runs SET state='failed',kind='unknown',error='Аналіз не завершено після перезапуску',lease_until=0 WHERE state='running' AND lease_until<=? AND attempts>=3 AND (?=0 OR item_id=?)`, now, itemID, itemID); err != nil {
@@ -173,7 +173,7 @@ func (s *Store) knowledgeForRun(run int64) (*ArticleKnowledge, error) {
 func (s *Store) knowledgeRecord(where string, args ...any) (*ArticleKnowledge, error) {
 	var k ArticleKnowledge
 	var tags, questions, path, hash string
-	err := s.DB.QueryRow(`SELECT k.id,k.run_id,k.item_id,k.item_id,k.item_id,k.category,k.tags_json,k.questions_json,k.markdown_path,k.hash,k.model,k.prompt_version,k.created_at FROM article_knowledge k JOIN knowledge_runs r ON r.id=k.run_id`+where, args...).Scan(&k.ID, &k.RunID, &k.ItemID, &k.SnapshotID, &k.DigestID, &k.Category, &tags, &questions, &path, &hash, &k.Model, &k.PromptVersion, &k.CreatedAt)
+	err := s.DB.QueryRow(`SELECT k.id,k.run_id,k.item_id,k.item_id,k.item_id,k.category,k.tags_json,k.questions_json,k.markdown_path,k.hash,k.model,k.prompt_version FROM article_knowledge k JOIN knowledge_runs r ON r.id=k.run_id`+where, args...).Scan(&k.ID, &k.RunID, &k.ItemID, &k.SnapshotID, &k.DigestID, &k.Category, &tags, &questions, &path, &hash, &k.Model, &k.PromptVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -212,13 +212,12 @@ func (s *Store) completeKnowledgeMetadata(j KnowledgeRun, k ArticleKnowledge, d 
 	if err = tx.QueryRow("SELECT i.original_url,v.title,v.hash FROM active_items i JOIN texts v ON v.item_id=i.id WHERE i.id=?", j.ItemID).Scan(&sourceURL, &title, &sourceHash); err != nil {
 		return err
 	}
-	k.CreatedAt = nowUTC()
-	markdown := fmt.Sprintf("---\nschema: news-library/article-v1\ntype: article\ntitle: %s\nurl: %s\nsource_hash: %s\nevidence_scope: saved-digest-and-bounded-source-excerpt\nitem_id: %d\ncategory: %s\ntags: %s\nquestions: %s\naliases: %s\nauthor: model\nmodel: %s\nprompt_version: %s\ncreated_at: %s\n---\n\n%s\n", jsonString(title), jsonString(sourceURL), jsonString(sourceHash), j.ItemID, jsonString(k.Category), jsonString(k.Tags), jsonString(k.Questions), jsonString(k.Questions), jsonString(j.Model), jsonString(j.PromptVersion), jsonString(k.CreatedAt), d.Markdown)
+	markdown := fmt.Sprintf("---\nschema: news-library/article-v1\ntype: article\ntitle: %s\nurl: %s\nsource_hash: %s\nevidence_scope: saved-digest-and-bounded-source-excerpt\nitem_id: %d\ncategory: %s\ntags: %s\nquestions: %s\naliases: %s\nauthor: model\nmodel: %s\nprompt_version: %s\n---\n\n%s\n", jsonString(title), jsonString(sourceURL), jsonString(sourceHash), j.ItemID, jsonString(k.Category), jsonString(k.Tags), jsonString(k.Questions), jsonString(k.Questions), jsonString(j.Model), jsonString(j.PromptVersion), d.Markdown)
 	path, err := s.Files.Put("digests", []byte(markdown))
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT INTO article_knowledge(run_id,item_id,category,tags_json,questions_json,search_text,markdown_path,hash,model,prompt_version,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, j.ID, j.ItemID, k.Category, jsonString(k.Tags), jsonString(k.Questions), strings.ToLower(k.Category+" "+strings.Join(k.Tags, " ")+" "+strings.Join(k.Questions, " ")), path, textHash(markdown), j.Model, j.PromptVersion, k.CreatedAt)
+	_, err = tx.Exec(`INSERT INTO article_knowledge(run_id,item_id,category,tags_json,questions_json,search_text,markdown_path,hash,model,prompt_version) VALUES(?,?,?,?,?,?,?,?,?,?)`, j.ID, j.ItemID, k.Category, jsonString(k.Tags), jsonString(k.Questions), strings.ToLower(k.Category+" "+strings.Join(k.Tags, " ")+" "+strings.Join(k.Questions, " ")), path, textHash(markdown), j.Model, j.PromptVersion)
 	if err != nil {
 		return err
 	}
@@ -249,7 +248,7 @@ func (s *Store) failKnowledge(j KnowledgeRun, cause error) error {
 		}
 		hash = textHash(f.Response)
 	}
-	if _, err = tx.Exec("INSERT INTO knowledge_failures(run_id,kind,message,recorded_at,response_path,hash) VALUES(?,?,?,?,?,?)", j.ID, f.Kind, f.Message, nowUTC(), path, hash); err != nil {
+	if _, err = tx.Exec("INSERT INTO knowledge_failures(run_id,kind,message,response_path,hash) VALUES(?,?,?,?,?)", j.ID, f.Kind, f.Message, path, hash); err != nil {
 		return err
 	}
 	_, err = tx.Exec("UPDATE knowledge_runs SET state=?,error=?,kind=?,lease_until=0,next_attempt=?,updated_at=? WHERE id=?", state, f.Message, f.Kind, time.Now().Add(time.Duration(j.Attempts)*10*time.Second).UnixMilli(), nowUTC(), j.ID)
@@ -260,7 +259,7 @@ func (s *Store) failKnowledge(j KnowledgeRun, cause error) error {
 }
 
 func (s *Store) KnowledgeFailures(item, snapshot int64) ([]JobFailure, error) {
-	rows, err := s.DB.Query(`SELECT f.id,f.run_id,f.kind,f.message,f.recorded_at,f.response_path,f.hash FROM knowledge_failures f JOIN knowledge_runs r ON r.id=f.run_id WHERE r.item_id=? AND r.item_id=? ORDER BY f.id DESC LIMIT 20`, item, snapshot)
+	rows, err := s.DB.Query(`SELECT f.id,f.run_id,f.kind,f.message,f.response_path,f.hash FROM knowledge_failures f JOIN knowledge_runs r ON r.id=f.run_id WHERE r.item_id=? AND r.item_id=? ORDER BY f.id DESC LIMIT 20`, item, snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +270,7 @@ func (s *Store) KnowledgeFailures(item, snapshot int64) ([]JobFailure, error) {
 	records := []record{}
 	for rows.Next() {
 		var r record
-		if err = rows.Scan(&r.failure.ID, &r.failure.JobID, &r.failure.Kind, &r.failure.Message, &r.failure.RecordedAt, &r.path, &r.hash); err != nil {
+		if err = rows.Scan(&r.failure.ID, &r.failure.JobID, &r.failure.Kind, &r.failure.Message, &r.path, &r.hash); err != nil {
 			rows.Close()
 			return nil, err
 		}

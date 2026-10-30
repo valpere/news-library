@@ -34,7 +34,7 @@ CREATE TABLE item_tags (
 CREATE TABLE digests (
  item_id INTEGER PRIMARY KEY REFERENCES items(id),
  model TEXT NOT NULL, actual_model TEXT NOT NULL, provider TEXT NOT NULL,
- prompt_version TEXT NOT NULL, created_at TEXT NOT NULL, input_tokens INTEGER NOT NULL DEFAULT 0,
+ prompt_version TEXT NOT NULL, input_tokens INTEGER NOT NULL DEFAULT 0,
  output_tokens INTEGER NOT NULL DEFAULT 0,
  markdown_path TEXT NOT NULL, hash TEXT NOT NULL, chunk_count INTEGER NOT NULL DEFAULT 1,
  feedback TEXT NOT NULL DEFAULT '' CHECK(feedback IN ('','good','inaccurate','incomplete','unclear'))
@@ -48,7 +48,7 @@ CREATE TABLE interest_predictions (
 CREATE TABLE digest_checkpoints (
  job_id INTEGER NOT NULL REFERENCES jobs(id), round INTEGER NOT NULL, part INTEGER NOT NULL,
  input_hash TEXT NOT NULL, markdown_path TEXT NOT NULL, hash TEXT NOT NULL,
- actual_model TEXT NOT NULL, provider TEXT NOT NULL, created_at TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
+ actual_model TEXT NOT NULL, provider TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
  PRIMARY KEY(job_id,round,part)
 );
 CREATE TABLE embedding_runs (
@@ -84,7 +84,7 @@ CREATE TABLE connection_members (
 );
 CREATE TABLE knowledge_runs (
  id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
- model TEXT NOT NULL, prompt_version TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ model TEXT NOT NULL, prompt_version TEXT NOT NULL, updated_at TEXT NOT NULL,
  state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','running','retry_wait','done','failed','cancelled')),
  attempts INTEGER NOT NULL DEFAULT 0, token TEXT NOT NULL DEFAULT '', lease_until INTEGER NOT NULL DEFAULT 0,
  next_attempt INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '',
@@ -94,15 +94,15 @@ CREATE TABLE article_knowledge (
  id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL UNIQUE REFERENCES knowledge_runs(id),
  item_id INTEGER NOT NULL REFERENCES items(id), category TEXT NOT NULL,
  tags_json TEXT NOT NULL, questions_json TEXT NOT NULL, search_text TEXT NOT NULL, markdown_path TEXT NOT NULL, hash TEXT NOT NULL,
- model TEXT NOT NULL, prompt_version TEXT NOT NULL, created_at TEXT NOT NULL
+ model TEXT NOT NULL, prompt_version TEXT NOT NULL
 );
 CREATE TABLE knowledge_failures (
  id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL REFERENCES knowledge_runs(id), kind TEXT NOT NULL,
- message TEXT NOT NULL, recorded_at TEXT NOT NULL, response_path TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL DEFAULT ''
+ message TEXT NOT NULL, response_path TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE knowledge_batches (
  request_token TEXT PRIMARY KEY, batch_limit INTEGER NOT NULL, include_retry INTEGER NOT NULL,
- created_at TEXT NOT NULL, result_json TEXT NOT NULL
+ result_json TEXT NOT NULL
 );
 CREATE TABLE chat_sessions (
  id TEXT PRIMARY KEY, state_json TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
