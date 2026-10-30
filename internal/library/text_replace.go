@@ -50,8 +50,7 @@ func (s *Store) installText(tx *sql.Tx, itemID int64, snap Snapshot, refreshOnly
 }
 
 // eraseDerived deletes everything produced from the item's current text: the
-// digest and its prediction and feedback, knowledge, embeddings, source-stage filter
-// decisions, completeness confirmations and the digest jobs with their checkpoints
+// digest and its prediction and feedback, knowledge, embeddings, completeness confirmations and the digest jobs with their checkpoints
 // and failures. The text row itself and the item stay.
 func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) {
 	paths := map[string]bool{}
@@ -89,8 +88,6 @@ func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) 
 		`DELETE FROM interest_predictions WHERE item_id=?`,
 		`DELETE FROM digest_feedback WHERE item_id=?`,
 		`DELETE FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
-		`UPDATE filter_decisions SET override_of=NULL WHERE override_of IN (SELECT id FROM filter_decisions WHERE item_id=? AND stage='source')`,
-		`DELETE FROM filter_decisions WHERE item_id=? AND stage='source'`,
 		`DELETE FROM completeness_confirmations WHERE item_id=?`,
 		`DELETE FROM digests WHERE item_id=?`,
 		`DELETE FROM jobs WHERE item_id=? AND stage='digest'`,

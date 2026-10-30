@@ -314,14 +314,14 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 	return true, nil
 }
 
-// A migrated source may not have a rule decision yet. Evaluate it before its
-// first new generation; configuration changes leave existing decisions alone.
+// An item whose text was never checked by the rules is evaluated before its first
+// generation; configuration changes leave existing verdicts alone.
 func (s *Store) ensureFilterForSnapshot(tx *sql.Tx, itemID, snapshotID int64) (bool, error) {
-	var decisions int
-	if err := tx.QueryRow("SELECT count(*) FROM filter_decisions WHERE item_id=? AND stage='source'", itemID).Scan(&decisions); err != nil {
+	var checked string
+	if err := tx.QueryRow("SELECT filter_state FROM items WHERE id=?", itemID).Scan(&checked); err != nil {
 		return false, err
 	}
-	if decisions == 0 {
+	if checked == "not_checked" {
 		var snap Snapshot
 		var path, hash string
 		if err := tx.QueryRow("SELECT text_path,hash,title FROM texts WHERE item_id=?", itemID).Scan(&path, &hash, &snap.Title); err != nil {

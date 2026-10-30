@@ -70,7 +70,7 @@ D_pair за замовчуванням не є критерієм прийман
 - [Браузерний дайджест: вкладки, clipboard, exports, rating context, failure/retry](../scripts/smoke_digest_ui.py).
 
 M2 також перевіряють [JSON/probability validation](../internal/library/prediction_test.go),
-[immutable rule history і причина без повторного внеску](../internal/library/filter_test.go),
+[причина на матеріалі без історії рішень і без повторного внеску](../internal/library/filter_test.go),
 [M2 config validation](../cmd/news-library/config_test.go).
 
 Довгі джерела: [UTF-8 coverage, checkpoint restart/retry, bounds/fencing](../internal/library/chunk_digest_test.go).

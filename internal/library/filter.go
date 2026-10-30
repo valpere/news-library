@@ -1,7 +1,6 @@
 package library
 
 import (
-	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,6 +8,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -27,13 +27,6 @@ type Contribution struct {
 	Reason      string   `json:"reason"`
 	Probability float64  `json:"probability"`
 	RuleIDs     []string `json:"rule_ids"`
-}
-type FilterDecision struct {
-	ID, ItemID                             int64
-	SnapshotID, OverrideOf                 sql.NullInt64
-	RulesVersion, Stage, Result, CreatedAt string
-	Probability, Threshold                 float64
-	Contributions                          []Contribution
 }
 
 func NewRuleSet(threshold float64, rulesJSON string) (RuleSet, error) {
@@ -78,10 +71,6 @@ func NewRuleSet(threshold float64, rulesJSON string) (RuleSet, error) {
 	}
 	return r, nil
 }
-func (r RuleSet) version() (string, string) {
-	data, _ := json.Marshal(r)
-	return fmt.Sprintf("%x", sha256.Sum256(data)), string(data)
-}
 func (r RuleSet) evaluate(url string, snap *Snapshot) (float64, []Contribution) {
 	values := map[string]string{"url": strings.ToLower(url)}
 	if snap != nil {
@@ -119,6 +108,7 @@ func (r RuleSet) evaluate(url string, snap *Snapshot) (float64, []Contribution) 
 }
 
 // Configuration changes affect future processing, never silently reprocess items.
+// The rules are one current set; the item keeps only the verdict and why it was given.
 func (s *Store) ConfigureRules(r RuleSet) error {
 	data, err := json.Marshal(r.Rules)
 	if err != nil {
@@ -128,12 +118,22 @@ func (s *Store) ConfigureRules(r RuleSet) error {
 	if err != nil {
 		return err
 	}
-	version, config := validated.version()
-	if _, err = s.DB.Exec("INSERT INTO filter_rule_versions(version,config,created_at) VALUES(?,?,?) ON CONFLICT DO NOTHING", version, config, nowUTC()); err != nil {
-		return err
-	}
 	s.Rules = validated
 	return nil
+}
+
+// filterReason is the one-line explanation stored on the item: the total risk, the threshold
+// and the matched reasons with their rules. It is empty when no rule matched.
+func filterReason(probability, threshold float64, contributions []Contribution) string {
+	if len(contributions) == 0 {
+		return ""
+	}
+	num := func(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
+	parts := make([]string, 0, len(contributions))
+	for _, c := range contributions {
+		parts = append(parts, fmt.Sprintf("%s: %s%% (правила %s)", c.Reason, strconv.FormatFloat(c.Probability*100, 'f', 0, 64), strings.Join(c.RuleIDs, ", ")))
+	}
+	return fmt.Sprintf("R=%s, поріг T=%s · %s", num(probability), num(threshold), strings.Join(parts, "; "))
 }
 func (s *Store) decideFilter(tx *sql.Tx, itemID int64, snap *Snapshot, override bool) (bool, error) {
 	var url string
@@ -141,25 +141,14 @@ func (s *Store) decideFilter(tx *sql.Tx, itemID int64, snap *Snapshot, override 
 		return false, err
 	}
 	probability, contributions := s.Rules.evaluate(url, snap)
-	version, config := s.Rules.version()
-	if _, err := tx.Exec("INSERT INTO filter_rule_versions(version,config,created_at) VALUES(?,?,?) ON CONFLICT DO NOTHING", version, config, nowUTC()); err != nil {
-		return false, err
-	}
-	result, stage := "passed", "url"
+	result := "passed"
 	if probability > s.Rules.Threshold {
 		result = "rejected"
 	}
 	if override {
 		result = "overridden"
 	}
-	if snap != nil {
-		stage = "source"
-	}
-	data, _ := json.Marshal(contributions)
-	if _, err := tx.Exec(`INSERT INTO filter_decisions(item_id,rules_version,stage,result,probability,threshold,contributions,created_at) VALUES(?,?,?,?,?,?,?,?)`, itemID, version, stage, result, probability, s.Rules.Threshold, string(data), nowUTC()); err != nil {
-		return false, err
-	}
-	if _, err := tx.Exec("UPDATE items SET filter_state=? WHERE id=?", result, itemID); err != nil {
+	if _, err := tx.Exec("UPDATE items SET filter_state=?,filter_reason=? WHERE id=?", result, filterReason(probability, s.Rules.Threshold, contributions), itemID); err != nil {
 		return false, err
 	}
 	if result == "rejected" {
@@ -184,25 +173,12 @@ func (s *Store) processSnapshot(tx *sql.Tx, itemID, sid int64, snap Snapshot, ov
 	}
 	return s.queueDigest(tx, itemID, sid)
 }
-func (s *Store) FilterDecisions(itemID int64) ([]FilterDecision, error) {
-	rows, err := s.DB.Query("SELECT id,item_id,item_id,rules_version,stage,result,probability,threshold,contributions,created_at,override_of FROM filter_decisions WHERE item_id=? ORDER BY id DESC", itemID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := []FilterDecision{}
-	for rows.Next() {
-		var d FilterDecision
-		var data string
-		if err = rows.Scan(&d.ID, &d.ItemID, &d.SnapshotID, &d.RulesVersion, &d.Stage, &d.Result, &d.Probability, &d.Threshold, &data, &d.CreatedAt, &d.OverrideOf); err != nil {
-			return nil, err
-		}
-		if err = json.Unmarshal([]byte(data), &d.Contributions); err != nil {
-			return nil, err
-		}
-		result = append(result, d)
-	}
-	return result, rows.Err()
+
+// FilterReason returns why the rules gave the item's current verdict ("" when no rule matched).
+func (s *Store) FilterReason(itemID int64) (string, error) {
+	var reason string
+	err := s.DB.QueryRow("SELECT filter_reason FROM items WHERE id=?", itemID).Scan(&reason)
+	return reason, err
 }
 func (s *Store) OverrideFilter(itemID int64) error {
 	tx, err := s.DB.Begin()
@@ -218,11 +194,7 @@ func (s *Store) OverrideFilter(itemID int64) error {
 	if state != "rejected" {
 		return errors.New("матеріал уже дозволено до обробки")
 	}
-	_, err = tx.Exec(`INSERT INTO filter_decisions(item_id,rules_version,stage,result,probability,threshold,contributions,created_at,override_of) SELECT item_id,rules_version,stage,'overridden',probability,threshold,contributions,?,id FROM filter_decisions WHERE item_id=? ORDER BY id DESC LIMIT 1`, nowUTC(), itemID)
-	if err != nil {
-		return err
-	}
-	if _, err = tx.Exec("UPDATE items SET filter_state='overridden',state='ready',error='' WHERE id=?", itemID); err != nil {
+	if _, err = tx.Exec("UPDATE items SET filter_state='overridden',filter_reason=CASE WHEN filter_reason='' THEN '' ELSE 'повернено вручну; було: '||filter_reason END,state='ready',error='' WHERE id=?", itemID); err != nil {
 		return err
 	}
 	if sid.Valid {
