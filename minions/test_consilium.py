@@ -95,6 +95,20 @@ class CouncilTest(unittest.TestCase):
         done = council.retry(lambda a: calls.append(a) or {'status': 'complete'}, retries=2, sleep=lambda s: None)
         self.assertEqual((calls, done['attempts']), ([0], 1))
 
+    def test_context_block_is_data_between_markers_and_empty_without_text(self):
+        self.assertEqual(council.context_block(''), '')
+        block = council.context_block('Код ще на v18.')
+        self.assertIn('Код ще на v18.', block)
+        self.assertIn('END CONTEXT', block)
+        self.assertIn('дані', block)
+
+    def test_context_must_be_a_committed_markdown_file(self):
+        files = ['README.md', 'minions/consilium/context.md', 'x.py']
+        self.assertEqual(council.context_path('minions/consilium/context.md', files), 'minions/consilium/context.md')
+        for bad in ('x.py', 'missing.md', '../etc/passwd.md', '/abs.md'):
+            with self.assertRaises(ValueError):
+                council.context_path(bad, files)
+
     def test_model_override_replaces_only_the_model_argument(self):
         model, command = council.with_model(council.AGENTS['opencode'], 'opencode/other-free')
         self.assertEqual(model, 'opencode/other-free')
