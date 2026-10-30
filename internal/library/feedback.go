@@ -6,9 +6,10 @@ import (
 	"errors"
 )
 
-// Feedback sets the digest's quality flag (one current value; a new digest starts without it).
+// Feedback sets (or, with "", clears) the digest's quality flag (one current value; a new digest starts without it).
 func (s *Store) Feedback(itemID, digestID int64, quality string) error {
-	if quality != "good" && quality != "inaccurate" && quality != "incomplete" && quality != "unclear" {
+	// An empty quality clears the flag.
+	if quality != "" && quality != "good" && quality != "inaccurate" && quality != "incomplete" && quality != "unclear" {
 		return errors.New("оберіть якість дайджесту")
 	}
 	if digestID != itemID {

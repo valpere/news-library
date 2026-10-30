@@ -74,6 +74,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
             page.locator('select[name=quality]').select_option('inaccurate')
             page.get_by_role('button',name='Зберегти відгук',exact=True).click()
             assert 'корисність: Низька' in page.locator('body').inner_text()
+            assert 'Поточний відгук: ' in page.locator('body').text_content()
             assert Gateway.calls == 1
             page.get_by_role('button',name='Перегенерувати дайджест',exact=True).click()
             page.get_by_text('Оновлюється дайджест.',exact=False).wait_for()

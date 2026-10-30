@@ -474,10 +474,11 @@ snapshot; новий результат без prediction не успадков�
 Помилка JSON/probability не публікує недійсний прогноз; URL і текст лишаються.
 Без профілю генерація повертає тільки дайджест, без вигаданої персоналізації.
 
-`feedback.go` (у цільовій моделі) ставить одну позначку `digests.feedback`; раніше це були незалежні immutable digest_feedback з ownership trigger.
-Запис feedback не запускає AI. Regeneration має новий unique config key,
-фіксує поточну модель/профіль і створює immutable artifact; активний job для
-snapshot блокує паралельний повтор. Старі посилання rating/feedback незмінні.
+`feedback.go` ставить одну позначку `digests.feedback` (порожня значить «без відгуку»);
+вона зникає разом із дайджестом. Запис feedback не запускає AI. Regeneration має
+новий unique config key, фіксує поточну модель/профіль, а готовий дайджест замінює
+старий разом із позначкою; активний job для матеріалу блокує паралельний повтор.
+(Старі описи нижче про immutable artifact і версії дайджестів — стара реалізація.)
 Web може вибирати source/digest IDs, показує історію версій та збережений
 результат під час регенерації, використовує readonly polling із захистом
 unsent input. Confidence sorting/filtering SQL не змінює людських даних.

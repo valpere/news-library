@@ -82,3 +82,31 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 		t.Fatal("foreign source regeneration")
 	}
 }
+
+func TestFeedbackCanBeClearedAndDiesWithTheText(t *testing.T) {
+	s, w := testWeb(t)
+	enableDigests(t, s)
+	id := add(t, s, "https://example.com/flag")
+	manual(t, s, id, "Source text")
+	completeFixtureDigest(t, s)
+	if e := s.Feedback(id, id, "unclear"); e != nil {
+		t.Fatal(e)
+	}
+	page := webRequest(w, "GET", "/items/1", nil, nil).Body.String()
+	if !strings.Contains(page, `value="unclear" selected`) {
+		t.Fatal("current flag not preselected")
+	}
+	if e := s.Feedback(id, id, ""); e != nil {
+		t.Fatal(e)
+	}
+	if d, _ := s.DigestForSnapshot(id); d.Feedback != "" {
+		t.Fatal("flag not cleared", d.Feedback)
+	}
+	if e := s.Feedback(id, id, "good"); e != nil {
+		t.Fatal(e)
+	}
+	manual(t, s, id, "A different source text")
+	if d, _ := s.DigestForSnapshot(id); d != nil {
+		t.Fatal("digest and its flag survived the text change", d.Feedback)
+	}
+}
