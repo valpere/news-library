@@ -85,9 +85,6 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	if e = s.Feedback(id, d.ID, "unknown", ""); e == nil {
 		t.Fatal("invalid quality accepted")
 	}
-	if _, e = s.DB.Exec("UPDATE digest_feedback SET quality='good'"); e == nil {
-		t.Fatal("mutable feedback")
-	}
 	if e = s.RegenerateDigest(other, sid); e == nil {
 		t.Fatal("foreign source regeneration")
 	}

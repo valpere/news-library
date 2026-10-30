@@ -178,7 +178,7 @@ func TestNeedsInputAndManualWinsRace(t *testing.T) {
 	}
 	vs, _ := s.Snapshots(id)
 	i, _ = s.Item(id)
-	if len(vs) != 2 || i.Selected.Int64 != vs[1].ID {
+	if len(vs) != 1 || i.Selected.Int64 != vs[0].ID || vs[0].Text != "manual preferred" {
 		t.Fatal("older fetch overwrote manual")
 	}
 	matches, e := s.Search(Filters{Query: "preferred"})

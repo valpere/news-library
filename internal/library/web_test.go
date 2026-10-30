@@ -94,10 +94,6 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 	if !i.Read || i.Score.Int64 != 0 {
 		t.Fatal("UI independent actions")
 	}
-	rw = webRequest(w, "GET", "/items/1?source="+sid, nil, nil)
-	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "offline useful knowledge") {
-		t.Fatal("old text unavailable")
-	}
 	post(t, w, base+"retry", url.Values{})
 	if e := s.Retry(id); e == nil {
 		t.Fatal("UI duplicate retry")

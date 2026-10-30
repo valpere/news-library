@@ -116,11 +116,6 @@ func TestAutomaticKnowledgePipelineBacklinksAndHumanHistory(t *testing.T) {
 	if worked, err := w.Step(context.Background()); err != nil || worked {
 		t.Fatal(worked, err)
 	}
-	for _, statement := range []string{"UPDATE article_knowledge SET category='other'", "DELETE FROM article_knowledge"} {
-		if _, err = s.DB.Exec(statement); err == nil {
-			t.Fatal("metadata mutable")
-		}
-	}
 }
 func TestKnowledgeCheckpointFailureRetryAndBackup(t *testing.T) {
 	s := backupStore(t)

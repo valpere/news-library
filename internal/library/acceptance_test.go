@@ -3,7 +3,6 @@ package library
 import (
 	"context"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -59,10 +58,6 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	if err = s.SetTags(id, []string{"human-tag"}); err != nil {
 		t.Fatal(err)
 	}
-	before, err := s.Ratings(id)
-	if err != nil {
-		t.Fatal(err)
-	}
 	path := filepath.Join(s.Files.Root, "library.db")
 	reopen := func() {
 		t.Helper()
@@ -104,14 +99,18 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	if err != nil || d == nil {
 		t.Fatal(d, err)
 	}
-	// A later source must not rewrite the prior assessment or fill its null digest/date.
+	// A different later text replaces the first one: the rating, which described
+	// the old text, and everything derived from it are erased; human tags and read stay.
 	manual(t, s, id, "Newer source version")
 	after, err := s.Ratings(id)
-	if err != nil || !reflect.DeepEqual(before, after) || len(after) != 1 || after[0].AssessedAt.Valid {
-		t.Fatal("judgment reinterpreted or rebound", before, after, err)
+	if err != nil || len(after) != 0 {
+		t.Fatal("rating survived a text change", after, err)
 	}
-	original, err := s.Snapshot(sourceID)
-	if err != nil || original.Text != "User supplied source" || original.Origin != "manual" {
-		t.Fatal("manual source replaced", original, err)
+	if _, err = s.Snapshot(sourceID); err == nil {
+		t.Fatal("replaced text kept")
+	}
+	item, err = s.Item(id)
+	if err != nil || !item.Read || item.Tags != "human-tag" {
+		t.Fatal("text change touched human state", item, err)
 	}
 }

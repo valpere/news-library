@@ -93,9 +93,6 @@ func TestURLRejectZeroModelCallsAndExplicitOverride(t *testing.T) {
 	if e != nil || len(history) != 3 || history[1].OverrideOf.Int64 != history[2].ID || history[2].Result != "rejected" {
 		t.Fatal("override history", history, e)
 	}
-	if _, e = s.DB.Exec("UPDATE filter_decisions SET result='passed'"); e == nil {
-		t.Fatal("mutable decisions")
-	}
 }
 
 type sourceFunc func(context.Context, string) (Snapshot, error)

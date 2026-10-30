@@ -170,20 +170,14 @@ CREATE INDEX completeness_confirmations_snapshot ON completeness_confirmations(s
 CREATE TRIGGER artifact_source_owner BEFORE INSERT ON generated_artifacts
 WHEN NOT EXISTS(SELECT 1 FROM source_versions WHERE id=NEW.snapshot_id AND item_id=NEW.item_id)
 BEGIN SELECT RAISE(ABORT,'artifact snapshot belongs to another item'); END;
-CREATE TRIGGER immutable_snapshot_update BEFORE UPDATE ON source_versions BEGIN SELECT RAISE(ABORT,'immutable snapshot'); END;
-CREATE TRIGGER immutable_artifact_update BEFORE UPDATE ON generated_artifacts BEGIN SELECT RAISE(ABORT,'immutable artifact'); END;
 CREATE TRIGGER immutable_rules_update BEFORE UPDATE ON filter_rule_versions BEGIN SELECT RAISE(ABORT,'immutable rules'); END;
 CREATE TRIGGER immutable_rules_delete BEFORE DELETE ON filter_rule_versions BEGIN SELECT RAISE(ABORT,'immutable rules'); END;
 CREATE TRIGGER filter_snapshot_owner BEFORE INSERT ON filter_decisions
 WHEN NEW.snapshot_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM source_versions WHERE id=NEW.snapshot_id AND item_id=NEW.item_id)
 BEGIN SELECT RAISE(ABORT,'filter snapshot belongs to another item'); END;
-CREATE TRIGGER immutable_filter_update BEFORE UPDATE ON filter_decisions BEGIN SELECT RAISE(ABORT,'immutable decision'); END;
 CREATE TRIGGER feedback_digest_owner BEFORE INSERT ON digest_feedback
 WHEN NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE id=NEW.digest_id AND item_id=NEW.item_id)
 BEGIN SELECT RAISE(ABORT,'feedback digest belongs to another item'); END;
-CREATE TRIGGER immutable_feedback_update BEFORE UPDATE ON digest_feedback BEGIN SELECT RAISE(ABORT,'immutable feedback'); END;
-CREATE TRIGGER immutable_prediction_update BEFORE UPDATE ON interest_predictions BEGIN SELECT RAISE(ABORT,'immutable prediction'); END;
-CREATE TRIGGER immutable_checkpoint_update BEFORE UPDATE ON digest_checkpoints BEGIN SELECT RAISE(ABORT,'immutable checkpoint'); END;
 CREATE TRIGGER connection_member_owner BEFORE INSERT ON connection_members
 WHEN NOT EXISTS(SELECT 1 FROM source_versions WHERE id=NEW.snapshot_id AND item_id=NEW.item_id)
  OR (NEW.digest_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE id=NEW.digest_id AND item_id=NEW.item_id AND snapshot_id=NEW.snapshot_id))
@@ -192,45 +186,15 @@ CREATE TRIGGER immutable_connection_version_update BEFORE UPDATE ON connection_v
 CREATE TRIGGER immutable_connection_version_delete BEFORE DELETE ON connection_versions BEGIN SELECT RAISE(ABORT,'immutable connection version'); END;
 CREATE TRIGGER immutable_connection_member_update BEFORE UPDATE ON connection_members BEGIN SELECT RAISE(ABORT,'immutable connection member'); END;
 CREATE TRIGGER immutable_connection_member_delete BEFORE DELETE ON connection_members BEGIN SELECT RAISE(ABORT,'immutable connection member'); END;
-CREATE TRIGGER immutable_job_failure_update BEFORE UPDATE ON job_failures BEGIN SELECT RAISE(ABORT,'immutable job failure'); END;
 CREATE TRIGGER knowledge_run_owner BEFORE INSERT ON knowledge_runs
 WHEN NOT EXISTS(SELECT 1 FROM generated_artifacts d WHERE d.id=NEW.digest_id AND d.item_id=NEW.item_id AND d.snapshot_id=NEW.snapshot_id)
 BEGIN SELECT RAISE(ABORT,'knowledge source ownership mismatch'); END;
 CREATE TRIGGER knowledge_metadata_owner BEFORE INSERT ON article_knowledge
 WHEN NOT EXISTS(SELECT 1 FROM knowledge_runs r WHERE r.id=NEW.run_id AND r.item_id=NEW.item_id AND r.snapshot_id=NEW.snapshot_id AND r.digest_id=NEW.digest_id)
 BEGIN SELECT RAISE(ABORT,'knowledge metadata ownership mismatch'); END;
-CREATE TRIGGER immutable_article_knowledge_update BEFORE UPDATE ON article_knowledge BEGIN SELECT RAISE(ABORT,'immutable knowledge'); END;
-CREATE TRIGGER immutable_knowledge_failure_update BEFORE UPDATE ON knowledge_failures BEGIN SELECT RAISE(ABORT,'immutable failure'); END;
 CREATE TRIGGER immutable_knowledge_batch_update BEFORE UPDATE ON knowledge_batches BEGIN SELECT RAISE(ABORT,'immutable batch'); END;
 CREATE TRIGGER immutable_knowledge_batch_delete BEFORE DELETE ON knowledge_batches BEGIN SELECT RAISE(ABORT,'immutable batch'); END;
 CREATE TRIGGER immutable_chat_input BEFORE UPDATE ON chat_turns
 WHEN NEW.session_id<>OLD.session_id OR NEW.request_token<>OLD.request_token OR NEW.request_hash<>OLD.request_hash OR NEW.user_text<>OLD.user_text
 BEGIN SELECT RAISE(ABORT,'immutable chat input'); END;
-CREATE TRIGGER immutable_snapshot_delete BEFORE DELETE ON source_versions
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=OLD.item_id)
- BEGIN SELECT RAISE(ABORT,'immutable snapshot'); END;
-CREATE TRIGGER immutable_artifact_delete BEFORE DELETE ON generated_artifacts
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=OLD.item_id)
- BEGIN SELECT RAISE(ABORT,'immutable artifact'); END;
-CREATE TRIGGER immutable_filter_delete BEFORE DELETE ON filter_decisions
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=OLD.item_id)
- BEGIN SELECT RAISE(ABORT,'immutable decision'); END;
-CREATE TRIGGER immutable_feedback_delete BEFORE DELETE ON digest_feedback
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=OLD.item_id)
- BEGIN SELECT RAISE(ABORT,'immutable feedback'); END;
-CREATE TRIGGER immutable_prediction_delete BEFORE DELETE ON interest_predictions
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=(SELECT item_id FROM generated_artifacts WHERE id=OLD.digest_id))
- BEGIN SELECT RAISE(ABORT,'immutable prediction'); END;
-CREATE TRIGGER immutable_checkpoint_delete BEFORE DELETE ON digest_checkpoints
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=(SELECT item_id FROM jobs WHERE id=OLD.job_id))
- BEGIN SELECT RAISE(ABORT,'immutable checkpoint'); END;
-CREATE TRIGGER immutable_job_failure_delete BEFORE DELETE ON job_failures
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=(SELECT item_id FROM jobs WHERE id=OLD.job_id))
- BEGIN SELECT RAISE(ABORT,'immutable job failure'); END;
-CREATE TRIGGER immutable_article_knowledge_delete BEFORE DELETE ON article_knowledge
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=OLD.item_id)
- BEGIN SELECT RAISE(ABORT,'immutable knowledge'); END;
-CREATE TRIGGER immutable_knowledge_failure_delete BEFORE DELETE ON knowledge_failures
- WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=(SELECT item_id FROM knowledge_runs WHERE id=OLD.run_id))
- BEGIN SELECT RAISE(ABORT,'immutable failure'); END;
 PRAGMA user_version=1;

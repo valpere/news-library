@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -79,22 +80,18 @@ func TestDigestQueueRecoveryAndRatingContext(t *testing.T) {
 	}
 	manual(t, s, id, "New source text")
 	completeFixtureDigest(t, s)
-	r, _ := s.Ratings(id)
-	if len(r) != 1 || r[0].AssessedAt.Valid {
-		t.Fatal("rating lost")
-	}
-	if _, e = s.DB.Exec("UPDATE generated_artifacts SET model='changed'"); e == nil {
-		t.Fatal("mutable artifact")
+	if r, _ := s.Ratings(id); len(r) != 0 {
+		t.Fatal("rating survived a text change", r)
 	}
 	other := add(t, s, "https://example.com/other")
 	manual(t, s, other, "Other text")
 	completeFixtureDigest(t, s)
-	// Finishing an older snapshot must not select it over a newer manual source.
+	// A digest job of a replaced text is gone: finishing it is refused.
 	manual(t, s, id, "Third text")
 	older := claim(t, s)
 	manual(t, s, id, "Fourth text")
-	if e = s.CompleteDigest(older, Digest{Markdown: fixtureDigest}); e != nil {
-		t.Fatal(e)
+	if e = s.CompleteDigest(older, Digest{Markdown: fixtureDigest}); !errors.Is(e, ErrLeaseLost) {
+		t.Fatal("digest of a replaced text accepted", e)
 	}
 	i, _ = s.Item(id)
 	if i.Selected.Int64 == older.SnapshotID.Int64 || i.State != "enriching" {

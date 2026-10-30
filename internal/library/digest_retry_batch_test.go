@@ -178,9 +178,6 @@ func TestBatchDigestRetryMigratedFilterAndPartialProgress(t *testing.T) {
 	a := failedDigestFixture(t, s, "format")
 	b := failedDigestFixture(t, s, "format")
 	// Model a migrated source with no historical filter decision.
-	if _, err := s.DB.Exec("DROP TRIGGER immutable_filter_delete"); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := s.DB.Exec("DELETE FROM filter_decisions WHERE item_id=?", a.ItemID); err != nil {
 		t.Fatal(err)
 	}
