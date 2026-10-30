@@ -28,11 +28,11 @@ func TestConfirmCompletenessOverlaysWithoutChangingTheStoredText(t *testing.T) {
 	if before.Completeness != "unknown" || before.UserConfirmed {
 		t.Fatalf("before: %+v", before)
 	}
-	if err := s.ConfirmCompleteness(before.ID, true, "звірив з оригіналом"); err != nil {
+	if err := s.ConfirmCompleteness(before.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	after := selectedSnapshot(t, s, id)
-	if after.Completeness != "full" || !after.UserConfirmed || after.ConfirmedAt == "" || !strings.Contains(after.Warning, "підтвердив користувач") {
+	if after.Completeness != "full" || !after.UserConfirmed || !strings.Contains(after.Warning, "підтвердив користувач") {
 		t.Fatalf("after: %+v", after)
 	}
 	if after.Hash != before.Hash || after.Text != before.Text {
@@ -53,23 +53,18 @@ func TestWithdrawingConfirmationRestoresTheStoredValue(t *testing.T) {
 	id := add(t, s, "https://example.com/a")
 	manual(t, s, id, "Текст.")
 	snap := selectedSnapshot(t, s, id)
-	s.ConfirmCompleteness(snap.ID, true, "")
-	if err := s.ConfirmCompleteness(snap.ID, false, "помилився"); err != nil {
+	s.ConfirmCompleteness(snap.ID, true)
+	if err := s.ConfirmCompleteness(snap.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := selectedSnapshot(t, s, id); got.Completeness != "unknown" || got.UserConfirmed {
 		t.Fatalf("%+v", got)
 	}
-	var n int
-	s.DB.QueryRow("SELECT count(*) FROM completeness_confirmations WHERE item_id=?", snap.ID).Scan(&n)
-	if n != 2 {
-		t.Fatalf("history must be append-only, got %d rows", n)
-	}
 }
 
 func TestConfirmCompletenessRejectsUnknownOrTrashedSnapshots(t *testing.T) {
 	s := testStore(t)
-	if s.ConfirmCompleteness(999, true, "") == nil {
+	if s.ConfirmCompleteness(999, true) == nil {
 		t.Fatal("unknown snapshot accepted")
 	}
 	id := add(t, s, "https://example.com/a")
@@ -78,7 +73,7 @@ func TestConfirmCompletenessRejectsUnknownOrTrashedSnapshots(t *testing.T) {
 	if err := s.MarkJunk(id, ""); err != nil {
 		t.Fatal(err)
 	}
-	if s.ConfirmCompleteness(snap.ID, true, "") == nil {
+	if s.ConfirmCompleteness(snap.ID, true) == nil {
 		t.Fatal("trashed item accepted")
 	}
 }
@@ -135,5 +130,29 @@ func TestWebCutoffOffersRecoveryStubsNotJunk(t *testing.T) {
 	body = webRequest(w, "GET", "/items/"+strconv.FormatInt(tid, 10), nil, nil).Body.String()
 	if strings.Contains(body, "Дотягнути решту тексту") || !strings.Contains(body, `href="#junk-action"`) {
 		t.Errorf("a teaser offers junk and no recovery stubs")
+	}
+}
+
+func TestSameTextRefetchKeepsConfirmationChangedTextClearsIt(t *testing.T) {
+	s := testStore(t)
+	id := add(t, s, "https://example.com/refetch")
+	if err := s.Complete(claim(t, s), Snapshot{Title: "T", Text: "Same text", Origin: "fetched", Extractor: "fixture", Completeness: "unknown"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ConfirmCompleteness(id, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Retry(id); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Complete(claim(t, s), Snapshot{Title: "T", Text: "Same text", Origin: "fetched", Extractor: "fixture", Completeness: "unknown"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := selectedSnapshot(t, s, id); !got.UserConfirmed {
+		t.Fatal("the same text lost its confirmation")
+	}
+	manual(t, s, id, "Changed text")
+	if got := selectedSnapshot(t, s, id); got.UserConfirmed {
+		t.Fatal("changed text kept the confirmation")
 	}
 }

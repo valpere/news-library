@@ -8,7 +8,7 @@ import (
 
 // installText makes snap the item's only text. When it replaces a different text,
 // the rating and everything derived from the old one (digest, knowledge, embeddings,
-// filter decision, completeness confirmation, digest jobs) are erased. Identical
+// completeness confirmation, digest jobs) are erased. Identical
 // text only refreshes the metadata (changed=false). It returns the file paths the
 // erased rows used; the caller removes the ones nothing else uses after the
 // transaction commits.
@@ -44,14 +44,13 @@ func (s *Store) installText(tx *sql.Tx, itemID int64, snap Snapshot, refreshOnly
 		return false, nil, err
 	}
 	_, err = tx.Exec(`INSERT INTO texts(item_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning) VALUES(?,?,?,?,?,?,?,?,?)
- ON CONFLICT(item_id) DO UPDATE SET text_path=excluded.text_path,title=excluded.title,hash=excluded.hash,retrieved_at=excluded.retrieved_at,origin=excluded.origin,extractor=excluded.extractor,completeness=excluded.completeness,warning=excluded.warning`,
+ ON CONFLICT(item_id) DO UPDATE SET text_path=excluded.text_path,title=excluded.title,hash=excluded.hash,retrieved_at=excluded.retrieved_at,origin=excluded.origin,extractor=excluded.extractor,completeness=excluded.completeness,warning=excluded.warning,complete_confirmed=0`,
 		itemID, path, snap.Title, hash, retrieved, snap.Origin, snap.Extractor, snap.Completeness, snap.Warning)
 	return true, paths, err
 }
 
 // eraseDerived deletes everything produced from the item's current text: the
-// digest and its prediction and feedback, knowledge, embeddings, completeness confirmations and the digest jobs with their checkpoints
-// and failures. The text row itself and the item stay.
+// digest and its prediction and feedback, knowledge, embeddings and the digest jobs with their checkpoints and failures. The text row itself and the item stay.
 func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) {
 	paths := map[string]bool{}
 	for _, q := range []string{
@@ -87,7 +86,6 @@ func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) 
 		`DELETE FROM knowledge_runs WHERE item_id=?`,
 		`DELETE FROM interest_predictions WHERE item_id=?`,
 		`DELETE FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
-		`DELETE FROM completeness_confirmations WHERE item_id=?`,
 		`DELETE FROM digests WHERE item_id=?`,
 		`DELETE FROM jobs WHERE item_id=? AND stage='digest'`,
 	} {

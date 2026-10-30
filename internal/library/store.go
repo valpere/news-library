@@ -46,9 +46,8 @@ type Snapshot struct {
 	ID, ItemID                                                               int64
 	Text, Title, Hash, RetrievedAt, Origin, Extractor, Completeness, Warning string
 	// UserConfirmed: the user vouched that this text is complete (overlay on the
-	// extractor's value, which stays in texts). ConfirmedAt is its date.
+	// extractor's value, which stays in texts).
 	UserConfirmed bool
-	ConfirmedAt   string
 }
 type Job struct {
 	ID, ItemID                                 int64
