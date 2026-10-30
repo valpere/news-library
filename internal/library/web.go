@@ -115,7 +115,6 @@ type pageData struct {
 	ExportScript              template.JS
 	ExportCSP                 string
 	FilterReason              string
-	Feedback                  []DigestFeedback
 	Digests                   []Digest
 	CanRegenerate             bool
 	DigestError               string
@@ -385,14 +384,10 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 	}
 	var digest *Digest
 	var sections []DigestSection
-	var feedback []DigestFeedback
 	if snap != nil {
 		digest, err = w.Store.DigestForSnapshot(snap.ID)
 		if err == nil && digest != nil && !isTranslationPrompt(digest.PromptVersion) {
 			sections, err = SplitDigest(digest.Markdown)
-		}
-		if err == nil && digest != nil {
-			feedback, err = w.Store.FeedbackHistory(id, digest.ID)
 		}
 		if err != nil {
 			http.Error(rw, "дайджест недоступний; перевірте сховище", 500)
@@ -483,7 +478,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 		assessed = Assess(*snap)
 	}
 	diagnosis, canConfirm := assessed.Diagnosis, assessed.CanConfirm
-	w.render(rw, "detail", pageData{CanConfirmCompleteness: canConfirm, SourceDiagnosis: diagnosis, DiagnosedDigestShown: diagnosis != nil && digest != nil, DigestSkipped: digestSkipped, DigestIsTranslation: digest != nil && isTranslationPrompt(digest.PromptVersion), KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Selected: snap, Digest: digest, Sections: sections, Feedback: feedback, FilterReason: filterReason, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
+	w.render(rw, "detail", pageData{CanConfirmCompleteness: canConfirm, SourceDiagnosis: diagnosis, DiagnosedDigestShown: diagnosis != nil && digest != nil, DigestSkipped: digestSkipped, DigestIsTranslation: digest != nil && isTranslationPrompt(digest.PromptVersion), KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Selected: snap, Digest: digest, Sections: sections, FilterReason: filterReason, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))
@@ -531,7 +526,7 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 		if e != nil || did <= 0 {
 			err = errors.New("некоректний дайджест")
 		} else {
-			err = w.Store.Feedback(id, did, form.Get("quality"), form.Get("note"))
+			err = w.Store.Feedback(id, did, form.Get("quality"))
 		}
 	case "digest-regenerate":
 		err = w.Store.RegenerateDigest(id)

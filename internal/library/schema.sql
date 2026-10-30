@@ -35,14 +35,11 @@ CREATE TABLE digests (
  model TEXT NOT NULL, actual_model TEXT NOT NULL, provider TEXT NOT NULL,
  prompt_version TEXT NOT NULL, created_at TEXT NOT NULL, input_tokens INTEGER NOT NULL DEFAULT 0,
  output_tokens INTEGER NOT NULL DEFAULT 0,
- markdown_path TEXT NOT NULL, hash TEXT NOT NULL, chunk_count INTEGER NOT NULL DEFAULT 1
+ markdown_path TEXT NOT NULL, hash TEXT NOT NULL, chunk_count INTEGER NOT NULL DEFAULT 1,
+ feedback TEXT NOT NULL DEFAULT '' CHECK(feedback IN ('','good','inaccurate','incomplete','unclear'))
 );
 CREATE VIRTUAL TABLE item_fts USING fts5(title,text,url,content='',contentless_delete=1,tokenize='unicode61');
 CREATE TABLE cache_entries (url TEXT PRIMARY KEY,final_url TEXT NOT NULL,content_type TEXT NOT NULL,body_path TEXT NOT NULL,hash TEXT NOT NULL,fetched_at TEXT NOT NULL,expires_at INTEGER NOT NULL,partial INTEGER NOT NULL, last_accessed INTEGER NOT NULL DEFAULT 0, response_headers TEXT NOT NULL DEFAULT '{}', checked_at TEXT NOT NULL DEFAULT '');
-CREATE TABLE digest_feedback (
- id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
- quality TEXT NOT NULL CHECK(quality IN ('good','inaccurate','incomplete','unclear')), note TEXT NOT NULL, recorded_at TEXT NOT NULL
-);
 CREATE TABLE interest_predictions (
  item_id INTEGER PRIMARY KEY REFERENCES digests(item_id), probability REAL NOT NULL CHECK(probability BETWEEN 0 AND 1),
  reason TEXT NOT NULL, profile TEXT NOT NULL, profile_hash TEXT NOT NULL

@@ -20,7 +20,10 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	if e := s.Rate(id, 3, nil); e != nil {
 		t.Fatal(e)
 	}
-	post(t, w, "/items/1/feedback", url.Values{"digest": {strconv.FormatInt(d.ID, 10)}, "quality": {"inaccurate"}, "note": {"A bad digest does not make the source uninteresting"}})
+	post(t, w, "/items/1/feedback", url.Values{"digest": {strconv.FormatInt(d.ID, 10)}, "quality": {"inaccurate"}})
+	if got, _ := s.DigestForSnapshot(sid); got.Feedback != "inaccurate" {
+		t.Fatal("feedback flag not stored", got.Feedback)
+	}
 	i, _ := s.Item(id)
 	if i.Score.Int64 != 3 || i.Read {
 		t.Fatal("feedback changed usefulness")
@@ -47,8 +50,8 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	if next == nil || !strings.Contains(next.Markdown, "Нова версія.") {
 		t.Fatal("new digest missing")
 	}
-	if history, e := s.FeedbackHistory(id, d.ID); e != nil || len(history) != 0 {
-		t.Fatal("feedback of the replaced digest kept", history, e)
+	if next.Feedback != "" {
+		t.Fatal("feedback of the replaced digest kept", next.Feedback)
 	}
 	if ratings, _ := s.Ratings(id); len(ratings) != 1 {
 		t.Fatal("regeneration erased the rating")
@@ -69,10 +72,10 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 		t.Fatal("failed regeneration invisible", rw.Code)
 	}
 	other := add(t, s, "https://example.com/foreign")
-	if e = s.Feedback(other, d.ID, "good", ""); e == nil {
+	if e = s.Feedback(other, d.ID, "good"); e == nil {
 		t.Fatal("foreign feedback accepted")
 	}
-	if e = s.Feedback(id, d.ID, "unknown", ""); e == nil {
+	if e = s.Feedback(id, d.ID, "unknown"); e == nil {
 		t.Fatal("invalid quality accepted")
 	}
 	if e = s.RegenerateDigest(other); e == nil {
