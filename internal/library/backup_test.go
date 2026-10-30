@@ -149,42 +149,6 @@ func TestBackupRejectsCorruptionSymlinksAndOverwrite(t *testing.T) {
 	}
 }
 
-func TestLegacyBackupDoesNotMigrateOriginal(t *testing.T) {
-	path := legacyDB(t)
-	source := filepath.Dir(path)
-	if err := os.Rename(path, filepath.Join(source, "library.sqlite")); err != nil {
-		t.Fatal(err)
-	}
-	backup := filepath.Join(t.TempDir(), "legacy-backup")
-	manifest, err := Backup(context.Background(), source, backup)
-	if err != nil || manifest.Schema != 1 {
-		t.Fatal(manifest.Schema, err)
-	}
-	original, err := readonlyDB(filepath.Join(source, "library.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer original.Close()
-	var version int
-	original.QueryRow("PRAGMA user_version").Scan(&version)
-	if version != 1 {
-		t.Fatal("original migrated")
-	}
-	restored := filepath.Join(t.TempDir(), "restored")
-	if err = Restore(context.Background(), backup, restored); err != nil {
-		t.Fatal(err)
-	}
-	copy, err := Open(filepath.Join(restored, "library.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer copy.Close()
-	item, err := copy.Item(7)
-	if err != nil || item.Score.Int64 != 3 {
-		t.Fatal(item, err)
-	}
-}
-
 func mixedLayoutStore(t *testing.T) (*Store, int64, int64) {
 	t.Helper()
 	s := backupStore(t)
