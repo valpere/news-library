@@ -17,18 +17,13 @@ type PurgeBlockedError struct{ Why string }
 func (e *PurgeBlockedError) Error() string { return "не можна видалити: " + e.Why }
 
 // PurgeBlocker returns why a trashed material cannot be erased, or "" when it can.
-// Connection notes keep immutable revisions with exact references, so a material
-// they mention stays in the trash.
+// Notes do not block: the material is taken out of them.
 func (s *Store) PurgeBlocker(id int64) (string, error) {
-	var notes, running int
-	if err := s.DB.QueryRow(`SELECT (SELECT count(DISTINCT version_id) FROM connection_members WHERE item_id=?),
- (SELECT count(*) FROM jobs WHERE item_id=? AND state='running')`, id, id).Scan(&notes, &running); err != nil {
+	var running int
+	if err := s.DB.QueryRow(`SELECT count(*) FROM jobs WHERE item_id=? AND state='running'`, id).Scan(&running); err != nil {
 		return "", err
 	}
-	switch {
-	case notes > 0:
-		return fmt.Sprintf("матеріал згадано в нотатках-зв'язках (редакцій: %d), їхня історія незмінна", notes), nil
-	case running > 0:
+	if running > 0 {
 		return "матеріал зараз обробляється; повторіть пізніше", nil
 	}
 	return "", nil
@@ -38,7 +33,7 @@ func (s *Store) PurgeBlocker(id int64) (string, error) {
 var purgeFileColumns = [][2]string{
 	{"texts", "text_path"}, {"digests", "markdown_path"}, {"digest_checkpoints", "markdown_path"},
 	{"article_knowledge", "markdown_path"}, {"jobs", "response_path"}, {"knowledge_failures", "response_path"},
-	{"connection_versions", "markdown_path"}, {"cache_entries", "body_path"},
+	{"connection_notes", "markdown_path"}, {"cache_entries", "body_path"},
 }
 
 // PurgeTrashed erases a trashed material for good: every row of its own history
@@ -99,6 +94,14 @@ func (s *Store) PurgeTrashed(id int64) error {
 		return err
 	}
 	defer tx.Rollback()
+	// The material leaves the notes that mention it (a note left with one material is deleted).
+	notePaths, err := s.removeFromNotes(tx, id)
+	if err != nil {
+		return err
+	}
+	for p := range notePaths {
+		paths[p] = true
+	}
 	jobs := `(SELECT id FROM jobs WHERE item_id=?)`
 	runs := `(SELECT id FROM knowledge_runs WHERE item_id=?)`
 	for _, q := range []string{

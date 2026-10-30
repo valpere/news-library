@@ -430,7 +430,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	connections, err := w.Store.Connections("", id, 0)
+	connections, err := w.Store.Connections("", id)
 	if err != nil {
 		http.Error(rw, "зв’язки недоступні", http.StatusServiceUnavailable)
 		return

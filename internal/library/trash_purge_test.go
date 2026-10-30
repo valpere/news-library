@@ -109,27 +109,56 @@ func TestPurgeKeepsAFileAnotherMaterialStillUses(t *testing.T) {
 	}
 }
 
-func TestPurgeRefusesMaterialUsedByConnectionNotes(t *testing.T) {
+func TestPurgeTakesMaterialOutOfConnectionNotes(t *testing.T) {
 	s, n := connectionFixture(t)
-	if _, err := s.SaveConnection(n, 0); err != nil {
+	noteID, err := s.SaveConnection(n)
+	if err != nil {
 		t.Fatal(err)
 	}
+	var path string
+	s.DB.QueryRow(`SELECT markdown_path FROM connection_notes WHERE id=?`, noteID).Scan(&path)
 	id := n.Members[0].ItemID
 	if err := s.MarkJunk(id, ""); err != nil {
 		t.Fatal(err)
 	}
-	var blocked *PurgeBlockedError
-	if err := s.PurgeTrashed(id); !errors.As(err, &blocked) || !strings.Contains(blocked.Why, "нотат") {
-		t.Fatalf("expected a blocked purge, got %v", err)
+	if err := s.PurgeTrashed(id); err != nil {
+		t.Fatalf("a note must not block the purge: %v", err)
 	}
-	if count(t, s, `SELECT count(*) FROM items WHERE id=?`, id) != 1 {
-		t.Fatal("a blocked purge must change nothing")
+	if count(t, s, `SELECT count(*) FROM items WHERE id=?`, id) != 0 {
+		t.Fatal("material kept")
+	}
+	if count(t, s, `SELECT count(*) FROM connection_notes`) != 0 || count(t, s, `SELECT count(*) FROM connection_members`) != 0 {
+		t.Fatal("a note left with one material must be deleted")
+	}
+	if _, err := os.Stat(filepath.Join(s.Files.Root, path)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("note file kept: %v", err)
 	}
 }
 
-func TestPurgeAllTrashedSkipsBlockedOnes(t *testing.T) {
+func TestPurgeKeepsNoteWithTwoMaterialsLeft(t *testing.T) {
 	s, n := connectionFixture(t)
-	if _, err := s.SaveConnection(n, 0); err != nil {
+	third := add(t, s, "https://example.com/third-member")
+	manual(t, s, third, "Third member text")
+	n.Members = append(n.Members, ConnectionMember{ItemID: third, Role: "Третій"})
+	noteID, err := s.SaveConnection(n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkJunk(third, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PurgeTrashed(third); err != nil {
+		t.Fatal(err)
+	}
+	note, err := s.Connection(noteID)
+	if err != nil || len(note.Members) != 2 || strings.Contains(note.Markdown, "Третій") {
+		t.Fatal(note, err)
+	}
+}
+
+func TestPurgeAllTrashedErasesMaterialsInNotes(t *testing.T) {
+	s, n := connectionFixture(t)
+	if _, err := s.SaveConnection(n); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.MarkJunk(n.Members[0].ItemID, ""); err != nil {
@@ -138,7 +167,7 @@ func TestPurgeAllTrashedSkipsBlockedOnes(t *testing.T) {
 	junked(t, s, "https://example.com/free-1", "Вільний матеріал один.")
 	junked(t, s, "https://example.com/free-2", "Вільний матеріал два.")
 	purged, kept, err := s.PurgeAllTrashed()
-	if err != nil || purged != 2 || kept != 1 {
+	if err != nil || purged != 3 || kept != 0 {
 		t.Fatalf("purged=%d kept=%d err=%v", purged, kept, err)
 	}
 }
@@ -178,17 +207,17 @@ func TestWebClearTrashList(t *testing.T) {
 	}
 }
 
-func TestWebCardExplainsWhyAConnectedMaterialCannotBePurged(t *testing.T) {
+func TestWebCardOffersPurgeForAConnectedMaterial(t *testing.T) {
 	s, w := testWeb(t)
 	id := junked(t, s, "https://example.com/linked", "Матеріал для нотатки.")
 	other := add(t, s, "https://example.com/linked-2")
 	manual(t, s, other, "Другий матеріал нотатки.")
-	if _, err := s.SaveConnection(ConnectionNote{Title: "Нотатка для перевірки помийки", Category: "Тест", Tags: []string{"тест"}, Questions: []string{"Чому?"}, Body: "Зв'язок.",
-		Members: []ConnectionMember{{ItemID: id, Role: "Перший"}, {ItemID: other, Role: "Другий"}}}, 0); err != nil {
-		t.Skipf("fixture needs the full connection shape: %v", err)
+	if _, err := s.SaveConnection(ConnectionNote{Title: "Нотатка для перевірки помийки", Category: "Тест", Tags: []string{"тест"}, Questions: []string{"Чому?"}, Body: "Зміст нотатки.",
+		Members: []ConnectionMember{{ItemID: id, Role: "Перший"}, {ItemID: other, Role: "Другий"}}}); err != nil {
+		t.Fatal(err)
 	}
 	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
-	if strings.Contains(body, "/purge") || !strings.Contains(body, "нотат") {
-		t.Fatalf("connected material:\n%s", body)
+	if !strings.Contains(body, "/purge") {
+		t.Fatalf("connected material has no purge button:\n%s", body)
 	}
 }

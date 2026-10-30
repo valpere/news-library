@@ -93,6 +93,14 @@ func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) 
 			return nil, fmt.Errorf("%s: %w", q, err)
 		}
 	}
+	// The links of the old text go too; post-processing finds the new ones.
+	notePaths, err := s.removeFromNotes(tx, itemID)
+	if err != nil {
+		return nil, err
+	}
+	for p := range notePaths {
+		paths[p] = true
+	}
 	return paths, nil
 }
 

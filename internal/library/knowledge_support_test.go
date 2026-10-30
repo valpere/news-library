@@ -141,7 +141,7 @@ func TestKnowledgeVerificationFailurePreservesCheckpointAndHumanHistory(t *testi
 	if status.State != "failed" || status.Kind != "format" || calls != 3 {
 		t.Fatal(status, calls)
 	}
-	notes, _ := s.Connections("", id, 0)
+	notes, _ := s.Connections("", id)
 	if len(notes) != 0 {
 		t.Fatal("unsupported connection published", notes)
 	}
@@ -217,7 +217,7 @@ func TestRecoveryCloudChecksCapturedProposalOnly(t *testing.T) {
 	knowledgeStep(t, w)
 	after, _ := s.Knowledge(id, item.Selected.Int64)
 	status, _ := s.KnowledgeStatus(id, item.Selected.Int64)
-	notes, _ := s.Connections("", id, 0)
+	notes, _ := s.Connections("", id)
 	if status.State != "done" || before.ID != after.ID || calls != 1 || recovery.Replayed != 1 || recovery.Generated != 1 || len(notes) != 1 {
 		t.Fatal(status, before, after, calls, recovery, notes)
 	}

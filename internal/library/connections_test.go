@@ -2,14 +2,12 @@ package library
 
 import (
 	"context"
-	"errors"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -25,7 +23,7 @@ func connectionFixture(t *testing.T) (*Store, ConnectionNote) {
 	n.Members = n.Members[:2]
 	return s, n
 }
-func TestConnectionVersionsBacklinksAndHumanState(t *testing.T) {
+func TestConnectionIsReplacedNotVersioned(t *testing.T) {
 	s, n := connectionFixture(t)
 	if err := s.SetTags(n.Members[0].ItemID, []string{"existing"}); err != nil {
 		t.Fatal(err)
@@ -33,48 +31,46 @@ func TestConnectionVersionsBacklinksAndHumanState(t *testing.T) {
 	if err := s.Rate(n.Members[0].ItemID, 3, nil); err != nil {
 		t.Fatal(err)
 	}
-	id, err := s.SaveConnection(n, 0)
+	id, err := s.SaveConnection(n)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := s.Connection(id, 0)
+	first, err := s.Connection(id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Revision != 1 || len(first.Tags) != 2 || !strings.Contains(first.Markdown, "questions:") || !strings.Contains(first.Markdown, "item_id:") {
+	if len(first.Tags) != 2 || !strings.Contains(first.Markdown, "questions:") || !strings.Contains(first.Markdown, "item_id:") {
 		t.Fatal(first)
 	}
-	manual(t, s, first.Members[0].ItemID, "A newer source should not change evidence")
+	var oldPath string
+	s.DB.QueryRow("SELECT markdown_path FROM connection_notes WHERE id=?", id).Scan(&oldPath)
 	second := first
 	second.Body = "Третя стаття уточнює обмеження."
 	second.Members = append(second.Members, ConnectionMember{ItemID: 3, Role: "Уточнення"})
-	if _, err = s.SaveConnection(second, first.VersionID); err != nil {
+	if _, err = s.SaveConnection(second); err != nil {
 		t.Fatal(err)
 	}
-	current, _ := s.Connection(id, 0)
-	historical, _ := s.Connection(id, first.VersionID)
-	if current.Revision != 2 || len(current.Members) != 3 || historical.Markdown != first.Markdown {
-		t.Fatal(current, historical)
+	current, _ := s.Connection(id)
+	if len(current.Members) != 3 || current.Body != second.Body || count(t, s, "SELECT count(*) FROM connection_notes") != 1 {
+		t.Fatal(current)
+	}
+	if _, err = os.Stat(filepath.Join(s.Files.Root, oldPath)); !os.IsNotExist(err) {
+		t.Fatal("file of the replaced note kept", err)
 	}
 	for _, m := range current.Members {
-		links, e := s.Connections("", m.ItemID, 0)
-		if e != nil || len(links) != 1 || links[0].VersionID != current.VersionID {
+		links, e := s.Connections("", m.ItemID)
+		if e != nil || len(links) != 1 || links[0].ID != id {
 			t.Fatal(links, e)
 		}
 	}
 	current.Members = current.Members[1:]
-	if _, err = s.SaveConnection(current, current.VersionID); err != nil {
+	if _, err = s.SaveConnection(current); err != nil {
 		t.Fatal(err)
 	}
-	links, _ := s.Connections("", first.Members[0].ItemID, 0)
-	if len(links) != 0 {
+	if links, _ := s.Connections("", first.Members[0].ItemID); len(links) != 0 {
 		t.Fatal("stale backlink", links)
 	}
-	item, _ := s.Item(first.Members[0].ItemID)
-	if item.Score.Valid || item.Read || item.Tags != "existing" {
-		t.Fatal("tags or read changed, or the rating survived a text change", item)
-	}
-	notes, e := s.Connections("як відновити", 0, 0)
+	notes, e := s.Connections("як відновити", 0)
 	if e != nil || len(notes) != 1 {
 		t.Fatal(notes, e)
 	}
@@ -83,83 +79,67 @@ func TestConnectionVersionsBacklinksAndHumanState(t *testing.T) {
 		t.Fatal(vocabulary, e)
 	}
 }
-func TestConnectionValidationOwnershipAndImmutableFiles(t *testing.T) {
+func TestChangedTextTakesItsMaterialOutOfNotes(t *testing.T) {
+	s, n := connectionFixture(t)
+	third := add(t, s, "https://example.com/fourth")
+	manual(t, s, third, "Fourth text")
+	n.Members = append(n.Members, ConnectionMember{ItemID: third, Role: "Четвертий"})
+	id, err := s.SaveConnection(n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manual(t, s, third, "Fourth text, rewritten")
+	note, err := s.Connection(id)
+	if err != nil || len(note.Members) != 2 || strings.Contains(note.Markdown, "Четвертий") {
+		t.Fatal("link of the old text survived", note, err)
+	}
+	manual(t, s, n.Members[0].ItemID, "First text, rewritten")
+	if _, err = s.Connection(id); err == nil {
+		t.Fatal("a note with one material left must be deleted")
+	}
+}
+func TestConnectionValidationAndFileIntegrity(t *testing.T) {
 	s, n := connectionFixture(t)
 	bad := n
 	bad.Members = append([]ConnectionMember{}, n.Members...)
 	bad.Members[1].ItemID = bad.Members[0].ItemID
-	if _, err := s.SaveConnection(bad, 0); err == nil {
+	if _, err := s.SaveConnection(bad); err == nil {
 		t.Fatal("duplicate accepted")
 	}
 	bad = n
 	bad.Members = append([]ConnectionMember{}, n.Members...)
 	bad.Members[1].ItemID = 9999
-	if _, err := s.SaveConnection(bad, 0); err == nil {
+	if _, err := s.SaveConnection(bad); err == nil {
 		t.Fatal("unknown material accepted")
 	}
 	bad = n
 	bad.Tags = []string{"bad\ntag"}
-	if _, err := s.SaveConnection(bad, 0); err == nil {
+	if _, err := s.SaveConnection(bad); err == nil {
 		t.Fatal("multiline tag accepted")
 	}
-	id, err := s.SaveConnection(n, 0)
+	id, err := s.SaveConnection(n)
 	if err != nil {
 		t.Fatal(err)
 	}
-	note, _ := s.Connection(id, 0)
-	for _, sql := range []string{"UPDATE connection_versions SET title='overwrite'", "DELETE FROM connection_versions", "UPDATE connection_members SET role='overwrite'", "DELETE FROM connection_members"} {
-		if _, err = s.DB.Exec(sql); err == nil {
-			t.Fatal("immutable record changed", sql)
-		}
-	}
 	var path string
-	s.DB.QueryRow("SELECT markdown_path FROM connection_versions WHERE id=?", note.VersionID).Scan(&path)
+	s.DB.QueryRow("SELECT markdown_path FROM connection_notes WHERE id=?", id).Scan(&path)
 	if err = os.WriteFile(filepath.Join(s.Files.Root, path), []byte("corrupted"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Connection(id, 0); err == nil {
+	if _, err = s.Connection(id); err == nil {
 		t.Fatal("corrupted file accepted")
 	}
 }
-func TestConnectionConcurrentEditsConflict(t *testing.T) {
+func TestConnectionBackupRestoresTheCurrentNote(t *testing.T) {
 	s, n := connectionFixture(t)
-	id, err := s.SaveConnection(n, 0)
+	id, err := s.SaveConnection(n)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, _ := s.Connection(id, 0)
-	var wg sync.WaitGroup
-	results := make(chan error, 2)
-	for range 2 {
-		wg.Add(1)
-		go func() { defer wg.Done(); _, e := s.SaveConnection(first, first.VersionID); results <- e }()
-	}
-	wg.Wait()
-	close(results)
-	success, conflict := 0, 0
-	for e := range results {
-		if e == nil {
-			success++
-		} else if errors.Is(e, ErrConnectionConflict) {
-			conflict++
-		} else {
-			t.Fatal(e)
-		}
-	}
-	if success != 1 || conflict != 1 {
-		t.Fatal(success, conflict)
-	}
-}
-func TestConnectionBackupRestoresAllRevisions(t *testing.T) {
-	s, n := connectionFixture(t)
-	id, err := s.SaveConnection(n, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, _ := s.Connection(id, 0)
+	first, _ := s.Connection(id)
 	edit := first
 	edit.Body = "Updated synthesis"
-	if _, err = s.SaveConnection(edit, first.VersionID); err != nil {
+	if _, err = s.SaveConnection(edit); err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
@@ -176,26 +156,22 @@ func TestConnectionBackupRestoresAllRevisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer restored.Close()
-	old, err := restored.Connection(id, first.VersionID)
-	if err != nil || old.Markdown != first.Markdown {
-		t.Fatal(old, err)
-	}
-	latest, err := restored.Connection(id, 0)
-	if err != nil || latest.Body != edit.Body || latest.StableID != first.StableID {
+	latest, err := restored.Connection(id)
+	if err != nil || latest.Body != edit.Body {
 		t.Fatal(latest, err)
 	}
-	links, _ := restored.Connections("", first.Members[0].ItemID, 0)
+	links, _ := restored.Connections("", first.Members[0].ItemID)
 	if len(links) != 1 {
 		t.Fatal(links)
 	}
 }
-func TestConnectionWebDraftConflictAndReadOnlyAPI(t *testing.T) {
+func TestConnectionWebLastSaveWinsAndReadOnlyAPI(t *testing.T) {
 	s, n := connectionFixture(t)
-	id, err := s.SaveConnection(n, 0)
+	id, err := s.SaveConnection(n)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, _ := s.Connection(id, 0)
+	first, _ := s.Connection(id)
 	web, err := NewWeb(s, "http://127.0.0.1:8787", 1<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -216,7 +192,7 @@ func TestConnectionWebDraftConflictAndReadOnlyAPI(t *testing.T) {
 		handler.ServeHTTP(out, r)
 		return out
 	}
-	form := url.Values{"csrf": {web.CSRF}, "title": {"My draft <script>unsafe()</script>"}, "category": {"SQLite"}, "body": {"Preserve this draft <script>unsafe()</script> [link](javascript:alert(1))"}, "version": {strconv.FormatInt(first.VersionID, 10)}}
+	form := url.Values{"csrf": {web.CSRF}, "title": {"My draft <script>unsafe()</script>"}, "category": {"SQLite"}, "body": {"Preserve this draft <script>unsafe()</script> [link](javascript:alert(1))"}}
 	for _, m := range first.Members {
 		form.Add("item", strconv.FormatInt(m.ItemID, 10))
 		form.Add("role", m.Role)
@@ -225,16 +201,20 @@ func TestConnectionWebDraftConflictAndReadOnlyAPI(t *testing.T) {
 	if out := request("POST", path, "Bearer fixture-read-token", form); out.Code != 403 {
 		t.Fatal(out.Code)
 	}
-	if out := request("POST", path, "", form); out.Code != 303 {
-		t.Fatal(out.Code, out.Body.String())
+	for range 2 {
+		if out := request("POST", path, "", form); out.Code != 303 {
+			t.Fatal(out.Code, out.Body.String())
+		}
 	}
-	if out := request("POST", path, "", form); out.Code != 409 || !strings.Contains(out.Body.String(), "Preserve this draft") || !strings.Contains(out.Body.String(), `action="`+path+`"`) {
+	bad := url.Values{"csrf": {web.CSRF}, "title": {"Draft kept on error"}, "body": {"Body kept"}, "item": {strconv.FormatInt(first.Members[0].ItemID, 10)}, "role": {"one"}}
+	if out := request("POST", path, "", bad); out.Code != 400 || !strings.Contains(out.Body.String(), "Draft kept on error") {
 		t.Fatal(out.Code, out.Body.String())
 	}
 	if out := request("GET", path, "", nil); out.Code != 200 || (strings.Contains(out.Body.String(), "<script>unsafe()</script>") || strings.Contains(out.Body.String(), `href="javascript:`)) {
 		t.Fatal(out.Code, out.Body.String())
 	}
-	if out := request("GET", path+"/markdown?version="+strconv.FormatInt(first.VersionID, 10), "", nil); out.Code != 200 || out.Body.String() != first.Markdown {
+	current, _ := s.Connection(id)
+	if out := request("GET", path+"/markdown", "", nil); out.Code != 200 || out.Body.String() != current.Markdown {
 		t.Fatal(out.Code)
 	}
 	if out := request("GET", "/api/read/connections", "", nil); out.Code != 401 {

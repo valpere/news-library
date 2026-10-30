@@ -68,19 +68,15 @@ CREATE TABLE embedding_chunks (
  FOREIGN KEY(item_id,version) REFERENCES embedding_runs(item_id,version) ON DELETE CASCADE
 );
 CREATE TABLE connection_notes (
- id INTEGER PRIMARY KEY, stable_id TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL
-);
-CREATE TABLE connection_versions (
- id INTEGER PRIMARY KEY, note_id INTEGER NOT NULL REFERENCES connection_notes(id),
- revision INTEGER NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL,
+ id INTEGER PRIMARY KEY, title TEXT NOT NULL, category TEXT NOT NULL,
  tags_json TEXT NOT NULL, questions_json TEXT NOT NULL, body TEXT NOT NULL, search_text TEXT NOT NULL,
- markdown_path TEXT NOT NULL, hash TEXT NOT NULL, created_at TEXT NOT NULL, author TEXT NOT NULL DEFAULT 'user', model TEXT NOT NULL DEFAULT '', prompt_version TEXT NOT NULL DEFAULT '',
- UNIQUE(note_id,revision)
+ markdown_path TEXT NOT NULL, hash TEXT NOT NULL,
+ author TEXT NOT NULL DEFAULT 'user', model TEXT NOT NULL DEFAULT '', prompt_version TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE connection_members (
- version_id INTEGER NOT NULL REFERENCES connection_versions(id),
+ note_id INTEGER NOT NULL REFERENCES connection_notes(id),
  item_id INTEGER NOT NULL REFERENCES items(id), role TEXT NOT NULL,
- PRIMARY KEY(version_id,item_id)
+ PRIMARY KEY(note_id,item_id)
 );
 CREATE TABLE knowledge_runs (
  id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
@@ -137,14 +133,10 @@ CREATE UNIQUE INDEX one_active_fetch ON jobs(item_id) WHERE stage='fetch' AND st
 CREATE UNIQUE INDEX one_digest_job ON jobs(item_id,config_version) WHERE stage='digest';
 CREATE INDEX embedding_version_state ON embedding_runs(version,state,item_id);
 CREATE INDEX embedding_chunk_version ON embedding_chunks(version,item_id);
-CREATE INDEX connection_backlinks ON connection_members(item_id,version_id);
+CREATE INDEX connection_backlinks ON connection_members(item_id,note_id);
 CREATE INDEX knowledge_current ON knowledge_runs(item_id,updated_at DESC,id DESC);
 CREATE INDEX chat_history ON chat_turns(session_id,id DESC);
 CREATE INDEX search_judgments_event ON search_judgments(event_id,item_id,id);
-CREATE TRIGGER immutable_connection_version_update BEFORE UPDATE ON connection_versions BEGIN SELECT RAISE(ABORT,'immutable connection version'); END;
-CREATE TRIGGER immutable_connection_version_delete BEFORE DELETE ON connection_versions BEGIN SELECT RAISE(ABORT,'immutable connection version'); END;
-CREATE TRIGGER immutable_connection_member_update BEFORE UPDATE ON connection_members BEGIN SELECT RAISE(ABORT,'immutable connection member'); END;
-CREATE TRIGGER immutable_connection_member_delete BEFORE DELETE ON connection_members BEGIN SELECT RAISE(ABORT,'immutable connection member'); END;
 CREATE TRIGGER immutable_knowledge_batch_update BEFORE UPDATE ON knowledge_batches BEGIN SELECT RAISE(ABORT,'immutable batch'); END;
 CREATE TRIGGER immutable_knowledge_batch_delete BEFORE DELETE ON knowledge_batches BEGIN SELECT RAISE(ABORT,'immutable batch'); END;
 CREATE TRIGGER immutable_chat_input BEFORE UPDATE ON chat_turns
