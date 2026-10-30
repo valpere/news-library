@@ -21,3 +21,26 @@ func (s *Store) Ratings(id int64) ([]ratingRow, error) {
 	r.Score = score.Int64
 	return []ratingRow{r}, nil
 }
+
+// Snapshots returns the item's stored texts (at most one in production).
+func (s *Store) Snapshots(id int64) ([]Snapshot, error) {
+	rows, err := s.DB.Query(snapshotSelect+" WHERE v.item_id=? ORDER BY v.id DESC", id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []Snapshot
+	for rows.Next() {
+		v, path, err := scanSnapshot(rows)
+		if err != nil {
+			return nil, err
+		}
+		data, e := s.Files.Read(path, v.Hash)
+		if e != nil {
+			return nil, e
+		}
+		v.Text = string(data)
+		result = append(result, v)
+	}
+	return result, rows.Err()
+}

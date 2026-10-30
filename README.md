@@ -317,7 +317,7 @@ semantic сортування — relevance, можна явно обрати д
 - `GET /api/read/items/1/context` — до 4000 UTF-8 bytes saved digest/excerpt,
   власна оцінка з датою/null, source completeness і tags.
 - `GET /api/read/items/1/fragment?start=0&end=100` — source byte boundaries,
-  до 16384 bytes; optional `source=ID` дозволяє historical snapshot цього item.
+  до 16384 bytes.
 
 GET не ставить read, не генерує текст і не індексує бібліотеку; semantic
 query використовує лише local embedding. Агентські credentials відхиляються

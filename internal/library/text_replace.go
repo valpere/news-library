@@ -120,3 +120,64 @@ func idList(ids []int64) string {
 	}
 	return "(" + strings.Join(parts, ",") + ")"
 }
+
+// eraseEarlierDigests removes the other digests of the same text (keep is the new
+// one) with their predictions, feedback, knowledge, checkpoints, failures and
+// jobs. A digest a connection note mentions stays until notes lose revisions.
+func (s *Store) eraseEarlierDigests(tx *sql.Tx, snapshotID, keep int64) (map[string]bool, error) {
+	arts, err := queryIDs(tx, `SELECT id FROM generated_artifacts WHERE snapshot_id=? AND id<>? AND id NOT IN (SELECT digest_id FROM connection_members WHERE digest_id IS NOT NULL)`, snapshotID, keep)
+	if err != nil || len(arts) == 0 {
+		return nil, err
+	}
+	in := idList(arts)
+	runs, err := queryIDs(tx, `SELECT id FROM knowledge_runs WHERE digest_id IN `+in)
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := queryIDs(tx, `SELECT job_id FROM generated_artifacts WHERE id IN `+in)
+	if err != nil {
+		return nil, err
+	}
+	paths := map[string]bool{}
+	for _, q := range []string{
+		`SELECT markdown_path FROM generated_artifacts WHERE id IN ` + in,
+		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN ` + idList(jobs),
+		`SELECT markdown_path FROM article_knowledge WHERE run_id IN ` + idList(runs),
+		`SELECT response_path FROM job_failures WHERE job_id IN ` + idList(jobs),
+		`SELECT response_path FROM knowledge_failures WHERE run_id IN ` + idList(runs),
+	} {
+		rows, e := tx.Query(q)
+		if e != nil {
+			return nil, e
+		}
+		for rows.Next() {
+			var p string
+			if e = rows.Scan(&p); e != nil {
+				rows.Close()
+				return nil, e
+			}
+			if p != "" {
+				paths[p] = true
+			}
+		}
+		if e = rows.Close(); e != nil {
+			return nil, e
+		}
+	}
+	for _, q := range []string{
+		`DELETE FROM knowledge_failures WHERE run_id IN ` + idList(runs),
+		`DELETE FROM article_knowledge WHERE run_id IN ` + idList(runs),
+		`DELETE FROM knowledge_runs WHERE id IN ` + idList(runs),
+		`DELETE FROM interest_predictions WHERE digest_id IN ` + in,
+		`DELETE FROM digest_feedback WHERE digest_id IN ` + in,
+		`DELETE FROM digest_checkpoints WHERE job_id IN ` + idList(jobs),
+		`DELETE FROM job_failures WHERE job_id IN ` + idList(jobs),
+		`DELETE FROM generated_artifacts WHERE id IN ` + in,
+		`DELETE FROM jobs WHERE id IN ` + idList(jobs),
+	} {
+		if _, err = tx.Exec(q); err != nil {
+			return nil, fmt.Errorf("%s: %w", q, err)
+		}
+	}
+	return paths, nil
+}

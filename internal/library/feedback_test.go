@@ -29,10 +29,10 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	if jobs[0].State != "done" {
 		t.Fatal("feedback scheduled AI")
 	}
-	if e := s.RegenerateDigest(id, sid); e != nil {
+	if e := s.RegenerateDigest(id); e != nil {
 		t.Fatal(e)
 	}
-	if e := s.RegenerateDigest(id, sid); e == nil {
+	if e := s.RegenerateDigest(id); e == nil {
 		t.Fatal("duplicate regeneration accepted")
 	}
 	j := claim(t, s)
@@ -47,27 +47,20 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	if next.ID == d.ID {
 		t.Fatal("old artifact overwritten")
 	}
-	old, e := s.Digest(d.ID, id)
-	if e != nil || old.Markdown != fixtureDigest {
-		t.Fatal("old digest unavailable", e)
+	if _, e := s.Digest(d.ID, id); e == nil {
+		t.Fatal("replaced digest kept")
 	}
-	history, e := s.FeedbackHistory(id, d.ID)
-	if e != nil || len(history) != 1 || history[0].Quality != "inaccurate" {
-		t.Fatal("feedback moved", history, e)
+	if history, e := s.FeedbackHistory(id, d.ID); e != nil || len(history) != 0 {
+		t.Fatal("feedback of the replaced digest kept", history, e)
 	}
-	ratings, _ := s.Ratings(id)
-	if len(ratings) != 1 {
-		t.Fatal("rating relinked")
+	if ratings, _ := s.Ratings(id); len(ratings) != 1 {
+		t.Fatal("regeneration erased the rating")
 	}
-	rw = webRequest(w, "GET", "/items/1?source="+strconv.FormatInt(sid, 10)+"&digest="+strconv.FormatInt(d.ID, 10), nil, nil)
-	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "A bad digest") || !strings.Contains(rw.Body.String(), `name="digest" value="1"`) {
-		t.Fatal("historical feedback unavailable", rw.Code)
-	}
-	if e = s.RegenerateDigest(id, sid); e != nil {
+	if e := s.RegenerateDigest(id); e != nil {
 		t.Fatal(e)
 	}
 	failed := claim(t, s)
-	if e = s.Fail(failed, "fixture outage", false, 3, time.Now(), time.Second); e != nil {
+	if e := s.Fail(failed, "fixture outage", false, 3, time.Now(), time.Second); e != nil {
 		t.Fatal(e)
 	}
 	kept, e := s.DigestForSnapshot(sid)
@@ -85,7 +78,7 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	if e = s.Feedback(id, d.ID, "unknown", ""); e == nil {
 		t.Fatal("invalid quality accepted")
 	}
-	if e = s.RegenerateDigest(other, sid); e == nil {
+	if e = s.RegenerateDigest(other); e == nil {
 		t.Fatal("foreign source regeneration")
 	}
 }

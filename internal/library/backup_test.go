@@ -26,7 +26,7 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 	sid := item.Selected.Int64
 	s.Rate(id, 3, nil)
 	// A pending regeneration with a saved digest checkpoint must survive.
-	s.RegenerateDigest(id, sid)
+	s.RegenerateDigest(id)
 	pending := claim(t, s)
 	if err := s.SaveDigestCheckpoint(pending, 0, 0, "input", Digest{Markdown: fixtureDigest, ActualModel: "fixture:cloud", Provider: "fixture"}); err != nil {
 		t.Fatal(err)

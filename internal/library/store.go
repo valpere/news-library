@@ -546,27 +546,6 @@ func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 func (s *Store) Item(id int64) (Item, error) {
 	return scanItem(s.DB.QueryRow(itemSelect+" WHERE i.id=?", id))
 }
-func (s *Store) Snapshots(id int64) ([]Snapshot, error) {
-	rows, err := s.DB.Query(snapshotSelect+" WHERE v.item_id=? ORDER BY v.id DESC", id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var result []Snapshot
-	for rows.Next() {
-		v, path, err := scanSnapshot(rows)
-		if err != nil {
-			return nil, err
-		}
-		data, e := s.Files.Read(path, v.Hash)
-		if e != nil {
-			return nil, e
-		}
-		v.Text = string(data)
-		result = append(result, v)
-	}
-	return result, rows.Err()
-}
 func (s *Store) Search(f Filters) ([]Item, error) {
 	query := itemSelect + " WHERE 1=1"
 	var args []any

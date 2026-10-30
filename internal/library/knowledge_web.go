@@ -3,7 +3,6 @@ package library
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 )
 
 func (w *Web) exportKnowledge(rw http.ResponseWriter, r *http.Request) {
@@ -18,13 +17,6 @@ func (w *Web) exportKnowledge(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sid := item.Selected.Int64
-	if raw := r.URL.Query().Get("source"); raw != "" {
-		sid, err = strconv.ParseInt(raw, 10, 64)
-		if err != nil || sid <= 0 {
-			http.Error(rw, "некоректний текст", 400)
-			return
-		}
-	}
 	k, err := w.Store.Knowledge(id, sid)
 	if err != nil || k == nil || k.FileError != "" {
 		http.NotFound(rw, r)

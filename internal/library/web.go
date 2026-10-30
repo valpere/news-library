@@ -98,7 +98,6 @@ type pageData struct {
 	Filters                   Filters
 	Items                     []Item
 	Item                      Item
-	Snapshots                 []Snapshot
 	Selected                  *Snapshot
 	Jobs                      []JobStatus
 	Digest                    *Digest
@@ -370,29 +369,14 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "сховище недоступне", 500)
 		return
 	}
-	snapshots, err := w.Store.Snapshots(id)
-	if err != nil {
-		http.Error(rw, "сховище недоступне", 500)
-		return
-	}
-	selected := i.Selected.Int64
-	if raw := r.URL.Query().Get("source"); raw != "" {
-		selected, err = strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			http.Error(rw, "некоректна версія", 400)
+	var snap *Snapshot
+	if i.Selected.Valid {
+		current, e := w.Store.Snapshot(i.Selected.Int64)
+		if e != nil {
+			http.Error(rw, "сховище недоступне", 500)
 			return
 		}
-	}
-	var snap *Snapshot
-	for k := range snapshots {
-		if snapshots[k].ID == selected {
-			snap = &snapshots[k]
-			break
-		}
-	}
-	if r.URL.Query().Get("source") != "" && snap == nil {
-		http.NotFound(rw, r)
-		return
+		snap = &current
 	}
 	jobs, err := w.Store.Jobs(id)
 	if err != nil {
@@ -401,29 +385,11 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 	}
 	var digest *Digest
 	var sections []DigestSection
-	var digests []Digest
 	var feedback []DigestFeedback
 	if snap != nil {
 		digest, err = w.Store.DigestForSnapshot(snap.ID)
-		if raw := r.URL.Query().Get("digest"); raw != "" {
-			did, e := strconv.ParseInt(raw, 10, 64)
-			if e != nil {
-				http.Error(rw, "некоректна версія дайджесту", 400)
-				return
-			}
-			d, e := w.Store.Digest(did, id)
-			if errors.Is(e, sql.ErrNoRows) || (e == nil && d.SnapshotID != snap.ID) {
-				http.NotFound(rw, r)
-				return
-			}
-			digest = &d
-			err = e
-		}
 		if err == nil && digest != nil && !isTranslationPrompt(digest.PromptVersion) {
 			sections, err = SplitDigest(digest.Markdown)
-		}
-		if err == nil {
-			digests, err = w.Store.DigestsForSnapshot(snap.ID)
 		}
 		if err == nil && digest != nil {
 			feedback, err = w.Store.FeedbackHistory(id, digest.ID)
@@ -432,9 +398,6 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, "дайджест недоступний; перевірте сховище", 500)
 			return
 		}
-	} else if r.URL.Query().Get("digest") != "" {
-		http.NotFound(rw, r)
-		return
 	}
 	decisions, err := w.Store.FilterDecisions(id)
 	if err != nil {
@@ -520,7 +483,7 @@ func (w *Web) detail(rw http.ResponseWriter, r *http.Request) {
 		assessed = Assess(*snap)
 	}
 	diagnosis, canConfirm := assessed.Diagnosis, assessed.CanConfirm
-	w.render(rw, "detail", pageData{CanConfirmCompleteness: canConfirm, SourceDiagnosis: diagnosis, DiagnosedDigestShown: diagnosis != nil && digest != nil, DigestSkipped: digestSkipped, DigestIsTranslation: digest != nil && isTranslationPrompt(digest.PromptVersion), KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Snapshots: snapshots, Selected: snap, Digest: digest, Sections: sections, Digests: digests, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
+	w.render(rw, "detail", pageData{CanConfirmCompleteness: canConfirm, SourceDiagnosis: diagnosis, DiagnosedDigestShown: diagnosis != nil && digest != nil, DigestSkipped: digestSkipped, DigestIsTranslation: digest != nil && isTranslationPrompt(digest.PromptVersion), KnowledgeFailures: knowledgeFailures, Knowledge: knowledge, KnowledgeStatus: knowledgeStatus, KnowledgeEnabled: current && w.Store.KnowledgeEnabled && i.FilterState != "rejected", KnowledgePending: knowledgePending, DigestFailureKind: failureKind, DigestFailureLabel: failureLabel, DigestFailureAdvice: failureAdvice, DigestRetryLabel: retryLabel, DigestRejectedResponse: rejected, Connections: connections, Item: i, Selected: snap, Digest: digest, Sections: sections, Feedback: feedback, FilterDecisions: decisions, DigestError: digestError, DigestEnabled: w.Store.DigestConfig != nil, CanRetryDigest: current && w.Store.DigestConfig != nil && i.FilterState != "rejected", CanRegenerate: current && w.Store.DigestConfig != nil && i.FilterState != "rejected" && !pending, Pending: pending, Jobs: jobs, RateWithoutText: r.URL.Query().Get("rate_without_text") == "1"})
 }
 func (w *Web) add(rw http.ResponseWriter, r *http.Request) {
 	id, err := w.Store.AddURL(r.PostForm.Get("url"))
@@ -571,12 +534,7 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 			err = w.Store.Feedback(id, did, form.Get("quality"), form.Get("note"))
 		}
 	case "digest-regenerate":
-		sid, e := strconv.ParseInt(form.Get("source"), 10, 64)
-		if e != nil || sid <= 0 {
-			err = errors.New("некоректна версія тексту")
-		} else {
-			err = w.Store.RegenerateDigest(id, sid)
-		}
+		err = w.Store.RegenerateDigest(id)
 	case "knowledge-retry":
 		err = w.Store.RetryKnowledge(id)
 	case "digest-retry":

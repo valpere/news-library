@@ -105,3 +105,27 @@ func TestRefetchWithChangedTextReplacesTheOldOne(t *testing.T) {
 		t.Fatal("old text kept", vs)
 	}
 }
+
+func TestRegeneratedDigestReplacesTheOldOneAndItsFile(t *testing.T) {
+	s := testStore(t)
+	enableDigests(t, s)
+	id := add(t, s, "https://example.com/regen")
+	manual(t, s, id, "Text that gets two digests in a row.")
+	completeFixtureDigest(t, s)
+	var oldPath string
+	s.DB.QueryRow("SELECT markdown_path FROM generated_artifacts WHERE item_id=?", id).Scan(&oldPath)
+	if err := s.RegenerateDigest(id); err != nil {
+		t.Fatal(err)
+	}
+	j := claim(t, s)
+	md := fixtureDigest + "\n"
+	if err := s.CompleteDigest(j, Digest{Markdown: md, ActualModel: j.Model, Provider: "fixture"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, s, "SELECT count(*) FROM generated_artifacts WHERE item_id=?", id); n != 1 {
+		t.Fatal("digest rows", n)
+	}
+	if _, err := os.Stat(filepath.Join(s.Files.Root, oldPath)); !os.IsNotExist(err) {
+		t.Fatal("file of the replaced digest kept", err)
+	}
+}

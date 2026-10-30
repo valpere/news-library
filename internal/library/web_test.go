@@ -99,12 +99,9 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 		t.Fatal("UI duplicate retry")
 	}
 }
-func TestWebRejectsInvalidScoresAndForeignContext(t *testing.T) {
+func TestWebRejectsInvalidScores(t *testing.T) {
 	s, w := testWeb(t)
 	a := add(t, s, "https://example.com/a")
-	b := add(t, s, "https://example.com/b")
-	manual(t, s, b, "foreign text")
-	vs, _ := s.Snapshots(b)
 	for _, score := range []string{"-1", "7", "1.5", "9223372036854775808", "NaN", ""} {
 		rw := webRequest(w, "POST", fmt.Sprintf("/items/%d/rating", a), url.Values{"csrf": {w.CSRF}, "score": {score}}, nil)
 		if rw.Code != 400 {
@@ -114,10 +111,6 @@ func TestWebRejectsInvalidScoresAndForeignContext(t *testing.T) {
 	events, _ := s.Ratings(a)
 	if len(events) != 0 {
 		t.Fatal("invalid score inserted event")
-	}
-	rw := webRequest(w, "GET", "/items/1?source="+strconv.FormatInt(vs[0].ID, 10), nil, nil)
-	if rw.Code != 404 {
-		t.Fatal("foreign version shown")
 	}
 	post(t, w, "/items/1/rating", url.Values{"score": {"6"}})
 	events, _ = s.Ratings(a)
