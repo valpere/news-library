@@ -18,7 +18,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 AGENTS = {
-    'opencode': ('opencode/nemotron-3-ultra-free', ['opencode', 'run', '--pure', '--agent', 'plan', '--format', 'json', '--model', 'opencode/nemotron-3-ultra-free']),
+    'opencode': ('opencode/nemotron-3.5-super-vl-free', ['opencode', 'run', '--pure', '--agent', 'plan', '--format', 'json', '--model', 'opencode/nemotron-3.5-super-vl-free']),
     'agy': ('Gemini 3.8 Flash (Low)', ['agy', '--print', '--mode', 'plan', '--sandbox', '--model', 'Gemini 3.8 Flash (Low)', '--output-format', 'json']),
 }
 AGENTS['claude'] = ('sonnet (CLI alias)', ['claude', '--print', '--permission-mode', 'plan', '--tools', 'Read,Grep,Glob', '--allowedTools', 'Read,Grep,Glob', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--model', 'sonnet', '--output-format', 'json', '--no-session-persistence'])
