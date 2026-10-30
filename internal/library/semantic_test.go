@@ -331,38 +331,3 @@ func TestReadContextUsesSavedDigestAndCorrectBounds(t *testing.T) {
 		t.Fatal("read queued generation", jobs)
 	}
 }
-
-func TestLegacySourceGetsRulesBeforeFirstEmbedding(t *testing.T) {
-	s, err := Open(legacyDB(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	f := &fixtureEmbedder{revision: "v1"}
-	semantic := &Semantic{Store: s, Embedder: f, ChunkBytes: 1024, Dimensions: 2, Timeout: time.Second}
-	rules, _ := NewRuleSet(.8, `[{"id":"legacy","reason":"fixture reject","field":"text","contains":"legacy","probability":1}]`)
-	s.ConfigureRules(rules)
-	drainIndex(t, semantic)
-	if f.calls != 0 {
-		t.Fatal("unchecked migrated source embedded")
-	}
-	if err = s.RebuildEmbeddings(); err != nil {
-		t.Fatal(err)
-	}
-	drainIndex(t, semantic)
-	if f.calls != 0 {
-		t.Fatal("rejected migrated source embedded")
-	}
-	item, err := s.Item(7)
-	if err != nil || item.FilterState != "rejected" || item.Score.Int64 != 3 {
-		t.Fatal(item, err)
-	}
-	rows, err := s.Search(Filters{Query: "legacy", Filter: "rejected"})
-	if err != nil || len(rows) != 1 {
-		t.Fatal("rejected source hidden from FTS", err)
-	}
-	history, err := s.Ratings(7)
-	if err != nil || len(history) != 1 || history[0].AssessedAt.Valid || history[0].SourceVersionID.Int64 != 12 {
-		t.Fatal("migration/indexing mutated history", err)
-	}
-}

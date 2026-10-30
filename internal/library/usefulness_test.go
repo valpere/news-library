@@ -2,69 +2,12 @@ package library
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 )
-
-func TestUsefulnessScaleAndLegacyMigration(t *testing.T) {
-	s := backupStore(t)
-	old := add(t, s, "https://example.com/old-scale")
-	manual(t, s, old, "historical context")
-	if err := s.Rate(old, 95, nil, nil, "old judgment"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.DB.Exec("DROP TABLE completeness_confirmations; DROP TABLE search_judgments; DROP TABLE search_events; DROP VIEW active_items; DROP TRIGGER IF EXISTS immutable_snapshot_delete; DROP TRIGGER IF EXISTS immutable_artifact_delete; DROP TRIGGER IF EXISTS immutable_rating_delete; DROP TRIGGER IF EXISTS immutable_filter_delete; DROP TRIGGER IF EXISTS immutable_feedback_delete; DROP TRIGGER IF EXISTS immutable_prediction_delete; DROP TRIGGER IF EXISTS immutable_checkpoint_delete; DROP TRIGGER IF EXISTS immutable_job_failure_delete; DROP TRIGGER IF EXISTS immutable_article_knowledge_delete; DROP TRIGGER IF EXISTS immutable_knowledge_failure_delete; DROP TABLE trash_entries; ALTER TABLE rating_events DROP COLUMN scale; PRAGMA user_version=13"); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(s.Files.Root, "library.sqlite")
-	if err := s.Close(); err != nil {
-		t.Fatal(err)
-	}
-	s, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	history, err := s.Ratings(old)
-	if err != nil || len(history) != 1 || history[0].Score != 95 || history[0].Scale != LegacyRatingScale || history[0].AssessedAt.Valid {
-		t.Fatal(history, err)
-	}
-	if label := ratingLabel(sql.NullInt64{Int64: 4, Valid: true}, LegacyRatingScale); strings.Contains(label, "Висока") {
-		t.Fatal("legacy reinterpreted", label)
-	}
-	fresh := add(t, s, "https://example.com/new-scale")
-	manual(t, s, fresh, "new context")
-	item, _ := s.Item(fresh)
-	sid := item.Selected.Int64
-	for _, level := range usefulnessLevels() {
-		if err := s.RateUsefulnessShown(fresh, level.Score, &sid, nil, nil, "explicit level"); err != nil {
-			t.Fatal(err)
-		}
-		item, err := s.Item(fresh)
-		if err != nil || ratingLabel(item.Score, item.ScoreScale) != level.Label {
-			t.Fatal(item, err)
-		}
-	}
-	for _, bad := range []int64{-1, 7, 95} {
-		if err := s.RateUsefulnessShown(fresh, bad, &sid, nil, nil, ""); err == nil {
-			t.Fatal("accepted invalid level", bad)
-		}
-	}
-	if _, err := s.DB.Exec("UPDATE rating_events SET scale='legacy_numeric' WHERE item_id=?", fresh); err == nil {
-		t.Fatal("scale history mutable")
-	}
-	if _, err := s.DB.Exec("INSERT INTO rating_events(item_id,score,recorded_at,scale) VALUES(?,7,'fixture',?)", fresh, UsefulnessScale); err == nil {
-		t.Fatal("DB accepted invalid level")
-	}
-	if _, err := s.DB.Exec("INSERT INTO rating_events(item_id,score,recorded_at,scale) VALUES(?,1,'fixture','invented')", fresh); err == nil {
-		t.Fatal("DB accepted unknown scale")
-	}
-}
 
 func TestUsefulnessFiltersDoNotReinterpretLegacyNumbers(t *testing.T) {
 	s := testStore(t)

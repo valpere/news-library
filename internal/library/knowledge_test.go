@@ -433,41 +433,6 @@ func TestKnowledgeGroupedThemeAndManualRevisionProvenance(t *testing.T) {
 		t.Fatal(historical, err)
 	}
 }
-func TestKnowledgeMigrationPreservesExistingNotes(t *testing.T) {
-	s, n := connectionFixture(t)
-	id, err := s.SaveConnection(n, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	original, err := s.Connection(id, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, statement := range []string{"DROP TABLE completeness_confirmations", "DROP TABLE search_judgments", "DROP TABLE search_events", "DROP VIEW active_items", "DROP TRIGGER IF EXISTS immutable_snapshot_delete; DROP TRIGGER IF EXISTS immutable_artifact_delete; DROP TRIGGER IF EXISTS immutable_rating_delete; DROP TRIGGER IF EXISTS immutable_filter_delete; DROP TRIGGER IF EXISTS immutable_feedback_delete; DROP TRIGGER IF EXISTS immutable_prediction_delete; DROP TRIGGER IF EXISTS immutable_checkpoint_delete; DROP TRIGGER IF EXISTS immutable_job_failure_delete; DROP TRIGGER IF EXISTS immutable_article_knowledge_delete; DROP TRIGGER IF EXISTS immutable_knowledge_failure_delete; DROP TABLE trash_entries", "DROP TABLE chat_turns", "DROP TABLE chat_sessions", "DROP TABLE knowledge_batches", "DROP TABLE knowledge_failures", "DROP TABLE article_knowledge", "DROP TABLE knowledge_runs", "ALTER TABLE connection_versions DROP COLUMN author", "ALTER TABLE connection_versions DROP COLUMN model", "ALTER TABLE connection_versions DROP COLUMN prompt_version", "ALTER TABLE rating_events DROP COLUMN scale", "PRAGMA user_version=10"} {
-		if _, err = s.DB.Exec(statement); err != nil {
-			t.Fatal(statement, err)
-		}
-	}
-	path := filepath.Join(s.Files.Root, "library.sqlite")
-	if err = s.Close(); err != nil {
-		t.Fatal(err)
-	}
-	upgraded, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer upgraded.Close()
-	current, err := upgraded.Connection(id, 0)
-	if err != nil || current.Author != "user" || current.Markdown != original.Markdown || current.VersionID != original.VersionID {
-		t.Fatal(current, err)
-	}
-	var queued int
-	upgraded.DB.QueryRow("SELECT count(*) FROM knowledge_runs").Scan(&queued)
-	if queued != 0 {
-		t.Fatal("migration silently scheduled cloud work", queued)
-	}
-}
-
 func TestKnowledgeCloudJSONValidationAndNoLocalFallback(t *testing.T) {
 	replies := []string{`{}`, `{"links":null}`, `{"links":[]}`, `{"links":[],"unexpected":true}`, "```json\n{\"links\":[]}\n```", "```\n{\"links\":[]}\n```", "before\n```json\n{\"links\":[]}\n```", "```json\n{\"links\":[],\"unexpected\":true}\n```", "```json\n{\"links\":[]} {}\n```", "```json\n{\"links\":[]"}
 	for _, reply := range replies {

@@ -109,34 +109,6 @@ func TestTrashPreservesRecoverableAndSavedSources(t *testing.T) {
 	}
 }
 
-func TestTrashMigrationAndBackup(t *testing.T) {
-	s := backupStore(t)
-	id := add(t, s, "https://example.com/gone")
-	j := claim(t, s)
-	if err := s.Fail(j, "джерело повернуло HTTP 410", false, 3, time.Now(), 0); err != nil {
-		t.Fatal(err)
-	}
-	// Emulate v14 with completed historic failure.
-	if _, err := s.DB.Exec("DROP TABLE completeness_confirmations; DROP TABLE search_judgments; DROP TABLE search_events; DROP VIEW active_items; DROP TRIGGER IF EXISTS immutable_snapshot_delete; DROP TRIGGER IF EXISTS immutable_artifact_delete; DROP TRIGGER IF EXISTS immutable_rating_delete; DROP TRIGGER IF EXISTS immutable_filter_delete; DROP TRIGGER IF EXISTS immutable_feedback_delete; DROP TRIGGER IF EXISTS immutable_prediction_delete; DROP TRIGGER IF EXISTS immutable_checkpoint_delete; DROP TRIGGER IF EXISTS immutable_job_failure_delete; DROP TRIGGER IF EXISTS immutable_article_knowledge_delete; DROP TRIGGER IF EXISTS immutable_knowledge_failure_delete; DROP TABLE trash_entries; PRAGMA user_version=14"); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(s.Files.Root, "library.sqlite")
-	s.Close()
-	reopened, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reopened.Close()
-	entries, err := reopened.Trash()
-	if err != nil || len(entries) != 1 || entries[0].ID != id {
-		t.Fatalf("migration %v %v", entries, err)
-	}
-	var integrity string
-	if err = reopened.DB.QueryRow("PRAGMA integrity_check").Scan(&integrity); err != nil || integrity != "ok" {
-		t.Fatalf("integrity %s %v", integrity, err)
-	}
-}
-
 func TestTrashSurvivesBackupRestore(t *testing.T) {
 	s := backupStore(t)
 	id := add(t, s, "https://example.com/404")

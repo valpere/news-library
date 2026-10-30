@@ -22,54 +22,6 @@ import (
 //go:embed schema.sql
 var schema string
 
-//go:embed schema_v2.sql
-var schemaV2 string
-
-//go:embed schema_v4.sql
-var schemaV4 string
-
-//go:embed schema_v5.sql
-var schemaV5 string
-
-//go:embed schema_v6.sql
-var schemaV6 string
-
-//go:embed schema_v7.sql
-var schemaV7 string
-
-//go:embed schema_v8.sql
-var schemaV8 string
-
-//go:embed schema_v9.sql
-var schemaV9 string
-
-//go:embed schema_v10.sql
-var schemaV10 string
-
-//go:embed schema_v11.sql
-var schemaV11 string
-
-//go:embed schema_v12.sql
-var schemaV12 string
-
-//go:embed schema_v13.sql
-var schemaV13 string
-
-//go:embed schema_v14.sql
-var schemaV14 string
-
-//go:embed schema_v15.sql
-var schemaV15 string
-
-//go:embed schema_v16.sql
-var schemaV16 string
-
-//go:embed schema_v17.sql
-var schemaV17 string
-
-//go:embed schema_v18.sql
-var schemaV18 string
-
 type Store struct {
 	KnowledgeEnabled bool
 	DB               *sql.DB
@@ -148,81 +100,23 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > CurrentSchema {
+	if version != 0 && version != CurrentSchema {
 		db.Close()
-		return nil, errors.New("database schema is newer than this application")
+		return nil, fmt.Errorf("database schema %d is not supported by this build (expects %d); use the import tool to bring data over", version, CurrentSchema)
 	}
-	if version > 0 && version < CurrentSchema {
-		if err = backupBeforeMigration(db, path, version); err != nil {
+	if version == 0 {
+		tx, e := db.Begin()
+		if e == nil {
+			if _, e = tx.Exec(schema); e == nil {
+				e = tx.Commit()
+			} else {
+				tx.Rollback()
+			}
+		}
+		if e != nil {
 			db.Close()
-			return nil, err
+			return nil, e
 		}
-	}
-	tx, err := db.Begin()
-	if err == nil {
-		if version == 0 {
-			_, err = tx.Exec(schema)
-		}
-		if err == nil && version < 2 {
-			_, err = tx.Exec(schemaV2)
-		}
-		if err == nil && version < 3 {
-			err = migrateFiles(tx, Files{Root: filepath.Dir(path)})
-		}
-		if err == nil && version < 4 {
-			_, err = tx.Exec(schemaV4)
-		}
-		if err == nil && version < 5 {
-			_, err = tx.Exec(schemaV5)
-		}
-		if err == nil && version < 6 {
-			_, err = tx.Exec(schemaV6)
-		}
-		if err == nil && version < 7 {
-			_, err = tx.Exec(schemaV7)
-		}
-		if err == nil && version < 8 {
-			_, err = tx.Exec(schemaV8)
-		}
-		if err == nil && version < 9 {
-			_, err = tx.Exec(schemaV9)
-		}
-		if err == nil && version < 10 {
-			_, err = tx.Exec(schemaV10)
-		}
-		if err == nil && version < 11 {
-			_, err = tx.Exec(schemaV11)
-		}
-		if err == nil && version < 12 {
-			_, err = tx.Exec(schemaV12)
-		}
-		if err == nil && version < 13 {
-			_, err = tx.Exec(schemaV13)
-		}
-		if err == nil && version < 14 {
-			_, err = tx.Exec(schemaV14)
-		}
-		if err == nil && version < 15 {
-			_, err = tx.Exec(schemaV15)
-		}
-		if err == nil && version < 16 {
-			_, err = tx.Exec(schemaV16)
-		}
-		if err == nil && version < 17 {
-			_, err = tx.Exec(schemaV17)
-		}
-		if err == nil && version < 18 {
-			_, err = tx.Exec(schemaV18)
-		}
-		if err == nil {
-			err = tx.Commit()
-		} else {
-			tx.Rollback()
-		}
-	}
-	if err != nil {
-		db.Close()
-		return nil, err
 	}
 	return &Store{DB: db, Files: Files{Root: filepath.Dir(path)}, Rules: RuleSet{Threshold: 0.8, Rules: []FilterRule{}}}, nil
 }
