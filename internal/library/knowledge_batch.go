@@ -187,7 +187,7 @@ func (s *Store) QueueKnowledgeBatch(token string, limit int, includeRetry bool) 
 	if result.Rows == nil {
 		result.Rows = []KnowledgeBatchRow{}
 	}
-	_, err = tx.Exec("INSERT INTO knowledge_batches(request_token,batch_limit,include_retry,created_at,result_json) VALUES(?,?,?,?,?)", token, limit, includeRetry, nowUTC(), jsonString(result))
+	_, err = tx.Exec("INSERT INTO knowledge_batches(request_token,batch_limit,include_retry,result_json) VALUES(?,?,?,?)", token, limit, includeRetry, jsonString(result))
 	if err != nil {
 		return result, err
 	}

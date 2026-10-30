@@ -144,7 +144,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if digest != nil {
-				meta := map[string]any{"model": digest.ActualModel, "provider": digest.Provider, "prompt_version": digest.PromptVersion, "created_at": digest.CreatedAt}
+				meta := map[string]any{"model": digest.ActualModel, "provider": digest.Provider, "prompt_version": digest.PromptVersion}
 				if digest.Prediction != nil {
 					payload["confidence"] = digest.Prediction.Probability
 					meta["prediction"] = map[string]any{"probability": digest.Prediction.Probability, "reason": digest.Prediction.Reason}
@@ -218,7 +218,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		if knowledge == nil {
 			payload["knowledge"] = nil
 		} else {
-			payload["knowledge"] = map[string]any{"id": knowledge.ID, "run_id": knowledge.RunID, "item_id": knowledge.ItemID, "category": knowledge.Category, "tags": knowledge.Tags, "questions": knowledge.Questions, "author": "model", "model": knowledge.Model, "prompt_version": knowledge.PromptVersion, "created_at": knowledge.CreatedAt, "file_error": knowledge.FileError}
+			payload["knowledge"] = map[string]any{"id": knowledge.ID, "run_id": knowledge.RunID, "item_id": knowledge.ItemID, "category": knowledge.Category, "tags": knowledge.Tags, "questions": knowledge.Questions, "author": "model", "model": knowledge.Model, "prompt_version": knowledge.PromptVersion, "file_error": knowledge.FileError}
 		}
 	}
 	payload["connections"] = backlinks

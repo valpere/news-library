@@ -163,7 +163,7 @@ func (s *Store) SaveDigestCheckpoint(j Job, round, part int, inputHash string, d
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec("INSERT INTO digest_checkpoints(job_id,round,part,input_hash,markdown_path,hash,actual_model,provider,input_tokens,output_tokens,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", j.ID, round, part, inputHash, path, textHash(d.Markdown), d.ActualModel, d.Provider, d.InputTokens, d.OutputTokens, nowUTC())
+	_, err = tx.Exec("INSERT INTO digest_checkpoints(job_id,round,part,input_hash,markdown_path,hash,actual_model,provider,input_tokens,output_tokens) VALUES(?,?,?,?,?,?,?,?,?,?)", j.ID, round, part, inputHash, path, textHash(d.Markdown), d.ActualModel, d.Provider, d.InputTokens, d.OutputTokens)
 	if err != nil {
 		return err
 	}

@@ -88,3 +88,22 @@ func TestRetryDigestRefusesWhenDigestExists(t *testing.T) {
 		t.Fatal("job queued", n)
 	}
 }
+
+func TestInformationalDatesAreGoneFromTheSchema(t *testing.T) {
+	s := testStore(t)
+	for table, column := range map[string]string{
+		"digests": "created_at", "digest_checkpoints": "created_at", "article_knowledge": "created_at",
+		"knowledge_runs": "created_at", "knowledge_failures": "recorded_at", "knowledge_batches": "created_at",
+	} {
+		var n int
+		if err := s.DB.QueryRow("SELECT count(*) FROM pragma_table_info(?) WHERE name=?", table, column).Scan(&n); err != nil || n != 0 {
+			t.Fatal(table, column, n, err)
+		}
+	}
+	for table, column := range map[string]string{"items": "added_at", "texts": "retrieved_at"} {
+		var n int
+		if err := s.DB.QueryRow("SELECT count(*) FROM pragma_table_info(?) WHERE name=?", table, column).Scan(&n); err != nil || n != 1 {
+			t.Fatal("kept date missing", table, column)
+		}
+	}
+}
