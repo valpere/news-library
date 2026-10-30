@@ -118,7 +118,7 @@ func TestBatchDigestRetrySkipsChangedAndMissingSources(t *testing.T) {
 	stale := a
 	stale.JobID++
 	var path string
-	if err := s.DB.QueryRow("SELECT text_path FROM source_versions WHERE id=?", b.SnapshotID).Scan(&path); err != nil {
+	if err := s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", b.SnapshotID).Scan(&path); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(filepath.Join(s.Files.Root, path)); err != nil {
@@ -238,15 +238,11 @@ func TestBatchDigestRetryPaginationAndExistingDigestProtection(t *testing.T) {
 			t.Fatal(e)
 		}
 		id, _ := r.LastInsertId()
-		r, e = tx.Exec(`INSERT INTO source_versions(item_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning) SELECT ?,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning FROM source_versions WHERE id=?`, id, seed.SnapshotID)
+		_, e = tx.Exec(`INSERT INTO texts(item_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning) SELECT ?,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning FROM texts WHERE item_id=?`, id, seed.SnapshotID)
 		if e != nil {
 			t.Fatal(e)
 		}
-		sid, _ := r.LastInsertId()
-		if _, e = tx.Exec("UPDATE items SET selected_snapshot=? WHERE id=?", sid, id); e != nil {
-			t.Fatal(e)
-		}
-		if _, e = tx.Exec("INSERT INTO jobs(item_id,snapshot_id,stage,state,config_version,error) VALUES(?,?,'digest','failed',?,'legacy unknown')", id, sid, s.DigestConfig.Version()); e != nil {
+		if _, e = tx.Exec("INSERT INTO jobs(item_id,stage,state,config_version,error) VALUES(?,'digest','failed',?,'legacy unknown')", id, s.DigestConfig.Version()); e != nil {
 			t.Fatal(e)
 		}
 	}

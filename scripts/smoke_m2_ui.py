@@ -73,15 +73,12 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
             page.get_by_text('Якість дайджесту',exact=True).click()
             page.locator('select[name=quality]').select_option('inaccurate')
             page.locator('textarea[name=note]').fill('Fixture feedback: useful source, flawed digest')
-            first_digest = page.locator('input[name=digest]').first.input_value()
             page.get_by_role('button',name='Зберегти відгук',exact=True).click()
             assert 'корисність: Низька' in page.locator('body').inner_text()
             assert Gateway.calls == 1
             page.get_by_role('button',name='Перегенерувати дайджест',exact=True).click()
             page.get_by_text('Оновлюється дайджест.',exact=False).wait_for()
             page.locator('#processing[data-pending="false"]').wait_for(state='attached',timeout=15000)
-            next_digest = page.locator('input[name=digest]').first.input_value()
-            assert next_digest != first_digest
             assert Gateway.calls == 2
             assert 'Fixture feedback' not in page.locator('body').inner_text()
             page.screenshot(path=str(root/'tmp/smoke-m2.png'),full_page=True)

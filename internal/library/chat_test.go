@@ -479,7 +479,7 @@ func TestChatMissingPrimaryFileDoesNotOfferRating(t *testing.T) {
 	id := add(t, s, "https://example.com/missing-preview")
 	manual(t, s, id, "Lost fixture source")
 	var path string
-	s.DB.QueryRow("SELECT text_path FROM source_versions WHERE item_id=?", id).Scan(&path)
+	s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", id).Scan(&path)
 	if e := os.Remove(filepath.Join(s.Files.Root, path)); e != nil {
 		t.Fatal(e)
 	}

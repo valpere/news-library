@@ -150,7 +150,7 @@ func TestKnowledgeBatchValidationAndMissingFiles(t *testing.T) {
 		t.Fatal(queued)
 	}
 	var path string
-	s.DB.QueryRow("SELECT text_path FROM source_versions WHERE item_id=1").Scan(&path)
+	s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=1").Scan(&path)
 	if err := os.Remove(filepath.Join(s.Files.Root, path)); err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestKnowledgeBatchMissingFirstFileDoesNotStarveNext(t *testing.T) {
 	}
 	s.KnowledgeEnabled = true
 	var path string
-	s.DB.QueryRow("SELECT text_path FROM source_versions WHERE item_id=1").Scan(&path)
+	s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=1").Scan(&path)
 	if err := os.Remove(filepath.Join(s.Files.Root, path)); err != nil {
 		t.Fatal(err)
 	}

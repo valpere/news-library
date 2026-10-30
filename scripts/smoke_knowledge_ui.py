@@ -84,7 +84,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='news-library-knowledge-s
             with page.expect_download() as info:
                 page.get_by_role('link',name='Markdown із метаданими',exact=True).click()
             exported = Path(info.value.path()).read_text()
-            assert 'aliases:' in exported and 'author: model' in exported and 'digest_id:' in exported
+            assert 'aliases:' in exported and 'author: model' in exported
             page.goto(f'{origin}/?q=Як%20відновити%20чергу%20без%20втрат?')
             assert page.locator('article a[href^="/items/"]').count() == 2
             page.screenshot(path=str(root/'tmp/smoke-knowledge.png'),full_page=True)

@@ -43,7 +43,7 @@ func TestMarkJunkRatesZeroAndMovesToTrash(t *testing.T) {
 		}
 	}
 	var texts int
-	s.DB.QueryRow("SELECT count(*) FROM source_versions WHERE item_id=?", id).Scan(&texts)
+	s.DB.QueryRow("SELECT count(*) FROM texts WHERE item_id=?", id).Scan(&texts)
 	if texts != 1 {
 		t.Fatal("source history must be kept")
 	}

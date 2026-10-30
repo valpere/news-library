@@ -44,11 +44,8 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 		t.Fatal(e)
 	}
 	next, _ := s.DigestForSnapshot(sid)
-	if next.ID == d.ID {
-		t.Fatal("old artifact overwritten")
-	}
-	if _, e := s.Digest(d.ID, id); e == nil {
-		t.Fatal("replaced digest kept")
+	if next == nil || !strings.Contains(next.Markdown, "Нова версія.") {
+		t.Fatal("new digest missing")
 	}
 	if history, e := s.FeedbackHistory(id, d.ID); e != nil || len(history) != 0 {
 		t.Fatal("feedback of the replaced digest kept", history, e)

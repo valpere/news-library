@@ -11,7 +11,7 @@ root=Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
 def start(data):
     process=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',str(data),
-        '-bind','127.0.0.1:0','-no-worker','-no-digests','-embeddings=false','-telegram=false'],
+        '-bind','127.0.0.1:0','-no-worker','-no-digests','-embeddings=false'],
         stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     line=process.stdout.readline().strip()
     assert line.startswith('news-library: http://'),(line,process.stderr.read())

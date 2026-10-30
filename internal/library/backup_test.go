@@ -115,7 +115,7 @@ func TestBackupRejectsCorruptionSymlinksAndOverwrite(t *testing.T) {
 	item, _ := s.Item(id)
 	source, _ := s.Snapshot(item.Selected.Int64)
 	var sourcePath string
-	s.DB.QueryRow("SELECT text_path FROM source_versions WHERE id=?", source.ID).Scan(&sourcePath)
+	s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", source.ID).Scan(&sourcePath)
 	os.Remove(filepath.Join(s.Files.Root, sourcePath))
 	outside := filepath.Join(root, "outside")
 	os.WriteFile(outside, []byte(source.Text), 0600)
@@ -145,45 +145,6 @@ func TestBackupRejectsCorruptionSymlinksAndOverwrite(t *testing.T) {
 	if _, err := Backup(context.Background(), s.Files.Root, filepath.Join(root, "symlink-shard")); err == nil {
 		t.Fatal("followed shard directory symlink")
 	}
-}
-
-func mixedLayoutStore(t *testing.T) (*Store, int64, int64) {
-	t.Helper()
-	s := backupStore(t)
-	enableDigests(t, s)
-	old := add(t, s, "https://example.com/flat")
-	manual(t, s, old, "historical flat source")
-	completeFixtureDigest(t, s)
-	// Reproduce a pre-sharding store without depending on the new writer.
-	for _, ref := range []struct{ table, column, kind, extension, trigger string }{
-		{"source_versions", "text_path", "texts", ".txt", "immutable_snapshot_update"},
-		{"generated_artifacts", "markdown_path", "digests", ".md", "immutable_artifact_update"},
-	} {
-		var path, hash, triggerSQL string
-		if err := s.DB.QueryRow("SELECT "+ref.column+",hash FROM "+ref.table+" WHERE item_id=?", old).Scan(&path, &hash); err != nil {
-			t.Fatal(err)
-		}
-		flat := filepath.Join(ref.kind, hash+ref.extension)
-		if err := os.Rename(filepath.Join(s.Files.Root, path), filepath.Join(s.Files.Root, flat)); err != nil {
-			t.Fatal(err)
-		}
-		if err := s.DB.QueryRow("SELECT sql FROM sqlite_master WHERE name=?", ref.trigger).Scan(&triggerSQL); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := s.DB.Exec("DROP TRIGGER " + ref.trigger); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := s.DB.Exec("UPDATE "+ref.table+" SET "+ref.column+"=? WHERE item_id=?", flat, old); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := s.DB.Exec(triggerSQL); err != nil {
-			t.Fatal(err)
-		}
-	}
-	fresh := add(t, s, "https://example.com/sharded")
-	manual(t, s, fresh, "new sharded source")
-	completeFixtureDigest(t, s)
-	return s, old, fresh
 }
 
 // A *_path column the inventory forgets would silently drop files from backups.

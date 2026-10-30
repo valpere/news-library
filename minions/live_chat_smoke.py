@@ -210,7 +210,7 @@ def main():
                 check(state['Filters']['Usefulness'] == '3' and db.execute('SELECT count(*) FROM items WHERE rating IS NOT NULL').fetchone()[0] == ratings, 'search score became a human rating')
                 state, _ = send('https://example.invalid/new-a https://example.invalid/new-b')
                 check(report['cases'][-1]['calls'] == 0, 'bare URL batch called the planner')
-                check(db.execute('SELECT count(*) FROM generated_artifacts').fetchone()[0] == 0, 'paused fixture generated a digest')
+                check(db.execute('SELECT count(*) FROM digests').fetchone()[0] == 0, 'paused fixture generated a digest')
             actual = {call.get('model') for call in recorder.calls}
             check(actual and all(model and model.endswith(('-cloud', ':cloud')) for model in actual), 'unexpected model or local generation')
             check(all(call.get('remote_model') and urllib.parse.urlsplit(call.get('remote_host', '')).hostname == 'ollama.com' for call in recorder.calls), 'cloud identity not verified')

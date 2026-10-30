@@ -4,7 +4,7 @@ CREATE TABLE items (
  id INTEGER PRIMARY KEY, original_url TEXT NOT NULL, canonical_url TEXT NOT NULL UNIQUE,
  title TEXT NOT NULL DEFAULT '', added_at TEXT NOT NULL,
  is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0,1)),
- state TEXT NOT NULL DEFAULT 'queued', error TEXT NOT NULL DEFAULT '', selected_snapshot INTEGER,
+ state TEXT NOT NULL DEFAULT 'queued', error TEXT NOT NULL DEFAULT '',
  rating INTEGER CHECK(rating BETWEEN 0 AND 6), rated_at TEXT CHECK(rated_at IS NULL OR rating IS NOT NULL),
  filter_state TEXT NOT NULL DEFAULT 'not_checked' CHECK(filter_state IN ('not_checked','passed','rejected','overridden')));
 CREATE TABLE source_aliases (
@@ -15,40 +15,40 @@ CREATE TABLE jobs (
  state TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0,
  next_attempt INTEGER NOT NULL DEFAULT 0, lease_until INTEGER NOT NULL DEFAULT 0,
  token TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT ''
-, stage TEXT NOT NULL DEFAULT 'fetch' CHECK(stage IN ('fetch','digest')), snapshot_id INTEGER REFERENCES source_versions(id), config_version TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', prompt_version TEXT NOT NULL DEFAULT '', input_limit INTEGER NOT NULL DEFAULT 0, refresh INTEGER NOT NULL DEFAULT 0, filter_override INTEGER NOT NULL DEFAULT 0 CHECK(filter_override IN (0,1)), interests TEXT NOT NULL DEFAULT '', chunk_limit INTEGER NOT NULL DEFAULT 0, chunk_max_parts INTEGER NOT NULL DEFAULT 0);
-CREATE TABLE source_versions (
- id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
- job_id INTEGER UNIQUE REFERENCES jobs(id), title TEXT NOT NULL,
+, stage TEXT NOT NULL DEFAULT 'fetch' CHECK(stage IN ('fetch','digest')), config_version TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', prompt_version TEXT NOT NULL DEFAULT '', input_limit INTEGER NOT NULL DEFAULT 0, refresh INTEGER NOT NULL DEFAULT 0, filter_override INTEGER NOT NULL DEFAULT 0 CHECK(filter_override IN (0,1)), interests TEXT NOT NULL DEFAULT '', chunk_limit INTEGER NOT NULL DEFAULT 0, chunk_max_parts INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE texts (
+ item_id INTEGER PRIMARY KEY REFERENCES items(id), title TEXT NOT NULL,
  hash TEXT NOT NULL, retrieved_at TEXT NOT NULL, origin TEXT NOT NULL,
- extractor TEXT NOT NULL, completeness TEXT NOT NULL, warning TEXT NOT NULL
-, text_path TEXT NOT NULL DEFAULT '');
+ extractor TEXT NOT NULL, completeness TEXT NOT NULL, warning TEXT NOT NULL,
+ text_path TEXT NOT NULL
+);
 CREATE TABLE item_tags (
  item_id INTEGER NOT NULL REFERENCES items(id), tag TEXT NOT NULL, origin TEXT NOT NULL DEFAULT 'human',
  PRIMARY KEY(item_id,tag,origin)
 );
-CREATE TABLE generated_artifacts (
- id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
- snapshot_id INTEGER NOT NULL REFERENCES source_versions(id), job_id INTEGER NOT NULL UNIQUE REFERENCES jobs(id),
+CREATE TABLE digests (
+ item_id INTEGER PRIMARY KEY REFERENCES items(id), job_id INTEGER REFERENCES jobs(id),
  model TEXT NOT NULL, actual_model TEXT NOT NULL, provider TEXT NOT NULL,
  prompt_version TEXT NOT NULL, created_at TEXT NOT NULL, input_tokens INTEGER NOT NULL DEFAULT 0,
- output_tokens INTEGER NOT NULL DEFAULT 0
-, markdown_path TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL DEFAULT '', chunk_count INTEGER NOT NULL DEFAULT 1);
+ output_tokens INTEGER NOT NULL DEFAULT 0,
+ markdown_path TEXT NOT NULL, hash TEXT NOT NULL, chunk_count INTEGER NOT NULL DEFAULT 1
+);
 CREATE VIRTUAL TABLE item_fts USING fts5(title,text,url,content='',contentless_delete=1,tokenize='unicode61');
 CREATE TABLE cache_entries (url TEXT PRIMARY KEY,final_url TEXT NOT NULL,content_type TEXT NOT NULL,body_path TEXT NOT NULL,hash TEXT NOT NULL,fetched_at TEXT NOT NULL,expires_at INTEGER NOT NULL,partial INTEGER NOT NULL, last_accessed INTEGER NOT NULL DEFAULT 0, response_headers TEXT NOT NULL DEFAULT '{}', checked_at TEXT NOT NULL DEFAULT '');
 CREATE TABLE filter_rule_versions (version TEXT PRIMARY KEY,config TEXT NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE filter_decisions (
- id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id), snapshot_id INTEGER REFERENCES source_versions(id),
+ id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
  rules_version TEXT NOT NULL REFERENCES filter_rule_versions(version), stage TEXT NOT NULL CHECK(stage IN ('url','source')),
  result TEXT NOT NULL CHECK(result IN ('passed','rejected','overridden')), probability REAL NOT NULL CHECK(probability BETWEEN 0 AND 1),
  threshold REAL NOT NULL CHECK(threshold BETWEEN 0 AND 1), contributions TEXT NOT NULL, created_at TEXT NOT NULL,
  override_of INTEGER REFERENCES filter_decisions(id)
 );
 CREATE TABLE digest_feedback (
- id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id), digest_id INTEGER NOT NULL REFERENCES generated_artifacts(id),
+ id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
  quality TEXT NOT NULL CHECK(quality IN ('good','inaccurate','incomplete','unclear')), note TEXT NOT NULL, recorded_at TEXT NOT NULL
 );
 CREATE TABLE interest_predictions (
- digest_id INTEGER PRIMARY KEY REFERENCES generated_artifacts(id), probability REAL NOT NULL CHECK(probability BETWEEN 0 AND 1),
+ item_id INTEGER PRIMARY KEY REFERENCES digests(item_id), probability REAL NOT NULL CHECK(probability BETWEEN 0 AND 1),
  reason TEXT NOT NULL, profile TEXT NOT NULL, profile_hash TEXT NOT NULL
 );
 CREATE TABLE digest_checkpoints (
@@ -58,20 +58,20 @@ CREATE TABLE digest_checkpoints (
  PRIMARY KEY(job_id,round,part)
 );
 CREATE TABLE embedding_runs (
- snapshot_id INTEGER NOT NULL REFERENCES source_versions(id), version TEXT NOT NULL,
+ item_id INTEGER NOT NULL REFERENCES texts(item_id), version TEXT NOT NULL,
  model_revision TEXT NOT NULL, chunk_bytes INTEGER NOT NULL, dimensions INTEGER NOT NULL,
  state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','running','retry_wait','done','failed','cancelled')),
  next_part INTEGER NOT NULL DEFAULT 0, total_parts INTEGER NOT NULL DEFAULT 0,
  attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL DEFAULT 0,
  token TEXT NOT NULL DEFAULT '', lease_until INTEGER NOT NULL DEFAULT 0,
  error TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
- PRIMARY KEY(snapshot_id,version)
+ PRIMARY KEY(item_id,version)
 );
 CREATE TABLE embedding_chunks (
- snapshot_id INTEGER NOT NULL, version TEXT NOT NULL, part INTEGER NOT NULL,
+ item_id INTEGER NOT NULL, version TEXT NOT NULL, part INTEGER NOT NULL,
  start_byte INTEGER NOT NULL, end_byte INTEGER NOT NULL, vector TEXT NOT NULL,
- PRIMARY KEY(snapshot_id,version,part),
- FOREIGN KEY(snapshot_id,version) REFERENCES embedding_runs(snapshot_id,version) ON DELETE CASCADE
+ PRIMARY KEY(item_id,version,part),
+ FOREIGN KEY(item_id,version) REFERENCES embedding_runs(item_id,version) ON DELETE CASCADE
 );
 CREATE TABLE connection_notes (
  id INTEGER PRIMARY KEY, stable_id TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL
@@ -85,8 +85,7 @@ CREATE TABLE connection_versions (
 );
 CREATE TABLE connection_members (
  version_id INTEGER NOT NULL REFERENCES connection_versions(id),
- item_id INTEGER NOT NULL REFERENCES items(id), snapshot_id INTEGER NOT NULL REFERENCES source_versions(id),
- digest_id INTEGER REFERENCES generated_artifacts(id), role TEXT NOT NULL,
+ item_id INTEGER NOT NULL REFERENCES items(id), role TEXT NOT NULL,
  PRIMARY KEY(version_id,item_id)
 );
 CREATE TABLE job_failures (
@@ -97,17 +96,15 @@ CREATE TABLE job_failures (
 );
 CREATE TABLE knowledge_runs (
  id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
- snapshot_id INTEGER NOT NULL REFERENCES source_versions(id), digest_id INTEGER NOT NULL REFERENCES generated_artifacts(id),
  model TEXT NOT NULL, prompt_version TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
  state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','running','retry_wait','done','failed','cancelled')),
  attempts INTEGER NOT NULL DEFAULT 0, token TEXT NOT NULL DEFAULT '', lease_until INTEGER NOT NULL DEFAULT 0,
  next_attempt INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '',
- linked_count INTEGER NOT NULL DEFAULT 0, UNIQUE(digest_id,prompt_version,model)
+ linked_count INTEGER NOT NULL DEFAULT 0, UNIQUE(item_id,prompt_version,model)
 );
 CREATE TABLE article_knowledge (
  id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL UNIQUE REFERENCES knowledge_runs(id),
- item_id INTEGER NOT NULL REFERENCES items(id), snapshot_id INTEGER NOT NULL REFERENCES source_versions(id),
- digest_id INTEGER NOT NULL REFERENCES generated_artifacts(id), category TEXT NOT NULL,
+ item_id INTEGER NOT NULL REFERENCES items(id), category TEXT NOT NULL,
  tags_json TEXT NOT NULL, questions_json TEXT NOT NULL, search_text TEXT NOT NULL, markdown_path TEXT NOT NULL, hash TEXT NOT NULL,
  model TEXT NOT NULL, prompt_version TEXT NOT NULL, created_at TEXT NOT NULL
 );
@@ -148,7 +145,7 @@ CREATE TABLE search_judgments (
 );
 CREATE TABLE completeness_confirmations (
  id INTEGER PRIMARY KEY,
- snapshot_id INTEGER NOT NULL REFERENCES source_versions(id),
+ item_id INTEGER NOT NULL REFERENCES texts(item_id),
  complete INTEGER NOT NULL CHECK(complete IN (0,1)),
  note TEXT NOT NULL DEFAULT '',
  recorded_at TEXT NOT NULL
@@ -156,42 +153,22 @@ CREATE TABLE completeness_confirmations (
 CREATE VIEW active_items AS SELECT * FROM items
  WHERE NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=items.id);
 CREATE UNIQUE INDEX one_active_fetch ON jobs(item_id) WHERE stage='fetch' AND state IN ('queued','running','retry_wait');
-CREATE UNIQUE INDEX one_digest_job ON jobs(snapshot_id,config_version) WHERE stage='digest';
+CREATE UNIQUE INDEX one_digest_job ON jobs(item_id,config_version) WHERE stage='digest';
 CREATE INDEX filter_history ON filter_decisions(item_id,id DESC);
-CREATE INDEX embedding_version_state ON embedding_runs(version,state,snapshot_id);
-CREATE INDEX embedding_chunk_version ON embedding_chunks(version,snapshot_id);
+CREATE INDEX embedding_version_state ON embedding_runs(version,state,item_id);
+CREATE INDEX embedding_chunk_version ON embedding_chunks(version,item_id);
 CREATE INDEX connection_backlinks ON connection_members(item_id,version_id);
 CREATE INDEX job_failure_history ON job_failures(job_id,id DESC);
-CREATE INDEX knowledge_current ON knowledge_runs(item_id,snapshot_id,updated_at DESC,id DESC);
-CREATE INDEX article_knowledge_source ON article_knowledge(item_id,snapshot_id);
+CREATE INDEX knowledge_current ON knowledge_runs(item_id,updated_at DESC,id DESC);
 CREATE INDEX chat_history ON chat_turns(session_id,id DESC);
 CREATE INDEX search_judgments_event ON search_judgments(event_id,item_id,id);
-CREATE INDEX completeness_confirmations_snapshot ON completeness_confirmations(snapshot_id,id);
-CREATE TRIGGER artifact_source_owner BEFORE INSERT ON generated_artifacts
-WHEN NOT EXISTS(SELECT 1 FROM source_versions WHERE id=NEW.snapshot_id AND item_id=NEW.item_id)
-BEGIN SELECT RAISE(ABORT,'artifact snapshot belongs to another item'); END;
+CREATE INDEX completeness_confirmations_item ON completeness_confirmations(item_id,id);
 CREATE TRIGGER immutable_rules_update BEFORE UPDATE ON filter_rule_versions BEGIN SELECT RAISE(ABORT,'immutable rules'); END;
 CREATE TRIGGER immutable_rules_delete BEFORE DELETE ON filter_rule_versions BEGIN SELECT RAISE(ABORT,'immutable rules'); END;
-CREATE TRIGGER filter_snapshot_owner BEFORE INSERT ON filter_decisions
-WHEN NEW.snapshot_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM source_versions WHERE id=NEW.snapshot_id AND item_id=NEW.item_id)
-BEGIN SELECT RAISE(ABORT,'filter snapshot belongs to another item'); END;
-CREATE TRIGGER feedback_digest_owner BEFORE INSERT ON digest_feedback
-WHEN NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE id=NEW.digest_id AND item_id=NEW.item_id)
-BEGIN SELECT RAISE(ABORT,'feedback digest belongs to another item'); END;
-CREATE TRIGGER connection_member_owner BEFORE INSERT ON connection_members
-WHEN NOT EXISTS(SELECT 1 FROM source_versions WHERE id=NEW.snapshot_id AND item_id=NEW.item_id)
- OR (NEW.digest_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE id=NEW.digest_id AND item_id=NEW.item_id AND snapshot_id=NEW.snapshot_id))
-BEGIN SELECT RAISE(ABORT,'connection source ownership mismatch'); END;
 CREATE TRIGGER immutable_connection_version_update BEFORE UPDATE ON connection_versions BEGIN SELECT RAISE(ABORT,'immutable connection version'); END;
 CREATE TRIGGER immutable_connection_version_delete BEFORE DELETE ON connection_versions BEGIN SELECT RAISE(ABORT,'immutable connection version'); END;
 CREATE TRIGGER immutable_connection_member_update BEFORE UPDATE ON connection_members BEGIN SELECT RAISE(ABORT,'immutable connection member'); END;
 CREATE TRIGGER immutable_connection_member_delete BEFORE DELETE ON connection_members BEGIN SELECT RAISE(ABORT,'immutable connection member'); END;
-CREATE TRIGGER knowledge_run_owner BEFORE INSERT ON knowledge_runs
-WHEN NOT EXISTS(SELECT 1 FROM generated_artifacts d WHERE d.id=NEW.digest_id AND d.item_id=NEW.item_id AND d.snapshot_id=NEW.snapshot_id)
-BEGIN SELECT RAISE(ABORT,'knowledge source ownership mismatch'); END;
-CREATE TRIGGER knowledge_metadata_owner BEFORE INSERT ON article_knowledge
-WHEN NOT EXISTS(SELECT 1 FROM knowledge_runs r WHERE r.id=NEW.run_id AND r.item_id=NEW.item_id AND r.snapshot_id=NEW.snapshot_id AND r.digest_id=NEW.digest_id)
-BEGIN SELECT RAISE(ABORT,'knowledge metadata ownership mismatch'); END;
 CREATE TRIGGER immutable_knowledge_batch_update BEFORE UPDATE ON knowledge_batches BEGIN SELECT RAISE(ABORT,'immutable batch'); END;
 CREATE TRIGGER immutable_knowledge_batch_delete BEFORE DELETE ON knowledge_batches BEGIN SELECT RAISE(ABORT,'immutable batch'); END;
 CREATE TRIGGER immutable_chat_input BEFORE UPDATE ON chat_turns

@@ -146,7 +146,6 @@ func (s *Store) decideFilter(tx *sql.Tx, itemID int64, snap *Snapshot, override 
 		return false, err
 	}
 	result, stage := "passed", "url"
-	var sid any
 	if probability > s.Rules.Threshold {
 		result = "rejected"
 	}
@@ -155,10 +154,9 @@ func (s *Store) decideFilter(tx *sql.Tx, itemID int64, snap *Snapshot, override 
 	}
 	if snap != nil {
 		stage = "source"
-		sid = snap.ID
 	}
 	data, _ := json.Marshal(contributions)
-	if _, err := tx.Exec(`INSERT INTO filter_decisions(item_id,snapshot_id,rules_version,stage,result,probability,threshold,contributions,created_at) VALUES(?,?,?,?,?,?,?,?,?)`, itemID, sid, version, stage, result, probability, s.Rules.Threshold, string(data), nowUTC()); err != nil {
+	if _, err := tx.Exec(`INSERT INTO filter_decisions(item_id,rules_version,stage,result,probability,threshold,contributions,created_at) VALUES(?,?,?,?,?,?,?,?)`, itemID, version, stage, result, probability, s.Rules.Threshold, string(data), nowUTC()); err != nil {
 		return false, err
 	}
 	if _, err := tx.Exec("UPDATE items SET filter_state=? WHERE id=?", result, itemID); err != nil {
@@ -181,13 +179,13 @@ func (s *Store) processSnapshot(tx *sql.Tx, itemID, sid int64, snap Snapshot, ov
 		return err
 	}
 	if contentErr := ValidateSourceContent(snap); contentErr != nil {
-		_, err = tx.Exec("UPDATE items SET state='needs_input',error=? WHERE id=? AND selected_snapshot=?", contentErr.Error(), itemID, sid)
+		_, err = tx.Exec("UPDATE items SET state='needs_input',error=? WHERE id=?", contentErr.Error(), itemID)
 		return err
 	}
 	return s.queueDigest(tx, itemID, sid)
 }
 func (s *Store) FilterDecisions(itemID int64) ([]FilterDecision, error) {
-	rows, err := s.DB.Query("SELECT id,item_id,snapshot_id,rules_version,stage,result,probability,threshold,contributions,created_at,override_of FROM filter_decisions WHERE item_id=? ORDER BY id DESC", itemID)
+	rows, err := s.DB.Query("SELECT id,item_id,item_id,rules_version,stage,result,probability,threshold,contributions,created_at,override_of FROM filter_decisions WHERE item_id=? ORDER BY id DESC", itemID)
 	if err != nil {
 		return nil, err
 	}
@@ -214,13 +212,13 @@ func (s *Store) OverrideFilter(itemID int64) error {
 	defer tx.Rollback()
 	var sid sql.NullInt64
 	var state string
-	if err = tx.QueryRow("SELECT selected_snapshot,filter_state FROM items WHERE id=?", itemID).Scan(&sid, &state); err != nil {
+	if err = tx.QueryRow("SELECT (SELECT item_id FROM texts WHERE texts.item_id=items.id),filter_state FROM items WHERE id=?", itemID).Scan(&sid, &state); err != nil {
 		return err
 	}
 	if state != "rejected" {
 		return errors.New("матеріал уже дозволено до обробки")
 	}
-	_, err = tx.Exec(`INSERT INTO filter_decisions(item_id,snapshot_id,rules_version,stage,result,probability,threshold,contributions,created_at,override_of) SELECT item_id,snapshot_id,rules_version,stage,'overridden',probability,threshold,contributions,?,id FROM filter_decisions WHERE item_id=? ORDER BY id DESC LIMIT 1`, nowUTC(), itemID)
+	_, err = tx.Exec(`INSERT INTO filter_decisions(item_id,rules_version,stage,result,probability,threshold,contributions,created_at,override_of) SELECT item_id,rules_version,stage,'overridden',probability,threshold,contributions,?,id FROM filter_decisions WHERE item_id=? ORDER BY id DESC LIMIT 1`, nowUTC(), itemID)
 	if err != nil {
 		return err
 	}
@@ -229,7 +227,7 @@ func (s *Store) OverrideFilter(itemID int64) error {
 	}
 	if sid.Valid {
 		var artifacts int
-		if err = tx.QueryRow("SELECT count(*) FROM generated_artifacts WHERE snapshot_id=?", sid).Scan(&artifacts); err != nil {
+		if err = tx.QueryRow("SELECT count(*) FROM digests WHERE item_id=?", sid).Scan(&artifacts); err != nil {
 			return err
 		}
 		if artifacts > 0 && s.DigestConfig != nil {
@@ -238,7 +236,7 @@ func (s *Store) OverrideFilter(itemID int64) error {
 			}
 		} else {
 			if s.DigestConfig != nil {
-				if _, err = tx.Exec("UPDATE jobs SET state='queued',attempts=0,next_attempt=0,lease_until=0,error='' WHERE item_id=? AND snapshot_id=? AND stage='digest' AND config_version=? AND state IN ('failed','cancelled')", itemID, sid, s.DigestConfig.Version()); err != nil {
+				if _, err = tx.Exec("UPDATE jobs SET state='queued',attempts=0,next_attempt=0,lease_until=0,error='' WHERE item_id=? AND stage='digest' AND config_version=? AND state IN ('failed','cancelled')", itemID, s.DigestConfig.Version()); err != nil {
 					return err
 				}
 			}

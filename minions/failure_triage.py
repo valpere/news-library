@@ -22,16 +22,14 @@ ADVICE = {
 def inspect(data):
     rows = []
     with ops.database(data) as db:
-        for item in db.execute('SELECT id,state,filter_state,selected_snapshot FROM active_items ORDER BY id'):
-            iid, sid = item['id'], item['selected_snapshot']
-            source = db.execute('SELECT id FROM source_versions WHERE id=? AND item_id=?', (sid, iid)).fetchone()
-            digest = db.execute('SELECT id FROM generated_artifacts WHERE item_id=? AND snapshot_id=? ORDER BY id DESC LIMIT 1', (iid, sid)).fetchone()
-            did = digest['id'] if digest else None
-            metadata = db.execute('SELECT id FROM article_knowledge WHERE item_id=? AND snapshot_id=? AND digest_id=? ORDER BY id DESC LIMIT 1', (iid, sid, did)).fetchone()
-            analysis = db.execute("SELECT id FROM knowledge_runs WHERE item_id=? AND snapshot_id=? AND digest_id=? AND state='done' LIMIT 1", (iid, sid, did)).fetchone()
+        for item in db.execute('SELECT id,state,filter_state FROM active_items ORDER BY id'):
+            iid = item['id']
+            source = db.execute('SELECT item_id FROM texts WHERE item_id=?', (iid,)).fetchone()
+            digest = db.execute('SELECT item_id FROM digests WHERE item_id=?', (iid,)).fetchone()
+            metadata = db.execute('SELECT id FROM article_knowledge WHERE item_id=? ORDER BY id DESC LIMIT 1', (iid,)).fetchone()
+            analysis = db.execute("SELECT id FROM knowledge_runs WHERE item_id=? AND state='done' LIMIT 1", (iid,)).fetchone()
             completed = {'source': bool(source), 'digest': bool(digest), 'metadata': bool(metadata), 'analysis': bool(analysis)}
-            entry = {'item_id': iid, 'state': item['state'], 'snapshot_id': sid,
-                     'digest_id': did, 'completed': completed, 'issues': []}
+            entry = {'item_id': iid, 'state': item['state'], 'completed': completed, 'issues': []}
             rows.append(entry)
             if item['filter_state'] == 'rejected':
                 entry['excluded_by_filter'] = True
@@ -42,16 +40,12 @@ def inspect(data):
                     latest['state'] == 'failed' and item['state'] == 'failed'):
                 stage = 'fetch'
             if stage == 'knowledge':
-                run = db.execute('SELECT id,state,kind FROM knowledge_runs WHERE item_id=? AND snapshot_id=? AND digest_id=? ORDER BY id DESC LIMIT 1', (iid, sid, did)).fetchone()
+                run = db.execute('SELECT id,state,kind FROM knowledge_runs WHERE item_id=? ORDER BY id DESC LIMIT 1', (iid,)).fetchone()
                 if analysis:
                     continue
             else:
                 query = 'SELECT id,state FROM jobs WHERE item_id=? AND stage=?'
-                params = [iid, stage]
-                if stage == 'digest':
-                    query += ' AND snapshot_id=?'
-                    params.append(sid)
-                run = db.execute(query + ' ORDER BY id DESC LIMIT 1', params).fetchone()
+                run = db.execute(query + ' ORDER BY id DESC LIMIT 1', (iid, stage)).fetchone()
             if run and run['state'] in ('queued', 'running', 'retry_wait'):
                 issue = {'stage': stage, 'status': run['state'], 'action': 'Дочекатися або перевірити worker; не створювати дубль.'}
             elif stage == 'fetch' and item['state'] == 'needs_input':

@@ -62,7 +62,7 @@ func parsePredictedDigest(raw, profile string) (string, *InterestPrediction, err
 }
 func (s *Store) Prediction(digestID int64) (*InterestPrediction, error) {
 	var p InterestPrediction
-	err := s.DB.QueryRow("SELECT probability,reason,profile,profile_hash FROM interest_predictions WHERE digest_id=?", digestID).Scan(&p.Probability, &p.Reason, &p.Profile, &p.ProfileHash)
+	err := s.DB.QueryRow("SELECT probability,reason,profile,profile_hash FROM interest_predictions WHERE item_id=?", digestID).Scan(&p.Probability, &p.Reason, &p.Profile, &p.ProfileHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

@@ -118,9 +118,9 @@ func (s *Semantic) version(revision string) string {
 	return fmt.Sprintf("bge-m3:%s|utf8-bytes-v1:%d|dense:%d", revision, s.ChunkBytes, s.Dimensions)
 }
 func (s *Semantic) schedule(revision string) error {
-	_, err := s.Store.DB.Exec(`INSERT INTO embedding_runs(snapshot_id,version,model_revision,chunk_bytes,dimensions,created_at)
- SELECT i.selected_snapshot,?,?,?,?,? FROM active_items i WHERE i.selected_snapshot IS NOT NULL AND i.filter_state IN ('passed','overridden')
- AND EXISTS(SELECT 1 FROM filter_decisions d WHERE d.item_id=i.id AND d.snapshot_id=i.selected_snapshot AND d.result IN ('passed','overridden'))
+	_, err := s.Store.DB.Exec(`INSERT INTO embedding_runs(item_id,version,model_revision,chunk_bytes,dimensions,created_at)
+ SELECT i.id,?,?,?,?,? FROM active_items i WHERE EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) AND i.filter_state IN ('passed','overridden')
+ AND EXISTS(SELECT 1 FROM filter_decisions d WHERE d.item_id=i.id AND d.result IN ('passed','overridden'))
  ON CONFLICT DO NOTHING`, s.version(revision), revision, s.ChunkBytes, s.Dimensions, nowUTC())
 	return err
 }
@@ -142,12 +142,12 @@ func (s *Semantic) claim(revision string) (*embeddingRun, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','retry_wait') AND NOT EXISTS(SELECT 1 FROM active_items i WHERE i.selected_snapshot=embedding_runs.snapshot_id AND i.filter_state IN ('passed','overridden'))`)
+	_, err = tx.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE state IN ('queued','retry_wait') AND NOT EXISTS(SELECT 1 FROM active_items i WHERE i.id=embedding_runs.item_id AND i.filter_state IN ('passed','overridden'))`)
 	if err != nil {
 		return nil, err
 	}
 	var j embeddingRun
-	err = tx.QueryRow(`SELECT snapshot_id,version,model_revision,next_part,attempts,chunk_bytes,dimensions FROM embedding_runs WHERE version=? AND ((state IN ('queued','retry_wait') AND next_attempt<=?) OR (state='running' AND lease_until<=? AND attempts<3)) ORDER BY snapshot_id LIMIT 1`, s.version(revision), now, now).Scan(&j.SnapshotID, &j.Version, &j.Revision, &j.Part, &j.Attempts, &j.ChunkBytes, &j.Dimensions)
+	err = tx.QueryRow(`SELECT item_id,version,model_revision,next_part,attempts,chunk_bytes,dimensions FROM embedding_runs WHERE version=? AND ((state IN ('queued','retry_wait') AND next_attempt<=?) OR (state='running' AND lease_until<=? AND attempts<3)) ORDER BY item_id LIMIT 1`, s.version(revision), now, now).Scan(&j.SnapshotID, &j.Version, &j.Revision, &j.Part, &j.Attempts, &j.ChunkBytes, &j.Dimensions)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}
@@ -156,7 +156,7 @@ func (s *Semantic) claim(revision string) (*embeddingRun, error) {
 	}
 	j.Token = rand.Text()
 	j.Attempts++
-	_, err = tx.Exec(`UPDATE embedding_runs SET state='running',token=?,attempts=?,lease_until=? WHERE snapshot_id=? AND version=?`, j.Token, j.Attempts, time.Now().Add(s.Timeout+time.Minute).UnixMilli(), j.SnapshotID, j.Version)
+	_, err = tx.Exec(`UPDATE embedding_runs SET state='running',token=?,attempts=?,lease_until=? WHERE item_id=? AND version=?`, j.Token, j.Attempts, time.Now().Add(s.Timeout+time.Minute).UnixMilli(), j.SnapshotID, j.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (s *Semantic) claim(revision string) (*embeddingRun, error) {
 }
 func embeddingLease(tx *sql.Tx, j embeddingRun) error {
 	var n int
-	err := tx.QueryRow(`SELECT count(*) FROM embedding_runs WHERE snapshot_id=? AND version=? AND token=? AND state='running' AND lease_until>?`, j.SnapshotID, j.Version, j.Token, time.Now().UnixMilli()).Scan(&n)
+	err := tx.QueryRow(`SELECT count(*) FROM embedding_runs WHERE item_id=? AND version=? AND token=? AND state='running' AND lease_until>?`, j.SnapshotID, j.Version, j.Token, time.Now().UnixMilli()).Scan(&n)
 	if err != nil {
 		return err
 	}
@@ -183,24 +183,24 @@ func (s *Semantic) finish(j embeddingRun, parts []string, vector []float64) erro
 		return err
 	}
 	var allowed int
-	if err = tx.QueryRow(`SELECT count(*) FROM items WHERE selected_snapshot=? AND filter_state IN ('passed','overridden')`, j.SnapshotID).Scan(&allowed); err != nil {
+	if err = tx.QueryRow(`SELECT count(*) FROM items WHERE id=? AND filter_state IN ('passed','overridden')`, j.SnapshotID).Scan(&allowed); err != nil {
 		return err
 	}
 	if allowed == 0 {
-		_, err = tx.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE snapshot_id=? AND version=?`, j.SnapshotID, j.Version)
+		_, err = tx.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE item_id=? AND version=?`, j.SnapshotID, j.Version)
 	} else {
 		start := 0
 		for _, part := range parts[:j.Part] {
 			start += len(part)
 		}
 		data, _ := json.Marshal(vector)
-		_, err = tx.Exec(`INSERT INTO embedding_chunks(snapshot_id,version,part,start_byte,end_byte,vector) VALUES(?,?,?,?,?,?)`, j.SnapshotID, j.Version, j.Part, start, start+len(parts[j.Part]), string(data))
+		_, err = tx.Exec(`INSERT INTO embedding_chunks(item_id,version,part,start_byte,end_byte,vector) VALUES(?,?,?,?,?,?)`, j.SnapshotID, j.Version, j.Part, start, start+len(parts[j.Part]), string(data))
 		if err == nil {
 			state := "queued"
 			if j.Part+1 == len(parts) {
 				state = "done"
 			}
-			_, err = tx.Exec(`UPDATE embedding_runs SET state=?,next_part=?,total_parts=?,attempts=0,next_attempt=0,lease_until=0,error='' WHERE snapshot_id=? AND version=?`, state, j.Part+1, len(parts), j.SnapshotID, j.Version)
+			_, err = tx.Exec(`UPDATE embedding_runs SET state=?,next_part=?,total_parts=?,attempts=0,next_attempt=0,lease_until=0,error='' WHERE item_id=? AND version=?`, state, j.Part+1, len(parts), j.SnapshotID, j.Version)
 		}
 	}
 	if err != nil {
@@ -236,10 +236,10 @@ func (s *Semantic) Step(ctx context.Context) (bool, error) {
 	}
 	var allowed int
 	if err == nil {
-		err = s.Store.DB.QueryRow(`SELECT count(*) FROM items WHERE selected_snapshot=? AND filter_state IN ('passed','overridden')`, j.SnapshotID).Scan(&allowed)
+		err = s.Store.DB.QueryRow(`SELECT count(*) FROM items WHERE id=? AND filter_state IN ('passed','overridden')`, j.SnapshotID).Scan(&allowed)
 	}
 	if err == nil && allowed == 0 { // No inference after an already recorded rejection.
-		_, err = s.Store.DB.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE snapshot_id=? AND version=? AND token=?`, j.SnapshotID, j.Version, j.Token)
+		_, err = s.Store.DB.Exec(`UPDATE embedding_runs SET state='cancelled',lease_until=0 WHERE item_id=? AND version=? AND token=?`, j.SnapshotID, j.Version, j.Token)
 		return true, err
 	}
 	if err == nil {
@@ -260,7 +260,7 @@ func (s *Semantic) Step(ctx context.Context) (bool, error) {
 		state = "failed"
 	}
 	// Generic diagnostic avoids leaking provider data; primary state is untouched.
-	result, saveErr := s.Store.DB.Exec(`UPDATE embedding_runs SET state=?,error='embedding failed; retry or check local bge-m3',next_attempt=?,lease_until=0 WHERE snapshot_id=? AND version=? AND token=? AND state='running' AND lease_until>?`, state, time.Now().Add(10*time.Second).UnixMilli(), j.SnapshotID, j.Version, j.Token, time.Now().UnixMilli())
+	result, saveErr := s.Store.DB.Exec(`UPDATE embedding_runs SET state=?,error='embedding failed; retry or check local bge-m3',next_attempt=?,lease_until=0 WHERE item_id=? AND version=? AND token=? AND state='running' AND lease_until>?`, state, time.Now().Add(10*time.Second).UnixMilli(), j.SnapshotID, j.Version, j.Token, time.Now().UnixMilli())
 	if saveErr == nil {
 		n, e := result.RowsAffected()
 		if e != nil {
@@ -298,7 +298,7 @@ func (s *Store) RebuildEmbeddings() error {
 		return err
 	}
 	defer tx.Rollback()
-	rows, err := tx.Query("SELECT id,selected_snapshot FROM items WHERE selected_snapshot IS NOT NULL AND filter_state='not_checked'")
+	rows, err := tx.Query("SELECT id,id FROM items WHERE EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id) AND filter_state='not_checked'")
 	if err != nil {
 		return err
 	}
@@ -325,18 +325,18 @@ func (s *Store) RebuildEmbeddings() error {
 			return err
 		}
 	}
-	_, err = tx.Exec(`DELETE FROM embedding_chunks WHERE snapshot_id IN (SELECT selected_snapshot FROM items WHERE filter_state IN ('passed','overridden'))`)
+	_, err = tx.Exec(`DELETE FROM embedding_chunks WHERE item_id IN (SELECT id FROM items WHERE filter_state IN ('passed','overridden'))`)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(`UPDATE embedding_runs SET state='queued',next_part=0,total_parts=0,attempts=0,next_attempt=0,lease_until=0,token='',error='' WHERE snapshot_id IN (SELECT selected_snapshot FROM items WHERE filter_state IN ('passed','overridden'))`)
+	_, err = tx.Exec(`UPDATE embedding_runs SET state='queued',next_part=0,total_parts=0,attempts=0,next_attempt=0,lease_until=0,token='',error='' WHERE item_id IN (SELECT id FROM items WHERE filter_state IN ('passed','overridden'))`)
 	if err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 func (s *Store) EmbeddingStatus() string {
-	rows, err := s.DB.Query(`SELECT e.state,count(*) FROM embedding_runs e JOIN active_items i ON i.selected_snapshot=e.snapshot_id GROUP BY e.state ORDER BY e.state`)
+	rows, err := s.DB.Query(`SELECT e.state,count(*) FROM embedding_runs e JOIN active_items i ON i.id=e.item_id GROUP BY e.state ORDER BY e.state`)
 	if err != nil {
 		return "Стан індексації недоступний"
 	}

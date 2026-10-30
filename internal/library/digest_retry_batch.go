@@ -22,7 +22,7 @@ type DigestRetryResult struct {
 	Reason string
 }
 
-const failedDigestSelection = `SELECT i.id,i.selected_snapshot,j.id,i.title,i.original_url,j.error,j.config_version,j.token,coalesce((SELECT kind FROM job_failures WHERE job_id=j.id AND message=j.error ORDER BY id DESC LIMIT 1),'') FROM active_items i JOIN jobs j ON j.item_id=i.id AND j.snapshot_id=i.selected_snapshot AND j.stage='digest' WHERE j.id=(SELECT max(id) FROM jobs WHERE item_id=i.id AND snapshot_id=i.selected_snapshot AND stage='digest') AND j.state='failed' AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=i.selected_snapshot) AND NOT EXISTS(SELECT 1 FROM jobs WHERE snapshot_id=i.selected_snapshot AND stage='digest' AND state IN ('queued','running','retry_wait'))`
+const failedDigestSelection = `SELECT i.id,i.id,j.id,i.title,i.original_url,j.error,j.config_version,j.token,coalesce((SELECT kind FROM job_failures WHERE job_id=j.id AND message=j.error ORDER BY id DESC LIMIT 1),'') FROM active_items i JOIN jobs j ON j.item_id=i.id AND j.stage='digest' WHERE j.id=(SELECT max(id) FROM jobs WHERE item_id=i.id AND stage='digest') AND j.state='failed' AND EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=i.id) AND NOT EXISTS(SELECT 1 FROM jobs WHERE jobs.item_id=i.id AND stage='digest' AND state IN ('queued','running','retry_wait'))`
 
 func scanRetryCandidate(row interface{ Scan(...any) error }) (DigestRetryCandidate, error) {
 	var c DigestRetryCandidate
@@ -108,7 +108,7 @@ func (s *Store) retryFailedDigest(selected DigestRetryCandidate) error {
 		return errors.New("версія тексту або спроба змінилася; оновіть список")
 	}
 	var filter, path, hash string
-	if err = tx.QueryRow(`SELECT i.filter_state,v.text_path,v.hash FROM active_items i JOIN source_versions v ON v.id=i.selected_snapshot WHERE i.id=?`, selected.ItemID).Scan(&filter, &path, &hash); err != nil {
+	if err = tx.QueryRow(`SELECT i.filter_state,v.text_path,v.hash FROM active_items i JOIN texts v ON v.item_id=i.id WHERE i.id=?`, selected.ItemID).Scan(&filter, &path, &hash); err != nil {
 		return err
 	}
 	s.retryCandidatePolicy(&current, filter)

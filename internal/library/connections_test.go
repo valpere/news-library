@@ -41,10 +41,9 @@ func TestConnectionVersionsBacklinksAndHumanState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Revision != 1 || len(first.Tags) != 2 || !strings.Contains(first.Markdown, "questions:") || !strings.Contains(first.Markdown, "snapshot_id:") {
+	if first.Revision != 1 || len(first.Tags) != 2 || !strings.Contains(first.Markdown, "questions:") || !strings.Contains(first.Markdown, "item_id:") {
 		t.Fatal(first)
 	}
-	original, _ := s.Snapshot(first.Members[0].SnapshotID)
 	manual(t, s, first.Members[0].ItemID, "A newer source should not change evidence")
 	second := first
 	second.Body = "Третя стаття уточнює обмеження."
@@ -54,7 +53,7 @@ func TestConnectionVersionsBacklinksAndHumanState(t *testing.T) {
 	}
 	current, _ := s.Connection(id, 0)
 	historical, _ := s.Connection(id, first.VersionID)
-	if current.Revision != 2 || len(current.Members) != 3 || historical.Markdown != first.Markdown || current.Members[0].SnapshotID != original.ID {
+	if current.Revision != 2 || len(current.Members) != 3 || historical.Markdown != first.Markdown {
 		t.Fatal(current, historical)
 	}
 	for _, m := range current.Members {
@@ -92,23 +91,16 @@ func TestConnectionValidationOwnershipAndImmutableFiles(t *testing.T) {
 	if _, err := s.SaveConnection(bad, 0); err == nil {
 		t.Fatal("duplicate accepted")
 	}
-	item, _ := s.Item(n.Members[0].ItemID)
 	bad = n
 	bad.Members = append([]ConnectionMember{}, n.Members...)
-	bad.Members[1].SnapshotID = item.Selected.Int64
+	bad.Members[1].ItemID = 9999
 	if _, err := s.SaveConnection(bad, 0); err == nil {
-		t.Fatal("foreign source accepted")
+		t.Fatal("unknown material accepted")
 	}
 	bad = n
 	bad.Tags = []string{"bad\ntag"}
 	if _, err := s.SaveConnection(bad, 0); err == nil {
 		t.Fatal("multiline tag accepted")
-	}
-	bad = n
-	bad.Members = append([]ConnectionMember{}, n.Members...)
-	bad.Members[1].DigestID = 9999
-	if _, err := s.SaveConnection(bad, 0); err == nil {
-		t.Fatal("foreign digest accepted")
 	}
 	id, err := s.SaveConnection(n, 0)
 	if err != nil {
@@ -227,8 +219,6 @@ func TestConnectionWebDraftConflictAndReadOnlyAPI(t *testing.T) {
 	form := url.Values{"csrf": {web.CSRF}, "title": {"My draft <script>unsafe()</script>"}, "category": {"SQLite"}, "body": {"Preserve this draft <script>unsafe()</script> [link](javascript:alert(1))"}, "version": {strconv.FormatInt(first.VersionID, 10)}}
 	for _, m := range first.Members {
 		form.Add("item", strconv.FormatInt(m.ItemID, 10))
-		form.Add("source", strconv.FormatInt(m.SnapshotID, 10))
-		form.Add("digest", "0")
 		form.Add("role", m.Role)
 	}
 	path := "/connections/" + strconv.FormatInt(id, 10)

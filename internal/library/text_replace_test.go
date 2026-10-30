@@ -14,8 +14,8 @@ func TestChangedTextErasesEarlierTextAndItsDerivedData(t *testing.T) {
 	completeFixtureDigest(t, s)
 	old, _ := s.Item(id)
 	var textPath, digestPath string
-	s.DB.QueryRow("SELECT text_path FROM source_versions WHERE id=?", old.Selected.Int64).Scan(&textPath)
-	s.DB.QueryRow("SELECT markdown_path FROM generated_artifacts WHERE snapshot_id=?", old.Selected.Int64).Scan(&digestPath)
+	s.DB.QueryRow("SELECT text_path FROM texts WHERE item_id=?", old.Selected.Int64).Scan(&textPath)
+	s.DB.QueryRow("SELECT markdown_path FROM digests WHERE item_id=?", old.Selected.Int64).Scan(&digestPath)
 	if textPath == "" || digestPath == "" {
 		t.Fatal("fixture files missing")
 	}
@@ -34,13 +34,13 @@ func TestChangedTextErasesEarlierTextAndItsDerivedData(t *testing.T) {
 	if item.Score.Valid || !item.Read || item.Tags != "mine" || item.State != "enriching" {
 		t.Fatal("rating must be erased, read and tags kept, post-processing queued", item)
 	}
-	if n := count(t, s, "SELECT count(*) FROM source_versions WHERE item_id=?", id); n != 1 {
+	if n := count(t, s, "SELECT count(*) FROM texts WHERE item_id=?", id); n != 1 {
 		t.Fatal("source rows", n)
 	}
-	if n := count(t, s, "SELECT count(*) FROM generated_artifacts WHERE item_id=?", id); n != 0 {
+	if n := count(t, s, "SELECT count(*) FROM digests WHERE item_id=?", id); n != 0 {
 		t.Fatal("digest of the replaced text kept", n)
 	}
-	if n := count(t, s, "SELECT count(*) FROM completeness_confirmations WHERE snapshot_id=?", old.Selected.Int64); n != 0 {
+	if n := count(t, s, "SELECT count(*) FROM completeness_confirmations WHERE item_id=?", old.Selected.Int64); n != 0 {
 		t.Fatal("confirmation kept", n)
 	}
 	if _, err := os.Stat(filepath.Join(s.Files.Root, textPath)); !os.IsNotExist(err) {
@@ -66,7 +66,7 @@ func TestSameTextChangesNothing(t *testing.T) {
 	if after.Selected != before.Selected || !after.Score.Valid || after.Score.Int64 != 5 || after.State != "ready" {
 		t.Fatal("identical text invalidated something", before, after)
 	}
-	if n := count(t, s, "SELECT count(*) FROM source_versions WHERE item_id=?", id); n != 1 {
+	if n := count(t, s, "SELECT count(*) FROM texts WHERE item_id=?", id); n != 1 {
 		t.Fatal("identical text added a row", n)
 	}
 }
@@ -113,7 +113,7 @@ func TestRegeneratedDigestReplacesTheOldOneAndItsFile(t *testing.T) {
 	manual(t, s, id, "Text that gets two digests in a row.")
 	completeFixtureDigest(t, s)
 	var oldPath string
-	s.DB.QueryRow("SELECT markdown_path FROM generated_artifacts WHERE item_id=?", id).Scan(&oldPath)
+	s.DB.QueryRow("SELECT markdown_path FROM digests WHERE item_id=?", id).Scan(&oldPath)
 	if err := s.RegenerateDigest(id); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestRegeneratedDigestReplacesTheOldOneAndItsFile(t *testing.T) {
 	if err := s.CompleteDigest(j, Digest{Markdown: md, ActualModel: j.Model, Provider: "fixture"}); err != nil {
 		t.Fatal(err)
 	}
-	if n := count(t, s, "SELECT count(*) FROM generated_artifacts WHERE item_id=?", id); n != 1 {
+	if n := count(t, s, "SELECT count(*) FROM digests WHERE item_id=?", id); n != 1 {
 		t.Fatal("digest rows", n)
 	}
 	if _, err := os.Stat(filepath.Join(s.Files.Root, oldPath)); !os.IsNotExist(err) {

@@ -134,8 +134,6 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, "source unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		payload["source_id"] = snapshot.ID
-		payload["selected_source_id"] = item.Selected.Int64
 		payload["confidence"] = nil
 		payload["text_kind"] = "source"
 		var digest *Digest
@@ -146,7 +144,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if digest != nil {
-				meta := map[string]any{"id": digest.ID, "source_id": digest.SnapshotID, "model": digest.ActualModel, "provider": digest.Provider, "prompt_version": digest.PromptVersion, "created_at": digest.CreatedAt}
+				meta := map[string]any{"model": digest.ActualModel, "provider": digest.Provider, "prompt_version": digest.PromptVersion, "created_at": digest.CreatedAt}
 				if digest.Prediction != nil {
 					payload["confidence"] = digest.Prediction.Probability
 					meta["prediction"] = map[string]any{"probability": digest.Prediction.Probability, "reason": digest.Prediction.Reason}
@@ -182,7 +180,6 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 			text = text[start:end]
 		} else if kind == "context" {
 			if digest != nil {
-				payload["digest_id"] = digest.ID
 				text = digest.Markdown
 				payload["context_kind"] = "digest"
 				payload["text_kind"] = "digest"
@@ -221,27 +218,24 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		if knowledge == nil {
 			payload["knowledge"] = nil
 		} else {
-			payload["knowledge"] = map[string]any{"id": knowledge.ID, "run_id": knowledge.RunID, "item_id": knowledge.ItemID, "snapshot_id": knowledge.SnapshotID, "digest_id": knowledge.DigestID, "category": knowledge.Category, "tags": knowledge.Tags, "questions": knowledge.Questions, "author": "model", "model": knowledge.Model, "prompt_version": knowledge.PromptVersion, "created_at": knowledge.CreatedAt, "file_error": knowledge.FileError}
+			payload["knowledge"] = map[string]any{"id": knowledge.ID, "run_id": knowledge.RunID, "item_id": knowledge.ItemID, "category": knowledge.Category, "tags": knowledge.Tags, "questions": knowledge.Questions, "author": "model", "model": knowledge.Model, "prompt_version": knowledge.PromptVersion, "created_at": knowledge.CreatedAt, "file_error": knowledge.FileError}
 		}
 	}
 	payload["connections"] = backlinks
 	jsonResponse(payload)
 }
 func readItem(item Item) map[string]any {
-	var score, ratedAt, source, confidence any
+	var score, ratedAt, confidence any
 	if item.Score.Valid {
 		score = item.Score.Int64
 	}
 	if item.RatedAt.Valid {
 		ratedAt = item.RatedAt.String
 	}
-	if item.Selected.Valid {
-		source = item.Selected.Int64
-	}
 	if item.Confidence.Valid {
 		confidence = item.Confidence.Float64
 	}
-	return map[string]any{"id": item.ID, "url": item.URL, "title": item.Title, "read": item.Read, "rating": score, "rated_at": ratedAt, "rating_label": ratingLabel(item.Score), "confidence": confidence, "filter_state": item.FilterState, "state": item.State, "source_id": source, "tags": item.Tags, "snippet": item.MatchSnippet, "snippet_source": item.MatchSnapshot, "start_byte": item.MatchStart, "end_byte": item.MatchEnd}
+	return map[string]any{"id": item.ID, "url": item.URL, "title": item.Title, "read": item.Read, "rating": score, "rated_at": ratedAt, "rating_label": ratingLabel(item.Score), "confidence": confidence, "filter_state": item.FilterState, "state": item.State, "tags": item.Tags, "snippet": item.MatchSnippet, "start_byte": item.MatchStart, "end_byte": item.MatchEnd}
 }
 func (w *Web) search(r *http.Request, f Filters, mode string) (SearchResult, error) {
 	semantic := w.Semantic

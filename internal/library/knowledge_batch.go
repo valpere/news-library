@@ -33,7 +33,7 @@ type knowledgeBatchCandidate struct {
 	Failures                               int
 }
 
-const knowledgeBatchSelection = `SELECT i.id,i.selected_snapshot,d.id,i.title,i.original_url,coalesce(r.id,0),coalesce(r.state,''),coalesce(r.kind,''),coalesce(r.model,''),coalesce(r.prompt_version,''),EXISTS(SELECT 1 FROM article_knowledge k WHERE k.run_id=r.id),EXISTS(SELECT 1 FROM knowledge_runs k WHERE k.digest_id=d.id AND k.state='done'),EXISTS(SELECT 1 FROM knowledge_runs k WHERE k.item_id=i.id AND k.state IN ('queued','running','retry_wait')),coalesce(r.error,''),(SELECT count(*) FROM knowledge_failures f WHERE f.run_id=r.id) FROM active_items i JOIN generated_artifacts d ON d.id=(SELECT max(id) FROM generated_artifacts WHERE snapshot_id=i.selected_snapshot) LEFT JOIN knowledge_runs r ON r.id=(SELECT id FROM knowledge_runs WHERE digest_id=d.id ORDER BY updated_at DESC,id DESC LIMIT 1) WHERE i.filter_state IN ('passed','overridden') ORDER BY i.id`
+const knowledgeBatchSelection = `SELECT i.id,i.id,i.id,i.title,i.original_url,coalesce(r.id,0),coalesce(r.state,''),coalesce(r.kind,''),coalesce(r.model,''),coalesce(r.prompt_version,''),EXISTS(SELECT 1 FROM article_knowledge k WHERE k.run_id=r.id),EXISTS(SELECT 1 FROM knowledge_runs k WHERE k.item_id=i.id AND k.state='done'),EXISTS(SELECT 1 FROM knowledge_runs k WHERE k.item_id=i.id AND k.state IN ('queued','running','retry_wait')),coalesce(r.error,''),(SELECT count(*) FROM knowledge_failures f WHERE f.run_id=r.id) FROM active_items i JOIN digests d ON d.item_id=i.id LEFT JOIN knowledge_runs r ON r.id=(SELECT id FROM knowledge_runs WHERE item_id=i.id ORDER BY updated_at DESC,id DESC LIMIT 1) WHERE i.filter_state IN ('passed','overridden') ORDER BY i.id`
 
 func knowledgeBatchCandidates(q interface {
 	Query(string, ...any) (*sql.Rows, error)
@@ -148,7 +148,7 @@ func (s *Store) QueueKnowledgeBatch(token string, limit int, includeRetry bool) 
 		considered++
 		row := KnowledgeBatchRow{ItemID: c.ItemID}
 		var sourcePath, sourceHash, digestPath, digestHash string
-		err = tx.QueryRow(`SELECT v.text_path,v.hash,d.markdown_path,d.hash FROM source_versions v JOIN generated_artifacts d ON d.snapshot_id=v.id WHERE v.id=? AND d.id=?`, c.SnapshotID, c.DigestID).Scan(&sourcePath, &sourceHash, &digestPath, &digestHash)
+		err = tx.QueryRow(`SELECT v.text_path,v.hash,d.markdown_path,d.hash FROM texts v JOIN digests d ON d.item_id=v.item_id WHERE v.item_id=?`, c.ItemID).Scan(&sourcePath, &sourceHash, &digestPath, &digestHash)
 		if err != nil {
 			return result, err
 		}
@@ -169,7 +169,7 @@ func (s *Store) QueueKnowledgeBatch(token string, limit int, includeRetry bool) 
 			continue
 		}
 		if class == "new" {
-			if err = s.queueKnowledge(tx, c.ItemID, c.SnapshotID, c.DigestID, s.DigestConfig.Model); err != nil {
+			if err = s.queueKnowledge(tx, c.ItemID, s.DigestConfig.Model); err != nil {
 				return result, err
 			}
 			result.New++

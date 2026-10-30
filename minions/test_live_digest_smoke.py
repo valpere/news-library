@@ -16,11 +16,11 @@ class LiveResultTests(unittest.TestCase):
             with sqlite3.connect(":memory:") as db:
                 db.executescript("""
                     CREATE TABLE items(id,state,error);
-                    CREATE TABLE generated_artifacts(id,item_id,markdown_path,actual_model,provider,prompt_version);
-                    CREATE TABLE interest_predictions(digest_id,probability);
+                    CREATE TABLE digests(item_id,markdown_path,actual_model,provider,prompt_version);
+                    CREATE TABLE interest_predictions(item_id,probability);
                     INSERT INTO items VALUES(1,'ready','');
-                    INSERT INTO generated_artifacts VALUES(2,1,'digest.md','fixture:cloud','ollama-cloud','fixture-v1');
-                    INSERT INTO interest_predictions VALUES(2,0.0);
+                    INSERT INTO digests VALUES(1,'digest.md','fixture:cloud','ollama-cloud','fixture-v1');
+                    INSERT INTO interest_predictions VALUES(1,0.0);
                 """)
                 result = inspect(db, data, True)
                 self.assertEqual(result["fixture_confidence"], 0)

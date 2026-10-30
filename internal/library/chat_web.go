@@ -26,7 +26,7 @@ func (w *Web) chatPageData(r *http.Request) (pageData, error) {
 	}
 	data := pageData{Chat: session, ChatToken: rand.Text()}
 	// Facets describe the whole library, rather than inventing counts for a model's search.
-	current := `k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs kr ON kr.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY kr.updated_at DESC,a.id DESC LIMIT 1)`
+	current := `k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs kr ON kr.id=a.run_id WHERE a.item_id=i.id ORDER BY kr.updated_at DESC,a.id DESC LIMIT 1)`
 	queries := []struct {
 		sql      string
 		target   *[]ChatFacet

@@ -39,7 +39,7 @@ func TestConfirmCompletenessOverlaysWithoutChangingTheStoredText(t *testing.T) {
 		t.Fatal("the immutable text must not change")
 	}
 	var raw string
-	s.DB.QueryRow("SELECT completeness FROM source_versions WHERE id=?", before.ID).Scan(&raw)
+	s.DB.QueryRow("SELECT completeness FROM texts WHERE item_id=?", before.ID).Scan(&raw)
 	if raw != "unknown" {
 		t.Fatalf("extractor's own value must stay: %q", raw)
 	}
@@ -61,7 +61,7 @@ func TestWithdrawingConfirmationRestoresTheStoredValue(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 	var n int
-	s.DB.QueryRow("SELECT count(*) FROM completeness_confirmations WHERE snapshot_id=?", snap.ID).Scan(&n)
+	s.DB.QueryRow("SELECT count(*) FROM completeness_confirmations WHERE item_id=?", snap.ID).Scan(&n)
 	if n != 2 {
 		t.Fatalf("history must be append-only, got %d rows", n)
 	}
@@ -113,19 +113,6 @@ func TestNoConfirmButtonForAFooterOnlyText(t *testing.T) {
 	manual(t, s, id, "Copyright © 2014-2026 The Cucumber Open Source Project")
 	if body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String(); strings.Contains(body, "Підтвердити повноту") {
 		t.Fatal("confirming completeness of a footer makes no sense")
-	}
-}
-
-func TestWebConfirmRejectsAForeignSnapshot(t *testing.T) {
-	s, w := testWeb(t)
-	a, b := add(t, s, "https://example.com/a"), add(t, s, "https://example.com/b")
-	manual(t, s, a, "Текст a.")
-	manual(t, s, b, "Текст b.")
-	other := selectedSnapshot(t, s, b)
-	rw := webRequest(w, "POST", "/items/"+strconv.FormatInt(a, 10)+"/completeness",
-		url.Values{"csrf": {w.CSRF}, "source": {strconv.FormatInt(other.ID, 10)}, "action": {"confirm"}}, nil)
-	if rw.Code != 400 && rw.Code != 404 {
-		t.Fatalf("foreign snapshot accepted: %d", rw.Code)
 	}
 }
 

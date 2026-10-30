@@ -185,11 +185,11 @@ func (s *Store) knowledgeCandidates(c KnowledgeContext) ([]KnowledgeContext, err
 	if terms == "" {
 		terms = `"__no_knowledge_term__"`
 	}
-	rows, err := s.DB.Query(`SELECT i.id,i.selected_snapshot,coalesce((SELECT max(id) FROM generated_artifacts WHERE snapshot_id=i.selected_snapshot),0),
+	rows, err := s.DB.Query(`SELECT i.id,i.id,coalesce((SELECT item_id FROM digests WHERE digests.item_id=i.id),0),
  (SELECT count(*)*5 FROM item_tags t,json_each(?) q WHERE t.item_id=i.id AND t.tag=q.value)+
- coalesce((SELECT (CASE WHEN k.category=? THEN 3 ELSE 0 END)+(SELECT count(*)*5 FROM json_each(k.tags_json) t,json_each(?) q WHERE t.value=q.value) FROM article_knowledge k WHERE k.item_id=i.id AND k.snapshot_id=i.selected_snapshot ORDER BY (SELECT updated_at FROM knowledge_runs WHERE id=k.run_id) DESC,k.id DESC LIMIT 1),0)+
+ coalesce((SELECT (CASE WHEN k.category=? THEN 3 ELSE 0 END)+(SELECT count(*)*5 FROM json_each(k.tags_json) t,json_each(?) q WHERE t.value=q.value) FROM article_knowledge k WHERE k.item_id=i.id ORDER BY (SELECT updated_at FROM knowledge_runs WHERE id=k.run_id) DESC,k.id DESC LIMIT 1),0)+
  CASE WHEN i.id IN (SELECT rowid FROM item_fts WHERE item_fts MATCH ?) THEN 2 ELSE 0 END AS relevance
- FROM active_items i WHERE i.id<>? AND i.selected_snapshot IS NOT NULL AND i.filter_state IN ('passed','overridden')
+ FROM active_items i WHERE i.id<>? AND EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) AND i.filter_state IN ('passed','overridden')
  AND NOT EXISTS(SELECT 1 FROM connection_versions v JOIN connection_members a ON a.version_id=v.id JOIN connection_members b ON b.version_id=v.id WHERE a.item_id=? AND b.item_id=i.id AND v.revision=(SELECT max(revision) FROM connection_versions WHERE note_id=v.note_id))
  AND relevance>0 ORDER BY relevance DESC,i.id DESC LIMIT 3`, jsonString(c.Tags), c.Category, jsonString(c.Tags), terms, c.ItemID, c.ItemID)
 	if err != nil {
@@ -231,7 +231,7 @@ func (s *Store) knowledgeVocabulary() (map[string][]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, entry := range []struct{ key, query string }{{"categories", `SELECT DISTINCT category FROM article_knowledge k JOIN active_items i ON i.id=k.item_id WHERE k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) LIMIT 200`}, {"tags", `SELECT DISTINCT j.value FROM article_knowledge k JOIN active_items i ON i.id=k.item_id,json_each(k.tags_json) j WHERE k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) LIMIT 200`}, {"questions", `SELECT DISTINCT j.value FROM article_knowledge k JOIN active_items i ON i.id=k.item_id,json_each(k.questions_json) j WHERE k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) LIMIT 200`}} {
+	for _, entry := range []struct{ key, query string }{{"categories", `SELECT DISTINCT category FROM article_knowledge k JOIN active_items i ON i.id=k.item_id WHERE k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) LIMIT 200`}, {"tags", `SELECT DISTINCT j.value FROM article_knowledge k JOIN active_items i ON i.id=k.item_id,json_each(k.tags_json) j WHERE k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) LIMIT 200`}, {"questions", `SELECT DISTINCT j.value FROM article_knowledge k JOIN active_items i ON i.id=k.item_id,json_each(k.questions_json) j WHERE k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) LIMIT 200`}} {
 		rows, e := s.DB.Query(entry.query)
 		if e != nil {
 			return nil, e
@@ -329,7 +329,7 @@ func (s *Store) completeKnowledgeLinks(j KnowledgeRun, c KnowledgeContext, candi
 	for _, l := range links {
 		other := byID[l.ItemID]
 		var valid, existing int
-		if err = tx.QueryRow(`SELECT count(*) FROM items WHERE id=? AND selected_snapshot=? AND filter_state IN ('passed','overridden') AND coalesce((SELECT max(id) FROM generated_artifacts WHERE snapshot_id=?),0)=?`, other.ItemID, other.SnapshotID, other.SnapshotID, other.DigestID).Scan(&valid); err != nil {
+		if err = tx.QueryRow(`SELECT count(*) FROM items WHERE id=? AND filter_state IN ('passed','overridden') AND EXISTS(SELECT 1 FROM digests WHERE digests.item_id=items.id)`, other.ItemID).Scan(&valid); err != nil {
 			return err
 		}
 		if valid != 1 {
@@ -342,7 +342,7 @@ func (s *Store) completeKnowledgeLinks(j KnowledgeRun, c KnowledgeContext, candi
 			continue
 		}
 		body := l.Body + "\n\n## Підстава зв’язку\n\nНова стаття (" + c.Coverage + "):\n\n" + quoteMarkdown(l.CurrentEvidence) + "\n\nІнший матеріал (" + other.Coverage + "):\n\n" + quoteMarkdown(l.OtherEvidence)
-		note := ConnectionNote{Author: "model", Model: j.Model, PromptVersion: j.PromptVersion, Title: l.Title, Category: l.Category, Tags: l.Tags, Questions: l.Questions, Body: body, Members: []ConnectionMember{{ItemID: j.ItemID, SnapshotID: j.SnapshotID, DigestID: j.DigestID, Role: l.CurrentRole}, {ItemID: other.ItemID, SnapshotID: other.SnapshotID, DigestID: other.DigestID, Role: l.OtherRole}}}
+		note := ConnectionNote{Author: "model", Model: j.Model, PromptVersion: j.PromptVersion, Title: l.Title, Category: l.Category, Tags: l.Tags, Questions: l.Questions, Body: body, Members: []ConnectionMember{{ItemID: j.ItemID, Role: l.CurrentRole}, {ItemID: other.ItemID, Role: l.OtherRole}}}
 		key := strings.ToLower(strings.TrimSpace(l.Title) + "\n" + strings.TrimSpace(l.Category) + "\n" + strings.TrimSpace(l.Body))
 		if group, ok := groups[key]; ok {
 			group.Members = append(group.Members, note.Members[1])

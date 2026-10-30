@@ -88,8 +88,8 @@ func main() {
 		}
 	}
 	var state string
-	var snapshot, digestID, jobID int64
-	err = store.DB.QueryRow("SELECT state,selected_snapshot FROM items LIMIT 1").Scan(&state, &snapshot)
+	var snapshot, jobID int64
+	err = store.DB.QueryRow("SELECT state,id FROM items LIMIT 1").Scan(&state, &snapshot)
 	if err != nil {
 		fmt.Println("Fixture result unavailable")
 		os.Exit(1)
@@ -103,7 +103,6 @@ func main() {
 		result["input_tokens"] = digest.InputTokens
 		result["output_tokens"] = digest.OutputTokens
 		result["zero_cost_non_byok_verified"] = true
-		digestID = digest.ID
 		jobID = digest.JobID
 		if err := os.WriteFile(filepath.Join(output, "digest.md"), []byte(digest.Markdown), 0600); err != nil {
 			fmt.Println("Cannot write fixture digest evidence")
@@ -118,7 +117,6 @@ func main() {
 		clean = append(clean, map[string]any{"kind": failure.Kind, "message": strings.ReplaceAll(failure.Message, key, "[redacted]"), "retryable": failure.Retryable})
 	}
 	result["job_failures"] = clean
-	result["digest_id"] = digestID
 	data, _ := json.MarshalIndent(result, "", "  ")
 	if err := os.WriteFile(filepath.Join(output, "result.json"), data, 0600); err != nil {
 		fmt.Println("Cannot write fixture report")
