@@ -142,7 +142,7 @@ func (s *Store) TrashCard(id int64) (TrashCard, error) {
 		return c, err
 	}
 	if selected > 0 {
-		snap, e := s.Snapshot(selected)
+		snap, e := s.SourceText(selected)
 		if e != nil {
 			return c, e
 		}

@@ -116,7 +116,7 @@ func TestLeaseRestartRetryAndIdempotency(t *testing.T) {
 	}
 	defer s.Close()
 	j := claim(t, s)
-	snap := Snapshot{Text: "Useful Ukrainian text пошук", Title: "Article", Origin: "fetch", Extractor: "fixture-v1", Completeness: "full"}
+	snap := SourceText{Text: "Useful Ukrainian text пошук", Title: "Article", Origin: "fetch", Extractor: "fixture-v1", Completeness: "full"}
 	if e = s.Complete(old, snap); e != ErrLeaseLost {
 		t.Fatal("stale completion", e)
 	}
@@ -129,7 +129,7 @@ func TestLeaseRestartRetryAndIdempotency(t *testing.T) {
 	if e = s.Complete(j, snap); e != ErrLeaseLost {
 		t.Fatal("replayed completion", e)
 	}
-	vs, e := s.Snapshots(id)
+	vs, e := s.Texts(id)
 	if e != nil || len(vs) != 1 {
 		t.Fatal("duplicate snapshot", e)
 	}
@@ -153,7 +153,7 @@ func TestLeaseRestartRetryAndIdempotency(t *testing.T) {
 	}
 	// Completing/failing a refresh never removes the available text.
 	i, e := s.Item(id)
-	if e != nil || i.State != "ready" || !i.Selected.Valid {
+	if e != nil || i.State != "ready" || !i.HasText {
 		t.Fatal("refresh lost text", e)
 	}
 }
@@ -173,12 +173,12 @@ func TestNeedsInputAndManualWinsRace(t *testing.T) {
 	}
 	j = claim(t, s)
 	manual(t, s, id, "manual preferred")
-	if e := s.Complete(j, Snapshot{Text: "older fetch", Origin: "fetch", Extractor: "fixture", Completeness: "full"}); e != nil {
+	if e := s.Complete(j, SourceText{Text: "older fetch", Origin: "fetch", Extractor: "fixture", Completeness: "full"}); e != nil {
 		t.Fatal(e)
 	}
-	vs, _ := s.Snapshots(id)
+	vs, _ := s.Texts(id)
 	i, _ = s.Item(id)
-	if len(vs) != 1 || i.Selected.Int64 != vs[0].ID || vs[0].Text != "manual preferred" {
+	if len(vs) != 1 || i.ID != vs[0].ItemID || vs[0].Text != "manual preferred" {
 		t.Fatal("older fetch overwrote manual")
 	}
 	matches, e := s.Search(Filters{Query: "preferred"})
@@ -189,12 +189,12 @@ func TestNeedsInputAndManualWinsRace(t *testing.T) {
 		t.Fatal(e)
 	}
 	j = claim(t, s)
-	if e = s.Complete(j, Snapshot{Text: "explicit newer refresh", Origin: "fetch", Extractor: "fixture", Completeness: "full"}); e != nil {
+	if e = s.Complete(j, SourceText{Text: "explicit newer refresh", Origin: "fetch", Extractor: "fixture", Completeness: "full"}); e != nil {
 		t.Fatal(e)
 	}
 	i, _ = s.Item(id)
-	vs, _ = s.Snapshots(id)
-	if i.Selected.Int64 != vs[0].ID {
+	vs, _ = s.Texts(id)
+	if i.ID != vs[0].ItemID {
 		t.Fatal("explicit newer refresh not selected")
 	}
 }

@@ -12,12 +12,11 @@ func (w *Web) exportKnowledge(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item, err := w.Store.Item(id)
-	if err != nil || !item.Selected.Valid {
+	if err != nil || !item.HasText {
 		http.NotFound(rw, r)
 		return
 	}
-	sid := item.Selected.Int64
-	k, err := w.Store.Knowledge(id, sid)
+	k, err := w.Store.Knowledge(id)
 	if err != nil || k == nil || k.FileError != "" {
 		http.NotFound(rw, r)
 		return

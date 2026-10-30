@@ -204,19 +204,19 @@ func youtubeID(u *url.URL) (string, bool, error) {
 	}
 	return id, true, nil
 }
-func (f *Fetcher) FetchFresh(ctx context.Context, raw string) (Snapshot, error) {
+func (f *Fetcher) FetchFresh(ctx context.Context, raw string) (SourceText, error) {
 	return f.Fetch(context.WithValue(ctx, cacheRefreshKey{}, true), raw)
 }
-func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
+func (f *Fetcher) Fetch(ctx context.Context, raw string) (SourceText, error) {
 	meta := &NetworkMeta{}
 	ctx = context.WithValue(ctx, cacheMetaKey{}, meta)
 	u, err := url.Parse(raw)
 	if err != nil {
-		return Snapshot{}, err
+		return SourceText{}, err
 	}
 	id, isYT, err := youtubeID(u)
 	if err != nil {
-		return Snapshot{}, err
+		return SourceText{}, err
 	}
 	if isYT {
 		return f.youtube(ctx, id)
@@ -225,7 +225,7 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 	if len(f.Adapters) > 0 {
 		adapted, note, ok, e := f.extractWithAdapter(ctx, u)
 		if e != nil {
-			return Snapshot{}, e
+			return SourceText{}, e
 		}
 		if ok {
 			return adapted, nil
@@ -234,7 +234,7 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 	}
 	data, final, kind, partial, err := f.get(ctx, raw)
 	if err != nil {
-		return Snapshot{}, err
+		return SourceText{}, err
 	}
 	snap, err := decodeArticle(data, final, kind, partial, meta)
 	if err == nil && adapterNote != "" {
@@ -248,7 +248,7 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 		}
 		data, final, kind, partial, err = resolver(ctx, raw)
 		if err != nil {
-			return Snapshot{}, err
+			return SourceText{}, err
 		}
 		snap, err = decodeArticle(data, final, kind, partial, &NetworkMeta{FetchedAt: nowUTC()})
 		if err == nil {
@@ -257,8 +257,8 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string) (Snapshot, error) {
 	}
 	return snap, err
 }
-func decodeArticle(data []byte, final *url.URL, kind string, partial bool, meta *NetworkMeta) (Snapshot, error) {
-	snap := Snapshot{Origin: "fetch", Extractor: "readability-v2.1.3", Completeness: "unknown", Warning: "Виділений текст HTML"}
+func decodeArticle(data []byte, final *url.URL, kind string, partial bool, meta *NetworkMeta) (SourceText, error) {
+	snap := SourceText{Origin: "fetch", Extractor: "readability-v2.1.3", Completeness: "unknown", Warning: "Виділений текст HTML"}
 	if strings.Contains(kind, "text/plain") {
 		snap.Text = string(data)
 		snap.Title = final.Hostname()
@@ -268,21 +268,21 @@ func decodeArticle(data []byte, final *url.URL, kind string, partial bool, meta 
 	} else if strings.Contains(kind, "text/html") || strings.Contains(kind, "application/xhtml+xml") || kind == "" {
 		article, e := readability.FromReader(bytes.NewReader(data), final)
 		if e != nil {
-			return Snapshot{}, &SourceError{Message: "не вдалося виділити текст статті"}
+			return SourceText{}, &SourceError{Message: "не вдалося виділити текст статті"}
 		}
 		var b bytes.Buffer
 		if e = article.RenderText(&b); e != nil {
-			return Snapshot{}, e
+			return SourceText{}, e
 		}
 		snap.Text = b.String()
 		snap.Title = article.Title()
 	} else {
-		return Snapshot{}, &SourceError{Message: "непідтримуваний формат джерела: потрібен HTML або text/plain"}
+		return SourceText{}, &SourceError{Message: "непідтримуваний формат джерела: потрібен HTML або text/plain"}
 	}
 	if err := ValidateSourceContent(snap); err != nil {
 		var se *SourceError
 		if errors.As(err, &se) && se.Challenge {
-			return Snapshot{}, err
+			return SourceText{}, err
 		}
 		// Keep extracted footer text. Store marks it needs_input before AI.
 		snap.Warning = err.Error()
@@ -293,7 +293,7 @@ func decodeArticle(data []byte, final *url.URL, kind string, partial bool, meta 
 	}
 	snap.Text = strings.TrimSpace(snap.Text)
 	if snap.Text == "" {
-		return Snapshot{}, &SourceError{Message: "доступного тексту немає; можна вставити вручну"}
+		return SourceText{}, &SourceError{Message: "доступного тексту немає; можна вставити вручну"}
 	}
 	if partial {
 		snap.Completeness = "partial"
@@ -318,7 +318,7 @@ func captionTracks(data []byte) ([]captionTrack, error) {
 	err := json.NewDecoder(bytes.NewReader(data[pos+len(marker):])).Decode(&tracks)
 	return tracks, err
 }
-func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
+func (f *Fetcher) youtube(ctx context.Context, id string) (SourceText, error) {
 	data, _, _, pagePartial, pageErr := f.get(ctx, "https://www.youtube.com/watch?v="+id)
 	tracks, _ := captionTracks(data)
 	title := "YouTube: " + id
@@ -326,7 +326,7 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
 	if len(languages) == 0 {
 		languages = []string{"uk", "en"}
 	}
-	try := func(candidates []captionTrack, extractor string) (Snapshot, bool) {
+	try := func(candidates []captionTrack, extractor string) (SourceText, bool) {
 		sort.SliceStable(candidates, func(i, j int) bool {
 			return subtitleRank(candidates[i], languages) > subtitleRank(candidates[j], languages)
 		})
@@ -343,7 +343,7 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
 			if strings.TrimSpace(text) == "" {
 				continue
 			}
-			snap := Snapshot{Text: text, Title: title, Origin: "fetch", Extractor: extractor, Completeness: "full", Warning: "Субтитри: " + track.LanguageCode}
+			snap := SourceText{Text: text, Title: title, Origin: "fetch", Extractor: extractor, Completeness: "full", Warning: "Субтитри: " + track.LanguageCode}
 			if track.Kind == "asr" {
 				snap.Warning += "; автоматичні"
 			}
@@ -362,7 +362,7 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
 			}
 			return snap, true
 		}
-		return Snapshot{}, false
+		return SourceText{}, false
 	}
 	if snap, ok := try(tracks, "youtube-timedtext-v1"); ok {
 		return snap, nil
@@ -370,7 +370,7 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
 	if pageErr != nil {
 		var se *SourceError
 		if errors.As(pageErr, &se) && !se.Retry {
-			return Snapshot{}, pageErr
+			return SourceText{}, pageErr
 		}
 	}
 	resolver := f.metadataResolver
@@ -389,9 +389,9 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (Snapshot, error) {
 		}
 	}
 	if ctx.Err() != nil {
-		return Snapshot{}, &SourceError{Message: "час отримання YouTube-субтитрів вичерпано; спробуйте повторити", Retry: true}
+		return SourceText{}, &SourceError{Message: "час отримання YouTube-субтитрів вичерпано; спробуйте повторити", Retry: true}
 	}
-	return Snapshot{}, &SourceError{Message: "не вдалося отримати доступні субтитри у вибраних чи інших мовах; перевірте yt-dlp або вставте текст вручну"}
+	return SourceText{}, &SourceError{Message: "не вдалося отримати доступні субтитри у вибраних чи інших мовах; перевірте yt-dlp або вставте текст вручну"}
 }
 func decodeCaptions(data []byte) (string, error) {
 	if bytes.HasPrefix(bytes.TrimSpace(data), []byte("{")) {

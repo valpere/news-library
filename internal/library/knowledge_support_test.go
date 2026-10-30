@@ -133,11 +133,11 @@ func TestKnowledgeVerificationFailurePreservesCheckpointAndHumanHistory(t *testi
 	w := &KnowledgeWorker{Store: s, Generator: supportGateway(t, reply, &calls), Timeout: time.Second}
 	knowledgeStep(t, w)
 	item, _ := s.Item(id)
-	k, err := s.Knowledge(id, item.Selected.Int64)
+	k, err := s.Knowledge(id)
 	if err != nil || k == nil || item.State != "ready" {
 		t.Fatal(item, k, err)
 	}
-	status, _ := s.KnowledgeStatus(id, item.Selected.Int64)
+	status, _ := s.KnowledgeStatus(id)
 	if status.State != "failed" || status.Kind != "format" || calls != 3 {
 		t.Fatal(status, calls)
 	}
@@ -145,7 +145,7 @@ func TestKnowledgeVerificationFailurePreservesCheckpointAndHumanHistory(t *testi
 	if len(notes) != 0 {
 		t.Fatal("unsupported connection published", notes)
 	}
-	failures, err := s.KnowledgeFailures(id, item.Selected.Int64)
+	failures, err := s.KnowledgeFailures(id)
 	if err != nil || len(failures) != 1 || !strings.Contains(failures[0].Response, "Content verification") {
 		t.Fatal(failures, err)
 	}
@@ -198,10 +198,9 @@ func TestRecoveryCloudChecksCapturedProposalOnly(t *testing.T) {
 	completeFixtureDigest(t, s)
 	w := &KnowledgeWorker{Store: s, Generator: &supportProposalFixture{}, Timeout: time.Second}
 	knowledgeStep(t, w)
-	item, _ := s.Item(id)
-	before, _ := s.Knowledge(id, item.Selected.Int64)
+	before, _ := s.Knowledge(id)
 	// Offline replay of the captured nonempty proposal is forbidden.
-	c, _ := s.knowledgeContext(id, before.SnapshotID, before.DigestID)
+	c, _ := s.knowledgeContext(id)
 	others, _ := s.knowledgeCandidates(c)
 	offline := &KnowledgeRecoveryGenerator{Store: s}
 	if links, err := offline.Links(context.Background(), "fixture:cloud", c, others); err == nil || len(links) != 0 {
@@ -215,8 +214,8 @@ func TestRecoveryCloudChecksCapturedProposalOnly(t *testing.T) {
 	recovery := &KnowledgeRecoveryGenerator{Store: s, Fallback: gateway}
 	w.Generator = recovery
 	knowledgeStep(t, w)
-	after, _ := s.Knowledge(id, item.Selected.Int64)
-	status, _ := s.KnowledgeStatus(id, item.Selected.Int64)
+	after, _ := s.Knowledge(id)
+	status, _ := s.KnowledgeStatus(id)
 	notes, _ := s.Connections("", id)
 	if status.State != "done" || before.ID != after.ID || calls != 1 || recovery.Replayed != 1 || recovery.Generated != 1 || len(notes) != 1 {
 		t.Fatal(status, before, after, calls, recovery, notes)
@@ -236,8 +235,7 @@ func TestHistoricalFooterCandidateDoesNotBlockValidArticle(t *testing.T) {
 	current := knowledgeArticle(t, s, "new-valid-current")
 	generator := &fixtureKnowledgeGenerator{}
 	knowledgeStep(t, &KnowledgeWorker{Store: s, Generator: generator, Timeout: time.Second})
-	item, _ := s.Item(current)
-	status, _ := s.KnowledgeStatus(current, item.Selected.Int64)
+	status, _ := s.KnowledgeStatus(current)
 	if status.State != "done" || generator.MetadataCalls != 1 || generator.LinkCalls != 0 {
 		t.Fatal(status, generator)
 	}

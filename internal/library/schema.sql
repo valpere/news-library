@@ -84,17 +84,15 @@ CREATE TABLE knowledge_runs (
  state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','running','retry_wait','done','failed','cancelled')),
  attempts INTEGER NOT NULL DEFAULT 0, token TEXT NOT NULL DEFAULT '', lease_until INTEGER NOT NULL DEFAULT 0,
  next_attempt INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '',
- linked_count INTEGER NOT NULL DEFAULT 0, UNIQUE(item_id,prompt_version,model)
+ linked_count INTEGER NOT NULL DEFAULT 0,
+ response_path TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL DEFAULT '',
+ UNIQUE(item_id,prompt_version,model)
 );
 CREATE TABLE article_knowledge (
  id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL UNIQUE REFERENCES knowledge_runs(id),
  item_id INTEGER NOT NULL REFERENCES items(id), category TEXT NOT NULL,
  tags_json TEXT NOT NULL, questions_json TEXT NOT NULL, search_text TEXT NOT NULL, markdown_path TEXT NOT NULL, hash TEXT NOT NULL,
  model TEXT NOT NULL, prompt_version TEXT NOT NULL
-);
-CREATE TABLE knowledge_failures (
- id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL REFERENCES knowledge_runs(id), kind TEXT NOT NULL,
- message TEXT NOT NULL, response_path TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE knowledge_batches (
  request_token TEXT PRIMARY KEY, batch_limit INTEGER NOT NULL, include_retry INTEGER NOT NULL,

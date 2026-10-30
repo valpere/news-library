@@ -32,13 +32,12 @@ func TestKnowledgeRecoveryRequiresCloudForNonemptyProposal(t *testing.T) {
 	knowledgeStep(t, w)
 	id := knowledgeArticle(t, s, "replay-current")
 	knowledgeStep(t, w)
-	item, _ := s.Item(id)
-	status, _ := s.KnowledgeStatus(id, item.Selected.Int64)
+	status, _ := s.KnowledgeStatus(id)
 	if status.State != "failed" {
 		t.Fatal(status)
 	}
 	originalRun := status.ID
-	before, _ := s.Knowledge(id, item.Selected.Int64)
+	before, _ := s.Knowledge(id)
 	audit, err := s.AuditKnowledgeRecovery()
 	if err != nil || len(audit) != 1 || audit[0].Replayable {
 		t.Fatal(audit, err)
@@ -49,14 +48,13 @@ func TestKnowledgeRecoveryRequiresCloudForNonemptyProposal(t *testing.T) {
 	replay := &KnowledgeRecoveryGenerator{Store: s, Fallback: &fixtureKnowledgeGenerator{}}
 	w.Generator = replay
 	knowledgeStep(t, w)
-	after, _ := s.Knowledge(id, item.Selected.Int64)
-	status, _ = s.KnowledgeStatus(id, item.Selected.Int64)
+	after, _ := s.Knowledge(id)
+	status, _ = s.KnowledgeStatus(id)
 	if status.ID != originalRun || status.State != "done" || before.ID != after.ID || before.Markdown != after.Markdown || replay.Replayed != 0 || replay.Generated != 1 {
 		t.Fatal(status, before, after, replay)
 	}
-	failures, err := s.KnowledgeFailures(id, item.Selected.Int64)
-	if err != nil || len(failures) != 1 || failures[0].Response == "" {
-		t.Fatal("failure history lost", failures, err)
+	if failures, err := s.KnowledgeFailures(id); err != nil || len(failures) != 0 {
+		t.Fatal("the failure must be forgotten after the successful run", failures, err)
 	}
 	var count int
 	if err := s.DB.QueryRow("SELECT count(*) FROM connection_members WHERE item_id=?", id).Scan(&count); err != nil || count == 0 {

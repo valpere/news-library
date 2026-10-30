@@ -79,7 +79,7 @@ func TestChatHomeReadOnlyAndURLBatchReplay(t *testing.T) {
 		t.Fatal(loaded, e)
 	}
 	for _, card := range reply.Cards {
-		if card.SourceID != 0 {
+		if card.HasText {
 			t.Fatal("queued URL has shown text")
 		}
 	}

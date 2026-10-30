@@ -64,7 +64,7 @@ func TestChatExplainsRepeatedFailuresWithoutRetryOrModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	session, reply := chatTurn(t, w, ChatSession{}, "Чому вічно залишається незавершено? Що з ними таке?", "", "")
-	for _, want := range []string{"завершилися помилкою 1", "не пройшла перевірку JSON", "кілька невдалих спроб", "вже мають дайджест"} {
+	for _, want := range []string{"завершилися помилкою 1", "не пройшла перевірку JSON", "вже мають дайджест"} {
 		if !strings.Contains(reply.Message, want) {
 			t.Fatal(want, reply)
 		}
@@ -74,8 +74,8 @@ func TestChatExplainsRepeatedFailuresWithoutRetryOrModel(t *testing.T) {
 	}
 	var active, events int
 	s.DB.QueryRow("SELECT count(*) FROM knowledge_runs WHERE state IN ('queued','running','retry_wait')").Scan(&active)
-	s.DB.QueryRow("SELECT count(*) FROM knowledge_failures").Scan(&events)
-	if active != 0 || events != 2 {
+	s.DB.QueryRow("SELECT count(*) FROM knowledge_runs WHERE kind<>''").Scan(&events)
+	if active != 0 || events != 1 {
 		t.Fatal("explanation retried", active, events)
 	}
 	session, reply = chatTurn(t, w, session, "скільки ще необроблених?", "", "")

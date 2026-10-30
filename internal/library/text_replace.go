@@ -12,7 +12,7 @@ import (
 // text only refreshes the metadata (changed=false). It returns the file paths the
 // erased rows used; the caller removes the ones nothing else uses after the
 // transaction commits.
-func (s *Store) installText(tx *sql.Tx, itemID int64, snap Snapshot, refreshOnly bool) (changed bool, paths map[string]bool, err error) {
+func (s *Store) installText(tx *sql.Tx, itemID int64, snap SourceText, refreshOnly bool) (changed bool, paths map[string]bool, err error) {
 	var oldHash, oldPath string
 	err = tx.QueryRow(`SELECT hash,text_path FROM texts WHERE item_id=?`, itemID).Scan(&oldHash, &oldPath)
 	exists := err == nil
@@ -58,7 +58,7 @@ func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) 
 		`SELECT markdown_path FROM article_knowledge WHERE item_id=?`,
 		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
 		`SELECT response_path FROM jobs WHERE item_id=? AND stage='digest'`,
-		`SELECT response_path FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
+		`SELECT response_path FROM knowledge_runs WHERE item_id=?`,
 	} {
 		rows, err := tx.Query(q, itemID)
 		if err != nil {
@@ -81,7 +81,6 @@ func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) 
 	for _, q := range []string{
 		`DELETE FROM embedding_chunks WHERE item_id=?`,
 		`DELETE FROM embedding_runs WHERE item_id=?`,
-		`DELETE FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
 		`DELETE FROM article_knowledge WHERE item_id=?`,
 		`DELETE FROM knowledge_runs WHERE item_id=?`,
 		`DELETE FROM interest_predictions WHERE item_id=?`,
@@ -118,7 +117,7 @@ func (s *Store) eraseDigest(tx *sql.Tx, itemID, keepJob int64) (map[string]bool,
 		`SELECT markdown_path FROM article_knowledge WHERE item_id=?`,
 		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN ` + idList(jobs),
 		`SELECT response_path FROM jobs WHERE id IN ` + idList(jobs),
-		`SELECT response_path FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
+		`SELECT response_path FROM knowledge_runs WHERE item_id=?`,
 	} {
 		var rows *sql.Rows
 		if strings.Contains(q, "?") {
@@ -147,7 +146,6 @@ func (s *Store) eraseDigest(tx *sql.Tx, itemID, keepJob int64) (map[string]bool,
 		query string
 		args  []any
 	}{
-		{`DELETE FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`, []any{itemID}},
 		{`DELETE FROM article_knowledge WHERE item_id=?`, []any{itemID}},
 		{`DELETE FROM knowledge_runs WHERE item_id=?`, []any{itemID}},
 		{`DELETE FROM interest_predictions WHERE item_id=?`, []any{itemID}},

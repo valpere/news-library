@@ -35,13 +35,13 @@ type ChatCommand struct {
 	IncludeUnknown bool         `json:"include_unknown,omitempty"`
 }
 type ChatCard struct {
-	CanRate            bool
-	Index              int
-	Item               Item
-	SourceID, DigestID int64
-	Summary            string
+	CanRate bool
+	Index   int
+	Item    Item
+	HasText bool
+	Summary string
 }
-type ChatReference struct{ ItemID, SourceID int64 }
+type ChatReference struct{ ItemID int64 }
 type ChatState struct {
 	Results         []ChatReference
 	Total           int

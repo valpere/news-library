@@ -8,10 +8,10 @@ import (
 )
 
 type Source interface {
-	Fetch(context.Context, string) (Snapshot, error)
+	Fetch(context.Context, string) (SourceText, error)
 }
 type Generator interface {
-	Generate(context.Context, Job, Snapshot) (Digest, error)
+	Generate(context.Context, Job, SourceText) (Digest, error)
 }
 type Worker struct {
 	Store                   *Store
@@ -53,10 +53,10 @@ func (w *Worker) Step(ctx context.Context) (bool, error) {
 			}
 		}
 	}()
-	var snap Snapshot
+	var snap SourceText
 	var digest Digest
 	if j.Stage == "digest" {
-		snap, err = w.Store.Snapshot(j.SnapshotID.Int64)
+		snap, err = w.Store.SourceText(j.ItemID)
 		if err == nil {
 			if w.Generator == nil {
 				err = &SourceError{Message: "генерацію не налаштовано"}
@@ -65,7 +65,7 @@ func (w *Worker) Step(ctx context.Context) (bool, error) {
 			}
 		}
 	} else if fresh, ok := w.Source.(interface {
-		FetchFresh(context.Context, string) (Snapshot, error)
+		FetchFresh(context.Context, string) (SourceText, error)
 	}); ok && j.Refresh {
 		snap, err = fresh.FetchFresh(fetchCtx, j.URL)
 	} else {

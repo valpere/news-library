@@ -31,7 +31,7 @@ func TestLongDigestResumesSavedPartsAndPreservesSource(t *testing.T) {
 	manual(t, s, id, source)
 	calls := 0
 	failed := false
-	leaf := generatorFunc(func(_ context.Context, j Job, snapshot Snapshot) (Digest, error) {
+	leaf := generatorFunc(func(_ context.Context, j Job, snapshot SourceText) (Digest, error) {
 		calls++
 		if !failed && calls == 2 {
 			failed = true
@@ -49,7 +49,7 @@ func TestLongDigestResumesSavedPartsAndPreservesSource(t *testing.T) {
 	if checkpoints != 1 {
 		t.Fatal("no durable part")
 	}
-	snapshots, e := s.Snapshots(id)
+	snapshots, e := s.Texts(id)
 	if e != nil || snapshots[0].Text != source {
 		t.Fatal("full source lost", e)
 	}
@@ -70,7 +70,7 @@ func TestLongDigestResumesSavedPartsAndPreservesSource(t *testing.T) {
 	if worked, e := worker.Step(context.Background()); !worked || e != nil {
 		t.Fatal(e)
 	}
-	d, e := s.DigestForSnapshot(snapshots[0].ID)
+	d, e := s.DigestOf(snapshots[0].ItemID)
 	if e != nil || d == nil || d.ChunkCount < 2 {
 		t.Fatal("no multi-part digest", e)
 	}
@@ -90,8 +90,8 @@ func TestLongDigestBoundsAndFencing(t *testing.T) {
 	manual(t, s, id, strings.Repeat("x", 4000))
 	j := claim(t, s)
 	calls := 0
-	g := &ChunkGenerator{Store: s, Leaf: generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) { calls++; return Digest{}, nil })}
-	snap, _ := s.Snapshot(j.SnapshotID.Int64)
+	g := &ChunkGenerator{Store: s, Leaf: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) { calls++; return Digest{}, nil })}
+	snap, _ := s.SourceText(j.ItemID)
 	if _, e := g.Generate(context.Background(), j, snap); e == nil || calls != 0 {
 		t.Fatal("unbounded calls")
 	}
@@ -99,7 +99,7 @@ func TestLongDigestBoundsAndFencing(t *testing.T) {
 	if e := s.SaveDigestCheckpoint(j, 0, 0, "hash", Digest{Markdown: fixtureDigest}); e != ErrLeaseLost {
 		t.Fatal("stale worker checkpoint accepted", e)
 	}
-	snapshots, e := s.Snapshots(id)
+	snapshots, e := s.Texts(id)
 	if e != nil || len(snapshots[0].Text) != 4000 {
 		t.Fatal("bounded failure lost source")
 	}
@@ -112,9 +112,9 @@ func TestLongDigestPredictsInterestOnlyAtFinalSynthesis(t *testing.T) {
 	id := add(t, s, "https://example.com/long-predicted")
 	manual(t, s, id, strings.Repeat("Source data. ", 800))
 	j := claim(t, s)
-	snap, _ := s.Snapshot(j.SnapshotID.Int64)
+	snap, _ := s.SourceText(j.ItemID)
 	forecasts := 0
-	g := ChunkGenerator{Store: s, Leaf: generatorFunc(func(_ context.Context, part Job, s Snapshot) (Digest, error) {
+	g := ChunkGenerator{Store: s, Leaf: generatorFunc(func(_ context.Context, part Job, s SourceText) (Digest, error) {
 		d := Digest{Markdown: fixtureDigest, ActualModel: part.Model, Provider: "fixture"}
 		if part.Interests != "" {
 			forecasts++

@@ -50,7 +50,7 @@ func (w *Web) chatProcessingReply(explain bool) (ChatReply, error) {
 	if err != nil {
 		return ChatReply{}, err
 	}
-	failed, queued, running, waiting, repeated, invalidJSON := 0, 0, 0, 0, 0, 0
+	failed, queued, running, waiting, invalidJSON := 0, 0, 0, 0, 0
 	kinds := map[string]int{}
 	for _, c := range candidates {
 		if c.Done {
@@ -66,9 +66,6 @@ func (w *Web) chatProcessingReply(explain bool) (ChatReply, error) {
 		case "failed":
 			failed++
 			kinds[c.Kind]++
-			if c.Failures > 1 {
-				repeated++
-			}
 			if c.Error == "некоректний JSON аналізу" {
 				invalidJSON++
 			}
@@ -88,9 +85,6 @@ func (w *Web) chatProcessingReply(explain bool) (ChatReply, error) {
 		}
 		label, advice, _ := FailureAdvice(kind)
 		message += fmt.Sprintf("\n%s: %d. %s", label, kinds[kind], advice)
-	}
-	if repeated > 0 {
-		message += fmt.Sprintf("\nДля %d матеріалів уже було кілька невдалих спроб. Лічильник не зменшується, коли повтор знову завершується помилкою. Спершу треба усунути причину, потім спробувати дообробити п’ять матеріалів і перевірити результат.", repeated)
 	}
 	if summary.New+summary.Active+summary.Continue+summary.Blocked == 0 {
 		message += "\nУсі матеріали з готовими дозволеними дайджестами пройшли аналіз."

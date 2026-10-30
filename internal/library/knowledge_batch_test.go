@@ -77,8 +77,7 @@ func TestKnowledgeBatchResumesPinnedCheckpointAndPreservesFailures(t *testing.T)
 	id := knowledgeArticle(t, s, "unfinished")
 	g.FailLinks = true
 	knowledgeStep(t, w)
-	item, _ := s.Item(id)
-	original, _ := s.Knowledge(id, item.Selected.Int64)
+	original, _ := s.Knowledge(id)
 	s.DigestConfig.Model = "other:cloud"
 	result, err := s.QueueKnowledgeBatch(strings.Repeat("d", 26), 500, true)
 	if err != nil || result.Resumed != 1 || result.New != 0 {
@@ -86,13 +85,12 @@ func TestKnowledgeBatchResumesPinnedCheckpointAndPreservesFailures(t *testing.T)
 	}
 	g.FailLinks = false
 	knowledgeStep(t, w)
-	k, err := s.Knowledge(id, item.Selected.Int64)
+	k, err := s.Knowledge(id)
 	if err != nil || k.ID != original.ID || k.Model != "fixture:cloud" || g.MetadataCalls != 2 {
 		t.Fatal(k, g, err)
 	}
-	failures, err := s.KnowledgeFailures(id, item.Selected.Int64)
-	if err != nil || len(failures) != 1 || failures[0].Kind != "format" {
-		t.Fatal(failures, err)
+	if failures, err := s.KnowledgeFailures(id); err != nil || len(failures) != 0 {
+		t.Fatal("the failure must be forgotten after the successful run", failures, err)
 	}
 }
 func TestKnowledgeBatchSkipsActiveAndBlockedAndPrioritizesNew(t *testing.T) {

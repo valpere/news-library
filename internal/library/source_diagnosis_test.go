@@ -7,7 +7,7 @@ import (
 )
 
 func TestDiagnoseSourceExplainsFooterOnlyText(t *testing.T) {
-	d := diagnoseSource(Snapshot{ID: 22, RetrievedAt: "2026-10-11T15:33:44Z", Extractor: "readability-v2.1.3",
+	d := diagnoseSource(SourceText{ItemID: 22, RetrievedAt: "2026-10-11T15:33:44Z", Extractor: "readability-v2.1.3",
 		Text: "Copyright © 2014-2026 The Cucumber Open Source Project"})
 	if d == nil {
 		t.Fatal("footer-only text must be diagnosed")
@@ -24,7 +24,7 @@ func TestDiagnoseSourceExplainsFooterOnlyText(t *testing.T) {
 
 func TestDiagnoseSourceIgnoresRealText(t *testing.T) {
 	for _, text := range []string{"AI agents help defenders detect threats.", strings.Repeat("Звичайна стаття. ", 50)} {
-		if d := diagnoseSource(Snapshot{ID: 1, Text: text}); d != nil {
+		if d := diagnoseSource(SourceText{Text: text}); d != nil {
 			t.Errorf("%q diagnosed: %+v", text[:20], d)
 		}
 	}
@@ -60,7 +60,7 @@ func TestItemPageWithoutProblemHasNoDiagnosis(t *testing.T) {
 // one; the page must still say what the text itself shows.
 func TestDiagnoseSourceFlagsAnIndexPageByItsTrailingMarker(t *testing.T) {
 	text := "In our Google Cloud series we share exclusive looks at how Google approaches security topics, straight from Google experts.\n\nExplore more articles"
-	d := diagnoseSource(Snapshot{ID: 7, RetrievedAt: "2026-10-11T15:33:29Z", Extractor: "readability-v2.1.3", Completeness: "unknown", Text: text})
+	d := diagnoseSource(SourceText{ItemID: 7, RetrievedAt: "2026-10-11T15:33:29Z", Extractor: "readability-v2.1.3", Completeness: "unknown", Text: text})
 	if d == nil || !d.Soft {
 		t.Fatalf("a trailing pointer to other articles must give a soft diagnosis: %+v", d)
 	}
@@ -72,14 +72,14 @@ func TestDiagnoseSourceFlagsAnIndexPageByItsTrailingMarker(t *testing.T) {
 }
 
 func TestDiagnoseSourceStaysQuietForShortCompleteTexts(t *testing.T) {
-	cases := []Snapshot{
-		{ID: 1, Completeness: "unknown", Text: "Model size used to mean RAM size. colibri breaks that link: it runs a 744B model on a 25GB machine."},
-		{ID: 2, Completeness: "full", Text: "Субтитри.\n\nExplore more articles"}, // a trusted full extraction is not second-guessed
-		{ID: 3, Completeness: "unknown", Text: strings.Repeat("Довге речення про тему. ", 60) + "останній абзац без крапки і з довжиною більше сорока символів"},
+	cases := []SourceText{
+		{Completeness: "unknown", Text: "Model size used to mean RAM size. colibri breaks that link: it runs a 744B model on a 25GB machine."},
+		{Completeness: "full", Text: "Субтитри.\n\nExplore more articles"}, // a trusted full extraction is not second-guessed
+		{Completeness: "unknown", Text: strings.Repeat("Довге речення про тему. ", 60) + "останній абзац без крапки і з довжиною більше сорока символів"},
 	}
 	for _, s := range cases {
 		if d := diagnoseSource(s); d != nil {
-			t.Errorf("snapshot %d diagnosed: %+v", s.ID, d)
+			t.Errorf("snapshot %d diagnosed: %+v", s.ItemID, d)
 		}
 	}
 }

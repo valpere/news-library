@@ -123,8 +123,8 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	payload := readItem(item)
-	if item.Selected.Valid {
-		snapshot, err := w.Store.Snapshot(item.Selected.Int64)
+	if item.HasText {
+		snapshot, err := w.Store.SourceText(item.ID)
 		if err != nil {
 			http.Error(rw, "source unavailable", http.StatusServiceUnavailable)
 			return
@@ -133,7 +133,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		payload["text_kind"] = "source"
 		var digest *Digest
 		if kind != "fragment" {
-			digest, err = w.Store.DigestForSnapshot(snapshot.ID)
+			digest, err = w.Store.DigestOf(snapshot.ItemID)
 			if err != nil {
 				http.Error(rw, "digest unavailable", http.StatusServiceUnavailable)
 				return
@@ -191,7 +191,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 				end = len(text)
 			}
 		}
-		payload["source"] = map[string]any{"id": snapshot.ID, "url": item.URL, "hash": snapshot.Hash, "retrieved_at": snapshot.RetrievedAt, "origin": snapshot.Origin, "extractor": snapshot.Extractor, "completeness": snapshot.Completeness, "incomplete_signs": Assess(snapshot).Reasons, "warning": snapshot.Warning}
+		payload["source"] = map[string]any{"id": snapshot.ItemID, "url": item.URL, "hash": snapshot.Hash, "retrieved_at": snapshot.RetrievedAt, "origin": snapshot.Origin, "extractor": snapshot.Extractor, "completeness": snapshot.Completeness, "incomplete_signs": Assess(snapshot).Reasons, "warning": snapshot.Warning}
 		payload["text"] = text
 		payload["start_byte"] = start
 		payload["end_byte"] = end
@@ -204,8 +204,8 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "backlinks unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if item.Selected.Valid {
-		knowledge, e := w.Store.Knowledge(id, item.Selected.Int64)
+	if item.HasText {
+		knowledge, e := w.Store.Knowledge(id)
 		if e != nil {
 			http.Error(rw, "knowledge unavailable", http.StatusServiceUnavailable)
 			return

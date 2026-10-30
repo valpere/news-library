@@ -83,7 +83,7 @@ func (w *Web) connectionForm(rw http.ResponseWriter, r *http.Request) {
 			http.NotFound(rw, r)
 			return
 		}
-		if item.Selected.Valid {
+		if item.HasText {
 			n.Members = append(n.Members, ConnectionMember{ItemID: id, Title: item.Title, URL: item.URL})
 		}
 	}
@@ -162,14 +162,14 @@ func (w *Web) renderConnectionForm(rw http.ResponseWriter, r *http.Request, n Co
 	}
 	ready := []Item{}
 	for _, item := range choices {
-		if item.Selected.Valid {
+		if item.HasText {
 			ready = append(ready, item)
 		}
 	}
 	if n.ID == 0 && len(n.Members) == 0 && r.URL.Query().Get("item") != "" {
 		id, _ := strconv.ParseInt(r.URL.Query().Get("item"), 10, 64)
 		item, e := w.Store.Item(id)
-		if e == nil && item.Selected.Valid {
+		if e == nil && item.HasText {
 			n.Members = append(n.Members, ConnectionMember{ItemID: id, Title: item.Title, URL: item.URL})
 		}
 	}

@@ -19,7 +19,7 @@ import (
 //
 // Name is a stable id with a version suffix (-vN); it is recorded as the
 // snapshot's extractor. Bump it whenever the output format changes, so old and
-// new texts stay distinguishable. Extract returns a Snapshot with Text, Title,
+// new texts stay distinguishable. Extract returns a SourceText with Text, Title,
 // Warning (saying where the text came from) and Completeness; Origin and
 // Extractor are set by the caller.
 //
@@ -31,7 +31,7 @@ type SourceAdapter interface {
 	Name() string
 	Hosts() []string
 	Match(u *url.URL) bool
-	Extract(ctx context.Context, f *Fetcher, u *url.URL) (Snapshot, error)
+	Extract(ctx context.Context, f *Fetcher, u *url.URL) (SourceText, error)
 }
 
 // DefaultAdapters lists the built-in adapters in priority order: the first
@@ -175,21 +175,21 @@ func (f *Fetcher) record(name string, failed bool) {
 // matches or the adapter failed or is resting; the reason comes back as a note
 // for the generic extraction's warning, so it is never silent. A cancelled
 // context is a real error, not a reason to fall back.
-func (f *Fetcher) extractWithAdapter(ctx context.Context, u *url.URL) (snap Snapshot, note string, ok bool, err error) {
+func (f *Fetcher) extractWithAdapter(ctx context.Context, u *url.URL) (snap SourceText, note string, ok bool, err error) {
 	for _, a := range f.candidates(u.Hostname()) {
 		if !a.Match(u) {
 			continue
 		}
 		if until, rest := f.resting(a.Name()); rest {
-			return Snapshot{}, fmt.Sprintf("адаптер %s тимчасово вимкнено після %d збоїв поспіль (до %s); взято загальний витяг сторінки", a.Name(), adapterFailureLimit, until.UTC().Format("15:04 UTC")), false, nil
+			return SourceText{}, fmt.Sprintf("адаптер %s тимчасово вимкнено після %d збоїв поспіль (до %s); взято загальний витяг сторінки", a.Name(), adapterFailureLimit, until.UTC().Format("15:04 UTC")), false, nil
 		}
 		snap, e := a.Extract(ctx, f, u)
 		if e != nil {
 			if ctx.Err() != nil || errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded) {
-				return Snapshot{}, "", false, e
+				return SourceText{}, "", false, e
 			}
 			f.record(a.Name(), true)
-			return Snapshot{}, fmt.Sprintf("адаптер %s не спрацював (%s); взято загальний витяг сторінки", a.Name(), e.Error()), false, nil
+			return SourceText{}, fmt.Sprintf("адаптер %s не спрацював (%s); взято загальний витяг сторінки", a.Name(), e.Error()), false, nil
 		}
 		f.record(a.Name(), false)
 		snap.Origin = "fetch"
@@ -197,5 +197,5 @@ func (f *Fetcher) extractWithAdapter(ctx context.Context, u *url.URL) (snap Snap
 		snap.RetrievedAt = nowUTC()
 		return snap, "", true, nil
 	}
-	return Snapshot{}, "", false, nil
+	return SourceText{}, "", false, nil
 }

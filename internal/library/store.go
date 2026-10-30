@@ -30,20 +30,19 @@ type Store struct {
 }
 type Item struct {
 	MatchSnippet                                   string
-	MatchSnapshot                                  int64
 	MatchStart, MatchEnd                           int
 	ID                                             int64
 	OriginalURL, URL, Title, AddedAt, State, Error string
 	Read                                           bool
-	Selected                                       sql.NullInt64
+	HasText                                        bool
 	Score                                          sql.NullInt64
 	RatedAt                                        sql.NullString
 	Tags                                           string
 	FilterState                                    string
 	Confidence                                     sql.NullFloat64
 }
-type Snapshot struct {
-	ID, ItemID                                                               int64
+type SourceText struct {
+	ItemID                                                                   int64
 	Text, Title, Hash, RetrievedAt, Origin, Extractor, Completeness, Warning string
 	// UserConfirmed: the user vouched that this text is complete (overlay on the
 	// extractor's value, which stays in texts).
@@ -55,7 +54,6 @@ type Job struct {
 	Attempts                                   int
 	TextAtClaim                                string
 	Stage, ConfigVersion, Model, PromptVersion string
-	SnapshotID                                 sql.NullInt64
 	InputLimit                                 int
 	Refresh                                    bool
 	FilterOverride                             bool
@@ -200,19 +198,19 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 	if _, err = tx.ExecContext(ctx, `UPDATE items SET state='needs_input',error='fetch attempts exhausted after restart' WHERE NOT EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id) AND id IN (SELECT item_id FROM jobs WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
 		return nil, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='fetch attempts exhausted after restart',failure_kind='unknown',failure_retryable=0,response_path='',hash='' WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='fetch attempts exhausted after restart',failure_kind='unknown',failure_retryable=0 WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
 		return nil, err
 	}
 	if s.DigestConfig != nil {
 		if _, err = tx.ExecContext(ctx, `UPDATE items SET state='digest_failed',error='digest attempts exhausted after restart' WHERE NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=items.id) AND id IN (SELECT item_id FROM jobs WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
 			return nil, err
 		}
-		if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='digest attempts exhausted after restart',failure_kind='unknown',failure_retryable=0,response_path='',hash='' WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='digest attempts exhausted after restart',failure_kind='unknown',failure_retryable=0 WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
 			return nil, err
 		}
 	}
 	var j Job
-	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,coalesce((SELECT hash FROM texts WHERE item_id=j.item_id),''),j.stage,CASE WHEN j.stage='digest' THEN j.item_id END,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests,j.chunk_limit,j.chunk_max_parts FROM jobs j JOIN active_items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.TextAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests, &j.ChunkLimit, &j.ChunkMaxParts)
+	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,coalesce((SELECT hash FROM texts WHERE item_id=j.item_id),''),j.stage,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests,j.chunk_limit,j.chunk_max_parts FROM jobs j JOIN active_items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.TextAtClaim, &j.Stage, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests, &j.ChunkLimit, &j.ChunkMaxParts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}
@@ -256,11 +254,11 @@ func leaseValid(tx *sql.Tx, j Job) error {
 	}
 	return nil
 }
-func indexSnapshot(tx *sql.Tx, id int64, title, text string) error {
+func indexText(tx *sql.Tx, id int64, title, text string) error {
 	_, err := tx.Exec("UPDATE item_fts SET title=?,text=?,url=(SELECT canonical_url FROM items WHERE id=?) WHERE rowid=?", title, text, id, id)
 	return err
 }
-func (s *Store) Complete(j Job, snap Snapshot) error {
+func (s *Store) Complete(j Job, snap SourceText) error {
 	if j.Stage != "fetch" {
 		return errors.New("not a fetch job")
 	}
@@ -297,10 +295,10 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 			if _, err = tx.Exec("UPDATE items SET title=?,state='ready',error='' WHERE id=?", snap.Title, j.ItemID); err != nil {
 				return err
 			}
-			if err = indexSnapshot(tx, j.ItemID, snap.Title, snap.Text); err != nil {
+			if err = indexText(tx, j.ItemID, snap.Title, snap.Text); err != nil {
 				return err
 			}
-			if err = s.processSnapshot(tx, j.ItemID, j.ItemID, snap, j.FilterOverride); err != nil {
+			if err = s.processText(tx, j.ItemID, snap, j.FilterOverride); err != nil {
 				return err
 			}
 		}
@@ -455,7 +453,7 @@ func (s *Store) Manual(id int64, text string) error {
 	if err = tx.QueryRow("SELECT title FROM active_items WHERE id=?", id).Scan(&title); err != nil {
 		return err
 	}
-	changed, erased, err := s.installText(tx, id, Snapshot{Text: text, Title: title, Origin: "manual", Extractor: "manual-v1", Completeness: "unknown", Warning: "Повнота ручного тексту невідома"}, false)
+	changed, erased, err := s.installText(tx, id, SourceText{Text: text, Title: title, Origin: "manual", Extractor: "manual-v1", Completeness: "unknown", Warning: "Повнота ручного тексту невідома"}, false)
 	if err != nil {
 		return err
 	}
@@ -482,10 +480,10 @@ func (s *Store) Manual(id int64, text string) error {
 			erased[p] = true
 		}
 	}
-	if err = indexSnapshot(tx, id, title, text); err != nil {
+	if err = indexText(tx, id, title, text); err != nil {
 		return err
 	}
-	if err = s.processSnapshot(tx, id, id, Snapshot{Text: text, Title: title}, false); err != nil {
+	if err = s.processText(tx, id, SourceText{Text: text, Title: title}, false); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -553,12 +551,12 @@ func (s *Store) SetTags(id int64, tags []string) error {
 }
 
 const confidenceExpr = `(SELECT probability FROM interest_predictions WHERE item_id=i.id)`
-const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.state,i.error,i.is_read,(SELECT item_id FROM texts WHERE texts.item_id=i.id),i.rating,i.rated_at,(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
+const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.state,i.error,i.is_read,EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id),i.rating,i.rated_at,(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var i Item
 	var tags sql.NullString
-	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.State, &i.Error, &i.Read, &i.Selected, &i.Score, &i.RatedAt, &tags, &i.FilterState, &i.Confidence)
+	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.State, &i.Error, &i.Read, &i.HasText, &i.Score, &i.RatedAt, &tags, &i.FilterState, &i.Confidence)
 	i.Tags = tags.String
 	return i, err
 }
@@ -680,7 +678,6 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 type JobStatus struct {
 	FailureKind string
 
-	SnapshotID              sql.NullInt64
 	ID                      int64
 	State                   string
 	Stage                   string
@@ -690,7 +687,7 @@ type JobStatus struct {
 }
 
 func (s *Store) Jobs(id int64) ([]JobStatus, error) {
-	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage,CASE WHEN stage='digest' THEN item_id END,failure_kind FROM jobs WHERE item_id=? ORDER BY id DESC", id)
+	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage,failure_kind FROM jobs WHERE item_id=? ORDER BY id DESC", id)
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +695,7 @@ func (s *Store) Jobs(id int64) ([]JobStatus, error) {
 	var result []JobStatus
 	for rows.Next() {
 		var j JobStatus
-		if err = rows.Scan(&j.ID, &j.State, &j.Attempts, &j.Error, &j.NextAttempt, &j.LeaseUntil, &j.Stage, &j.SnapshotID, &j.FailureKind); err != nil {
+		if err = rows.Scan(&j.ID, &j.State, &j.Attempts, &j.Error, &j.NextAttempt, &j.LeaseUntil, &j.Stage, &j.FailureKind); err != nil {
 			return nil, err
 		}
 		result = append(result, j)

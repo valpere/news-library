@@ -53,7 +53,7 @@ type KnowledgeRecoveryGenerator struct {
 
 func (g *KnowledgeRecoveryGenerator) saved(model string, c KnowledgeContext) (string, error) {
 	var path, hash string
-	err := g.Store.DB.QueryRow(`SELECT f.response_path,f.hash FROM knowledge_failures f JOIN knowledge_runs r ON r.id=f.run_id WHERE r.item_id=? AND r.model=? AND r.prompt_version=? AND f.response_path<>'' ORDER BY f.id DESC LIMIT 1`, c.ItemID, model, KnowledgePromptVersion).Scan(&path, &hash)
+	err := g.Store.DB.QueryRow(`SELECT response_path,hash FROM knowledge_runs WHERE item_id=? AND model=? AND prompt_version=? AND response_path<>'' ORDER BY id DESC LIMIT 1`, c.ItemID, model, KnowledgePromptVersion).Scan(&path, &hash)
 	if err != nil {
 		return "", err
 	}
@@ -135,7 +135,7 @@ func (s *Store) AuditKnowledgeRecovery() ([]KnowledgeRecoveryAudit, error) {
 			continue
 		}
 		a := KnowledgeRecoveryAudit{ItemID: candidate.ItemID, RunID: candidate.RunID, Failure: candidate.Error, Stage: "metadata"}
-		c, err := s.knowledgeContext(candidate.ItemID, candidate.SnapshotID, candidate.DigestID)
+		c, err := s.knowledgeContext(candidate.ItemID)
 		if err != nil {
 			out = append(out, a)
 			continue

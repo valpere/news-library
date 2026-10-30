@@ -145,7 +145,7 @@ func (or *FreeOpenRouter) checkPrices(ctx context.Context) error {
 	}
 	return nil
 }
-func (or *FreeOpenRouter) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, error) {
+func (or *FreeOpenRouter) Generate(ctx context.Context, j Job, snap SourceText) (Digest, error) {
 	messages, err := digestMessages(j, snap)
 	if err != nil {
 		return Digest{}, err
@@ -245,7 +245,7 @@ type DigestFallback struct {
 	PrimaryBudget time.Duration
 }
 
-func (f *DigestFallback) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, error) {
+func (f *DigestFallback) Generate(ctx context.Context, j Job, snap SourceText) (Digest, error) {
 	if _, err := digestMessages(j, snap); err != nil {
 		return Digest{}, err
 	}

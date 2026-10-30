@@ -40,7 +40,7 @@ type ChunkGenerator struct {
 	Leaf  Generator
 }
 
-func (g *ChunkGenerator) Generate(ctx context.Context, j Job, snap Snapshot) (Digest, error) {
+func (g *ChunkGenerator) Generate(ctx context.Context, j Job, snap SourceText) (Digest, error) {
 	if err := ValidateSourceContent(snap); err != nil {
 		return Digest{}, err
 	}

@@ -68,7 +68,7 @@ func TestOpenRouterZeroPriceAdmissionAndProvenance(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(freeFixtureResponse(fixtureDigest))
 	}, freeFixture)
-	d, err := r.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "source text"})
+	d, err := r.Generate(context.Background(), freeFixtureJob(), SourceText{Text: "source text"})
 	if err != nil || d.Provider != "openrouter-free" || d.ActualModel != freeFixture || d.Model != "fixture:cloud" || d.Markdown != fixtureDigest || d.InputTokens != 15 || get != 1 || post != 1 {
 		t.Fatal(d, err, get, post)
 	}
@@ -84,7 +84,7 @@ func TestOpenRouterRejectsPaidUnknownAndTinyPricesBeforeGeneration(t *testing.T)
 				}
 				w.Write([]byte(`{"data":[{"id":"fixture/alpha:free","pricing":{"prompt":"0","completion":"0","request":` + price + `}}]}`))
 			}, freeFixture)
-			_, err := r.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "source"})
+			_, err := r.Generate(context.Background(), freeFixtureJob(), SourceText{Text: "source"})
 			var se *SourceError
 			if !errors.As(err, &se) || se.Kind != "configuration" || post != 0 {
 				t.Fatal(err, post)
@@ -144,7 +144,7 @@ func TestOpenRouterDoesNotFollowRedirectOrLeakKey(t *testing.T) {
 		}
 		http.Redirect(w, q, destination.URL, http.StatusTemporaryRedirect)
 	}, freeFixture)
-	_, err := r.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "source"})
+	_, err := r.Generate(context.Background(), freeFixtureJob(), SourceText{Text: "source"})
 	if err == nil || hits != 0 || strings.Contains(err.Error(), "private-test-key") {
 		t.Fatal(err, hits)
 	}
@@ -155,7 +155,7 @@ func TestDigestFallbackPolicyPreservesHistoryAndRatings(t *testing.T) {
 	id := add(t, s, "https://example.com/free-fallback")
 	manual(t, s, id, "source")
 	item, _ := s.Item(id)
-	sid := item.Selected.Int64
+	sid := item.ID
 	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestDigestFallbackPolicyPreservesHistoryAndRatings(t *testing.T) {
 		json.NewEncoder(w).Encode(freeFixtureResponse(fixtureDigest))
 	}, freeFixture)
 	r.Store = s
-	primary := generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) {
+	primary := generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 		return Digest{}, &SourceError{Kind: "temporary", Message: "primary temporary failure", Retry: true}
 	})
 	f := &DigestFallback{Primary: primary, Secondary: r, Store: s}
@@ -178,7 +178,7 @@ func TestDigestFallbackPolicyPreservesHistoryAndRatings(t *testing.T) {
 	if worked, err := worker.Step(context.Background()); err != nil || !worked {
 		t.Fatal(worked, err)
 	}
-	d, err := s.DigestForSnapshot(sid)
+	d, err := s.DigestOf(sid)
 	if err != nil || d == nil || d.Provider != "openrouter-free" || post != 1 {
 		t.Fatal(d, err, post)
 	}
@@ -191,10 +191,10 @@ func TestDigestFallbackPolicyPreservesHistoryAndRatings(t *testing.T) {
 		t.Fatal("human judgment modified")
 	}
 	for _, kind := range []string{"format", "configuration", "limit", "source", "unknown"} {
-		f.Primary = generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) {
+		f.Primary = generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 			return Digest{}, &SourceError{Kind: kind, Message: "do not retry", Retry: true}
 		})
-		if _, err = f.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "source"}); err == nil {
+		if _, err = f.Generate(context.Background(), freeFixtureJob(), SourceText{Text: "source"}); err == nil {
 			t.Fatal("failure hidden")
 		}
 	}
@@ -212,18 +212,18 @@ func TestFreeFallbackBudgetAndCancellation(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(freeFixtureResponse(fixtureDigest))
 	}, freeFixture)
-	f := &DigestFallback{Secondary: r, PrimaryBudget: 10 * time.Millisecond, Primary: generatorFunc(func(ctx context.Context, _ Job, _ Snapshot) (Digest, error) {
+	f := &DigestFallback{Secondary: r, PrimaryBudget: 10 * time.Millisecond, Primary: generatorFunc(func(ctx context.Context, _ Job, _ SourceText) (Digest, error) {
 		<-ctx.Done()
 		return Digest{}, &SourceError{Kind: "temporary", Retry: true, Message: "timeout"}
 	})}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if _, err := f.Generate(ctx, freeFixtureJob(), Snapshot{Text: "source"}); err != nil || calls != 2 {
+	if _, err := f.Generate(ctx, freeFixtureJob(), SourceText{Text: "source"}); err != nil || calls != 2 {
 		t.Fatal(err, calls)
 	}
 	cancelled, stop := context.WithCancel(context.Background())
 	stop()
-	if _, err := f.Generate(cancelled, freeFixtureJob(), Snapshot{Text: "source"}); err == nil || calls != 2 {
+	if _, err := f.Generate(cancelled, freeFixtureJob(), SourceText{Text: "source"}); err == nil || calls != 2 {
 		t.Fatal("cancelled task used fallback", err, calls)
 	}
 }
@@ -231,11 +231,11 @@ func TestFreeFallbackBudgetAndCancellation(t *testing.T) {
 func TestFreeFallbackPrimarySuccessAndRejectRulesMakeZeroRouterCalls(t *testing.T) {
 	routerCalls, primaryCalls := 0, 0
 	r := testFreeRouter(t, func(w http.ResponseWriter, q *http.Request) { routerCalls++; t.Error("unexpected OpenRouter request") }, freeFixture)
-	f := &DigestFallback{Secondary: r, Primary: generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) {
+	f := &DigestFallback{Secondary: r, Primary: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 		primaryCalls++
 		return Digest{Markdown: fixtureDigest, Provider: "fixture"}, nil
 	})}
-	if _, err := f.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "source"}); err != nil || routerCalls != 0 || primaryCalls != 1 {
+	if _, err := f.Generate(context.Background(), freeFixtureJob(), SourceText{Text: "source"}); err != nil || routerCalls != 0 || primaryCalls != 1 {
 		t.Fatal(err, routerCalls, primaryCalls)
 	}
 	s := testStore(t)
@@ -271,7 +271,7 @@ func TestOpenRouterTemporaryModelFailoverRechecksPricesAndStopsOnFormat(t *testi
 		response["model"] = second
 		json.NewEncoder(w).Encode(response)
 	}, freeFixture, second)
-	d, err := r.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "source"})
+	d, err := r.Generate(context.Background(), freeFixtureJob(), SourceText{Text: "source"})
 	if err != nil || d.ActualModel != second || gets != 2 || posts != 2 {
 		t.Fatal(d, err, gets, posts)
 	}
@@ -286,7 +286,7 @@ func TestOpenRouterTemporaryModelFailoverRechecksPricesAndStopsOnFormat(t *testi
 		posts++
 		return &http.Response{StatusCode: 200, Body: ioBody("broken JSON")}, nil
 	})
-	if _, err = r.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "source"}); err == nil || posts != 1 || gets != 1 {
+	if _, err = r.Generate(context.Background(), freeFixtureJob(), SourceText{Text: "source"}); err == nil || posts != 1 || gets != 1 {
 		t.Fatal("format failure retried", err, posts, gets)
 	}
 }
@@ -309,7 +309,7 @@ func TestOpenRouterProfilePredictionAndBoundedResponse(t *testing.T) {
 	j := freeFixtureJob()
 	j.PromptVersion = DigestPredictionPromptVersion
 	j.Interests = profile
-	d, err := r.Generate(context.Background(), j, Snapshot{Text: "source"})
+	d, err := r.Generate(context.Background(), j, SourceText{Text: "source"})
 	if err != nil || d.Prediction == nil || d.Prediction.Profile != profile || d.Prediction.Probability != 0.75 {
 		t.Fatal(d, err)
 	}
@@ -337,7 +337,7 @@ func TestFreeFallbackChunkCheckpointsKeepActualRoute(t *testing.T) {
 		json.NewEncoder(w).Encode(freeFixtureResponse(fixtureDigest))
 	}, freeFixture)
 	r.Store = s
-	f := &DigestFallback{Store: s, Secondary: r, Primary: generatorFunc(func(context.Context, Job, Snapshot) (Digest, error) {
+	f := &DigestFallback{Store: s, Secondary: r, Primary: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 		return Digest{}, &SourceError{Kind: "temporary", Retry: true, Message: "fixture unavailable"}
 	})}
 	w := &Worker{Store: s, Generator: &ChunkGenerator{Store: s, Leaf: f}, Timeout: time.Second, DigestTimeout: 10 * time.Second, Lease: time.Minute, MaxAttempts: 3}
@@ -345,7 +345,7 @@ func TestFreeFallbackChunkCheckpointsKeepActualRoute(t *testing.T) {
 		t.Fatal(worked, err)
 	}
 	item, _ := s.Item(id)
-	d, err := s.DigestForSnapshot(item.Selected.Int64)
+	d, err := s.DigestOf(item.ID)
 	if err != nil || d == nil || d.ChunkCount < 2 || d.Provider != "openrouter-free" {
 		t.Fatal(d, err)
 	}
@@ -353,7 +353,7 @@ func TestFreeFallbackChunkCheckpointsKeepActualRoute(t *testing.T) {
 	if err = s.DB.QueryRow("SELECT count(*) FROM digest_checkpoints").Scan(&left); err != nil || left != 0 || d.ActualModel != freeFixture {
 		t.Fatal("checkpoints of the finished job kept or wrong route", left, d.ActualModel, err)
 	}
-	snap, err := s.Snapshot(item.Selected.Int64)
+	snap, err := s.SourceText(item.ID)
 	if err != nil || snap.Text != source {
 		t.Fatal("source changed", err)
 	}
@@ -391,7 +391,7 @@ func TestOpenRouterDataPolicyIsExplicitAndDoesNotWidenPrices(t *testing.T) {
 				t.Fatal(err)
 			}
 			r.baseURL = server.URL
-			if _, err = r.Generate(context.Background(), freeFixtureJob(), Snapshot{Text: "Synthetic source"}); err != nil {
+			if _, err = r.Generate(context.Background(), freeFixtureJob(), SourceText{Text: "Synthetic source"}); err != nil {
 				t.Fatal(err)
 			}
 		})

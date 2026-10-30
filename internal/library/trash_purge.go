@@ -32,7 +32,7 @@ func (s *Store) PurgeBlocker(id int64) (string, error) {
 // purgeFileColumns lists every place that references a stored file by path.
 var purgeFileColumns = [][2]string{
 	{"texts", "text_path"}, {"digests", "markdown_path"}, {"digest_checkpoints", "markdown_path"},
-	{"article_knowledge", "markdown_path"}, {"jobs", "response_path"}, {"knowledge_failures", "response_path"},
+	{"article_knowledge", "markdown_path"}, {"jobs", "response_path"}, {"knowledge_runs", "response_path"},
 	{"connection_notes", "markdown_path"}, {"cache_entries", "body_path"},
 }
 
@@ -80,7 +80,7 @@ func (s *Store) PurgeTrashed(id int64) error {
 		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=?)`,
 		`SELECT markdown_path FROM article_knowledge WHERE item_id=?`,
 		`SELECT response_path FROM jobs WHERE item_id=?`,
-		`SELECT response_path FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
+		`SELECT response_path FROM knowledge_runs WHERE item_id=?`,
 	} {
 		if err = collect(q, id); err != nil {
 			return err
@@ -103,11 +103,9 @@ func (s *Store) PurgeTrashed(id int64) error {
 		paths[p] = true
 	}
 	jobs := `(SELECT id FROM jobs WHERE item_id=?)`
-	runs := `(SELECT id FROM knowledge_runs WHERE item_id=?)`
 	for _, q := range []string{
 		`DELETE FROM embedding_chunks WHERE item_id=?`,
 		`DELETE FROM embedding_runs WHERE item_id=?`,
-		`DELETE FROM knowledge_failures WHERE run_id IN ` + runs,
 		`DELETE FROM article_knowledge WHERE item_id=?`,
 		`DELETE FROM knowledge_runs WHERE item_id=?`,
 		`DELETE FROM interest_predictions WHERE item_id=?`,

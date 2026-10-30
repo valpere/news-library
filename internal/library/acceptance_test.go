@@ -15,10 +15,10 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	raw := "https://example.com/manual-recovery"
 	id := add(t, s, raw)
 	fetchCalls, generationCalls := 0, 0
-	w := &Worker{Store: s, Source: sourceFunc(func(context.Context, string) (Snapshot, error) {
+	w := &Worker{Store: s, Source: sourceFunc(func(context.Context, string) (SourceText, error) {
 		fetchCalls++
-		return Snapshot{}, &SourceError{Kind: "source", Message: "fixture subtitles unavailable"}
-	}), Generator: generatorFunc(func(_ context.Context, j Job, snap Snapshot) (Digest, error) {
+		return SourceText{}, &SourceError{Kind: "source", Message: "fixture subtitles unavailable"}
+	}), Generator: generatorFunc(func(_ context.Context, j Job, snap SourceText) (Digest, error) {
 		generationCalls++
 		if snap.Text != "User supplied source" {
 			t.Fatal("wrong source", snap.Text)
@@ -32,7 +32,7 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 		t.Fatal(worked, err)
 	}
 	item, err := s.Item(id)
-	if err != nil || item.State != "needs_input" || item.URL != raw || item.Selected.Valid || item.Score.Valid {
+	if err != nil || item.State != "needs_input" || item.URL != raw || item.HasText || item.Score.Valid {
 		t.Fatal(item, err)
 	}
 	var artifacts int
@@ -44,8 +44,8 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceID := item.Selected.Int64
-	snap, err := s.Snapshot(sourceID)
+	sourceID := item.ID
+	snap, err := s.SourceText(sourceID)
 	if err != nil || snap.Origin != "manual" || snap.Extractor != "manual-v1" || snap.Completeness != "unknown" {
 		t.Fatal("manual provenance", snap, err)
 	}
@@ -92,10 +92,10 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 		t.Fatal(worked, err)
 	}
 	item, err = s.Item(id)
-	if err != nil || item.State != "ready" || !item.Read || item.Tags != "human-tag" || item.Selected.Int64 != sourceID || fetchCalls != 1 || generationCalls != 2 {
+	if err != nil || item.State != "ready" || !item.Read || item.Tags != "human-tag" || item.ID != sourceID || fetchCalls != 1 || generationCalls != 2 {
 		t.Fatal("recovery changed human state or repeated source", item, err, fetchCalls, generationCalls)
 	}
-	d, err := s.DigestForSnapshot(sourceID)
+	d, err := s.DigestOf(sourceID)
 	if err != nil || d == nil {
 		t.Fatal(d, err)
 	}
@@ -106,7 +106,7 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	if err != nil || len(after) != 0 {
 		t.Fatal("rating survived a text change", after, err)
 	}
-	if cur, err := s.Snapshot(sourceID); err != nil || cur.Text != "Newer source version" {
+	if cur, err := s.SourceText(sourceID); err != nil || cur.Text != "Newer source version" {
 		t.Fatal("old text kept", cur.Text, err)
 	}
 	item, err = s.Item(id)

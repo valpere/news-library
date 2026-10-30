@@ -87,7 +87,7 @@ func TestDecodeTranslationAcceptsPlainUkrainianOnly(t *testing.T) {
 }
 
 func TestTranslationPromptCarriesNoDigestStructure(t *testing.T) {
-	msgs, err := digestMessages(Job{PromptVersion: TranslationPromptVersion, InputLimit: 4096}, Snapshot{Text: "AI agents help defenders."})
+	msgs, err := digestMessages(Job{PromptVersion: TranslationPromptVersion, InputLimit: 4096}, SourceText{Text: "AI agents help defenders."})
 	if err != nil {
 		t.Fatal(err)
 	}

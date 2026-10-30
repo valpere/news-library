@@ -66,7 +66,7 @@ func TestAutomaticKnowledgePipelineBacklinksAndHumanHistory(t *testing.T) {
 		t.Fatal(generator)
 	}
 	item, _ := s.Item(first)
-	source, _ := s.Snapshot(item.Selected.Int64)
+	source, _ := s.SourceText(item.ID)
 	if err := s.SetTags(first, []string{"human-only"}); err != nil {
 		t.Fatal(err)
 	}
@@ -79,8 +79,7 @@ func TestAutomaticKnowledgePipelineBacklinksAndHumanHistory(t *testing.T) {
 		t.Fatal(generator)
 	}
 	for _, id := range []int64{first, second} {
-		item, _ := s.Item(id)
-		k, err := s.Knowledge(id, item.Selected.Int64)
+		k, err := s.Knowledge(id)
 		if err != nil || k == nil || len(k.Questions) != 1 || !strings.Contains(k.Markdown, "aliases:") || !strings.Contains(k.Markdown, "url:") {
 			t.Fatal(k, err)
 		}
@@ -97,7 +96,7 @@ func TestAutomaticKnowledgePipelineBacklinksAndHumanHistory(t *testing.T) {
 	if after.Tags != "human-only" || after.Score.Int64 != 3 || after.Read {
 		t.Fatal(after)
 	}
-	again, _ := s.Snapshot(source.ID)
+	again, _ := s.SourceText(source.ItemID)
 	if again.Text != source.Text || again.Hash != source.Hash {
 		t.Fatal("article rewritten")
 	}
@@ -128,12 +127,11 @@ func TestKnowledgeCheckpointFailureRetryAndBackup(t *testing.T) {
 	second := knowledgeArticle(t, s, "second")
 	g.FailLinks = true
 	knowledgeStep(t, w)
-	item, _ := s.Item(second)
-	k, err := s.Knowledge(second, item.Selected.Int64)
+	k, err := s.Knowledge(second)
 	if err != nil || k == nil {
 		t.Fatal(k, err)
 	}
-	status, _ := s.KnowledgeStatus(second, item.Selected.Int64)
+	status, _ := s.KnowledgeStatus(second)
 	if status.State != "failed" || status.Kind != "format" {
 		t.Fatal(status)
 	}
@@ -156,12 +154,12 @@ func TestKnowledgeCheckpointFailureRetryAndBackup(t *testing.T) {
 	defer restored.Close()
 	restored.KnowledgeEnabled = true
 	enableDigests(t, restored)
-	restoredK, err := restored.Knowledge(second, item.Selected.Int64)
+	restoredK, err := restored.Knowledge(second)
 	if err != nil || restoredK.Markdown != k.Markdown || !RestoredPaused(restoredRoot) {
 		t.Fatal(restoredK, err)
 	}
 	var diagnostic, hash string
-	restored.DB.QueryRow("SELECT response_path,hash FROM knowledge_failures").Scan(&diagnostic, &hash)
+	restored.DB.QueryRow("SELECT response_path,hash FROM knowledge_runs WHERE response_path<>''").Scan(&diagnostic, &hash)
 	raw, err := restored.Files.Read(diagnostic, hash)
 	if err != nil || string(raw) != "raw rejected analysis" {
 		t.Fatal(string(raw), err)
@@ -180,8 +178,8 @@ func TestKnowledgeCheckpointFailureRetryAndBackup(t *testing.T) {
 		t.Fatal(backlinks, err)
 	}
 	var events int
-	restored.DB.QueryRow("SELECT count(*) FROM knowledge_failures").Scan(&events)
-	if events != 1 {
+	restored.DB.QueryRow("SELECT count(*) FROM knowledge_runs WHERE response_path<>''").Scan(&events)
+	if events != 0 {
 		t.Fatal(events)
 	}
 }
@@ -198,16 +196,16 @@ func TestKnowledgeStaleLeaseFilterAndInvalidEvidence(t *testing.T) {
 	if err != nil || j == nil {
 		t.Fatal(j, err)
 	}
-	c, err := s.knowledgeContext(second, j.SnapshotID, j.DigestID)
+	c, err := s.knowledgeContext(second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	metadata, _ := g.Metadata(context.Background(), j.Model, c, nil)
-	digest, _ := s.Digest(j.DigestID, j.ItemID)
-	if err = s.completeKnowledgeMetadata(*j, metadata, digest); err != nil {
+	digest, _ := s.DigestOf(j.ItemID)
+	if err = s.completeKnowledgeMetadata(*j, metadata, *digest); err != nil {
 		t.Fatal(err)
 	}
-	c, err = s.knowledgeContext(second, j.SnapshotID, j.DigestID)
+	c, err = s.knowledgeContext(second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,9 +324,9 @@ func TestKnowledgeQueueRestartRecoveryAndBoundedTemporaryRetry(t *testing.T) {
 	if err != nil || next == nil || next.Token == j.Token {
 		t.Fatal(next, err)
 	}
-	digest, _ := s.Digest(next.DigestID, next.ItemID)
+	digest, _ := s.DigestOf(next.ItemID)
 	metadata := ArticleKnowledge{Category: "Storage", Tags: []string{"sqlite"}, Questions: []string{"How to restore?"}}
-	if err = s.completeKnowledgeMetadata(*j, metadata, digest); !errors.Is(err, ErrLeaseLost) {
+	if err = s.completeKnowledgeMetadata(*j, metadata, *digest); !errors.Is(err, ErrLeaseLost) {
 		t.Fatal(err)
 	}
 	if err = s.failKnowledge(*next, &SourceError{Kind: "temporary", Retry: true, Message: "rate limit"}); err != nil {
@@ -348,13 +346,13 @@ func TestKnowledgeQueueRestartRecoveryAndBoundedTemporaryRetry(t *testing.T) {
 	if claimed, err := s.claimKnowledge(time.Second); err != nil || claimed != nil {
 		t.Fatal(claimed, err)
 	}
-	status, err := s.KnowledgeStatus(id, final.SnapshotID)
+	status, err := s.KnowledgeStatus(id)
 	if err != nil || status.State != "failed" || status.Kind != "unknown" {
 		t.Fatal(status, err)
 	}
 	var events int
-	s.DB.QueryRow("SELECT count(*) FROM knowledge_failures WHERE run_id=?", final.ID).Scan(&events)
-	if events != 2 {
+	s.DB.QueryRow("SELECT count(*) FROM knowledge_runs WHERE id=? AND kind<>''", final.ID).Scan(&events)
+	if events != 1 {
 		t.Fatal(events)
 	}
 }
@@ -372,16 +370,16 @@ func TestKnowledgeGroupedThemeAndManualRevisionProvenance(t *testing.T) {
 		if err != nil || claimed == nil {
 			t.Fatal(claimed, err)
 		}
-		d, _ := s.Digest(claimed.DigestID, claimed.ItemID)
+		d, _ := s.DigestOf(claimed.ItemID)
 		k := ArticleKnowledge{Category: "Storage", Tags: []string{"sqlite"}, Questions: []string{"How to recover?"}}
-		if err = s.completeKnowledgeMetadata(*claimed, k, d); err != nil {
+		if err = s.completeKnowledgeMetadata(*claimed, k, *d); err != nil {
 			t.Fatal(err)
 		}
 		if claimed.ItemID == third {
 			j = claimed
 			break
 		}
-		c, _ := s.knowledgeContext(claimed.ItemID, claimed.SnapshotID, claimed.DigestID)
+		c, _ := s.knowledgeContext(claimed.ItemID)
 		if err = s.completeKnowledgeLinks(*claimed, c, nil, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -389,7 +387,7 @@ func TestKnowledgeGroupedThemeAndManualRevisionProvenance(t *testing.T) {
 	if j == nil {
 		t.Fatal("third job missing")
 	}
-	c, _ := s.knowledgeContext(third, j.SnapshotID, j.DigestID)
+	c, _ := s.knowledgeContext(third)
 	candidates, err := s.knowledgeCandidates(c)
 	if err != nil || len(candidates) != 2 {
 		t.Fatal(candidates, err)
@@ -469,8 +467,7 @@ func TestKnowledgeRetryUsesExactCheckpointAfterModelSwitch(t *testing.T) {
 	id := knowledgeArticle(t, s, "switch")
 	g.FailLinks = true
 	knowledgeStep(t, w)
-	item, _ := s.Item(id)
-	first, err := s.Knowledge(id, item.Selected.Int64)
+	first, err := s.Knowledge(id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +476,7 @@ func TestKnowledgeRetryUsesExactCheckpointAfterModelSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	knowledgeStep(t, w)
-	second, err := s.Knowledge(id, item.Selected.Int64)
+	second, err := s.Knowledge(id)
 	if err != nil || second.RunID == first.RunID || second.Model != "other:cloud" {
 		t.Fatal(second, err)
 	}
@@ -487,13 +484,13 @@ func TestKnowledgeRetryUsesExactCheckpointAfterModelSwitch(t *testing.T) {
 	if err = s.RetryKnowledge(id); err != nil {
 		t.Fatal(err)
 	}
-	selected, err := s.Knowledge(id, item.Selected.Int64)
+	selected, err := s.Knowledge(id)
 	if err != nil || selected.RunID != first.RunID {
 		t.Fatal(selected, err)
 	}
 	g.FailLinks = false
 	knowledgeStep(t, w)
-	status, err := s.KnowledgeStatus(id, item.Selected.Int64)
+	status, err := s.KnowledgeStatus(id)
 	if err != nil || status.ID != first.RunID || status.State != "done" || g.MetadataCalls != 3 {
 		t.Fatal(status, g, err)
 	}
