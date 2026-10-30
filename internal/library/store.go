@@ -3,7 +3,6 @@ package library
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	_ "embed"
 	"errors"
@@ -47,7 +46,7 @@ type Snapshot struct {
 	ID, ItemID                                                               int64
 	Text, Title, Hash, RetrievedAt, Origin, Extractor, Completeness, Warning string
 	// UserConfirmed: the user vouched that this text is complete (overlay on the
-	// extractor's value, which stays in source_versions). ConfirmedAt is its date.
+	// extractor's value, which stays in texts). ConfirmedAt is its date.
 	UserConfirmed bool
 	ConfirmedAt   string
 }
@@ -55,7 +54,7 @@ type Job struct {
 	ID, ItemID                                 int64
 	URL, Token                                 string
 	Attempts                                   int
-	SelectedAtClaim                            sql.NullInt64
+	TextAtClaim                                string
 	Stage, ConfigVersion, Model, PromptVersion string
 	SnapshotID                                 sql.NullInt64
 	InputLimit                                 int
@@ -199,14 +198,14 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 	}
 	defer tx.Rollback()
 	// A crash on the final attempt must terminate instead of retrying forever.
-	if _, err = tx.ExecContext(ctx, `UPDATE items SET state='needs_input',error='fetch attempts exhausted after restart' WHERE selected_snapshot IS NULL AND id IN (SELECT item_id FROM jobs WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE items SET state='needs_input',error='fetch attempts exhausted after restart' WHERE NOT EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id) AND id IN (SELECT item_id FROM jobs WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
 		return nil, err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='fetch attempts exhausted after restart' WHERE stage='fetch' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
 		return nil, err
 	}
 	if s.DigestConfig != nil {
-		if _, err = tx.ExecContext(ctx, `UPDATE items SET state='digest_failed',error='digest attempts exhausted after restart' WHERE NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=items.selected_snapshot) AND selected_snapshot IN (SELECT snapshot_id FROM jobs WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE items SET state='digest_failed',error='digest attempts exhausted after restart' WHERE NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=items.id) AND id IN (SELECT item_id FROM jobs WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?)`, now.UnixMilli(), maxAttempts); err != nil {
 			return nil, err
 		}
 		if _, err = tx.ExecContext(ctx, `UPDATE jobs SET state='failed',error='digest attempts exhausted after restart' WHERE stage='digest' AND state='running' AND lease_until<=? AND attempts>=?`, now.UnixMilli(), maxAttempts); err != nil {
@@ -214,7 +213,7 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 		}
 	}
 	var j Job
-	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,i.selected_snapshot,j.stage,j.snapshot_id,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests,j.chunk_limit,j.chunk_max_parts FROM jobs j JOIN active_items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.SelectedAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests, &j.ChunkLimit, &j.ChunkMaxParts)
+	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,coalesce((SELECT hash FROM texts WHERE item_id=j.item_id),''),j.stage,CASE WHEN j.stage='digest' THEN j.item_id END,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests,j.chunk_limit,j.chunk_max_parts FROM jobs j JOIN active_items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.TextAtClaim, &j.Stage, &j.SnapshotID, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests, &j.ChunkLimit, &j.ChunkMaxParts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}
@@ -227,9 +226,9 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 		return nil, err
 	}
 	if j.Stage == "digest" {
-		_, err = tx.ExecContext(ctx, "UPDATE items SET state='enriching',error='' WHERE id=? AND selected_snapshot=? AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=?)", j.ItemID, j.SnapshotID, j.SnapshotID)
+		_, err = tx.ExecContext(ctx, "UPDATE items SET state='enriching',error='' WHERE id=? AND NOT EXISTS(SELECT 1 FROM digests WHERE item_id=?)", j.ItemID, j.ItemID)
 	} else {
-		_, err = tx.ExecContext(ctx, "UPDATE items SET state='fetching',error='' WHERE id=? AND selected_snapshot IS NULL", j.ItemID)
+		_, err = tx.ExecContext(ctx, "UPDATE items SET state='fetching',error='' WHERE id=? AND NOT EXISTS(SELECT 1 FROM texts WHERE item_id=?)", j.ItemID, j.ItemID)
 	}
 	if err != nil {
 		return nil, err
@@ -262,22 +261,6 @@ func indexSnapshot(tx *sql.Tx, id int64, title, text string) error {
 	_, err := tx.Exec("UPDATE item_fts SET title=?,text=?,url=(SELECT canonical_url FROM items WHERE id=?) WHERE rowid=?", title, text, id, id)
 	return err
 }
-func (s *Store) insertSnapshot(tx *sql.Tx, id int64, jobID any, snap Snapshot) (int64, error) {
-	sum := sha256.Sum256([]byte(snap.Text))
-	path, err := s.Files.Put("texts", []byte(snap.Text))
-	if err != nil {
-		return 0, err
-	}
-	retrieved := snap.RetrievedAt
-	if retrieved == "" {
-		retrieved = nowUTC()
-	}
-	r, err := tx.Exec("INSERT INTO source_versions(item_id,job_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning) VALUES(?,?,?,?,?,?,?,?,?,?)", id, jobID, path, snap.Title, fmt.Sprintf("%x", sum), retrieved, snap.Origin, snap.Extractor, snap.Completeness, snap.Warning)
-	if err != nil {
-		return 0, err
-	}
-	return r.LastInsertId()
-}
 func (s *Store) Complete(j Job, snap Snapshot) error {
 	if j.Stage != "fetch" {
 		return errors.New("not a fetch job")
@@ -295,8 +278,10 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 	}
 	// Manual input wins over an already-running fetch.
 	var origin, currentHash string
-	var selected sql.NullInt64
-	if err = tx.QueryRow("SELECT coalesce((SELECT origin FROM source_versions WHERE id=selected_snapshot),''),coalesce((SELECT hash FROM source_versions WHERE id=selected_snapshot),''),selected_snapshot FROM items WHERE id=?", j.ItemID).Scan(&origin, &currentHash, &selected); err != nil {
+	hasText := false
+	if err = tx.QueryRow("SELECT origin,hash FROM texts WHERE item_id=?", j.ItemID).Scan(&origin, &currentHash); err == nil {
+		hasText = true
+	} else if err != sql.ErrNoRows {
 		return err
 	}
 	jobState, jobMessage := "done", ""
@@ -304,33 +289,20 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 	var erased map[string]bool
 	// A fresh response that contains only a notice does not replace a prior source;
 	// the failure is recorded on the job, the notice itself is dropped.
-	if (contentErr == nil || !selected.Valid) && (origin != "manual" || selected == j.SelectedAtClaim) {
-		if selected.Valid && currentHash == textHash(snap.Text) {
-			// Same text: nothing derived from it is invalidated.
-			retrieved := snap.RetrievedAt
-			if retrieved == "" {
-				retrieved = nowUTC()
-			}
-			if _, err = tx.Exec("UPDATE source_versions SET retrieved_at=?,extractor=?,completeness=?,warning=? WHERE id=?", retrieved, snap.Extractor, snap.Completeness, snap.Warning, selected.Int64); err != nil {
+	if (contentErr == nil || !hasText) && (origin != "manual" || currentHash == j.TextAtClaim) {
+		changed, paths, e := s.installText(tx, j.ItemID, snap, true)
+		if e != nil {
+			return e
+		}
+		erased = paths
+		if changed {
+			if _, err = tx.Exec("UPDATE items SET title=?,state='ready',error='' WHERE id=?", snap.Title, j.ItemID); err != nil {
 				return err
-			}
-		} else {
-			sid, e := s.insertSnapshot(tx, j.ItemID, j.ID, snap)
-			if e != nil {
-				return e
-			}
-			if _, err = tx.Exec("UPDATE items SET selected_snapshot=?,title=?,state='ready',error='' WHERE id=?", sid, snap.Title, j.ItemID); err != nil {
-				return err
-			}
-			if selected.Valid {
-				if erased, err = s.replaceText(tx, j.ItemID, sid); err != nil {
-					return err
-				}
 			}
 			if err = indexSnapshot(tx, j.ItemID, snap.Title, snap.Text); err != nil {
 				return err
 			}
-			if err = s.processSnapshot(tx, j.ItemID, sid, snap, j.FilterOverride); err != nil {
+			if err = s.processSnapshot(tx, j.ItemID, j.ItemID, snap, j.FilterOverride); err != nil {
 				return err
 			}
 		}
@@ -379,9 +351,9 @@ func (s *Store) fail(j Job, message string, retry bool, maxAttempts int, now tim
 		if state == "retry_wait" {
 			itemState = "digest_retry_wait"
 		}
-		_, err = tx.Exec("UPDATE items SET state=?,error=? WHERE id=? AND selected_snapshot=? AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=?)", itemState, message, j.ItemID, j.SnapshotID, j.SnapshotID)
+		_, err = tx.Exec("UPDATE items SET state=?,error=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM digests WHERE item_id=?)", itemState, message, j.ItemID, j.ItemID)
 	} else {
-		_, err = tx.Exec("UPDATE items SET state=?,error=? WHERE id=? AND selected_snapshot IS NULL", itemState, message, j.ItemID)
+		_, err = tx.Exec("UPDATE items SET state=?,error=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM texts WHERE item_id=?)", itemState, message, j.ItemID, j.ItemID)
 	}
 	if err != nil {
 		return err
@@ -421,7 +393,7 @@ func (s *Store) Retry(id int64) error {
 	if n == 0 {
 		return errors.New("запис відсутній або отримання вже активне")
 	}
-	if _, err = tx.Exec("UPDATE items SET state='queued',error='' WHERE id=? AND selected_snapshot IS NULL", id); err != nil {
+	if _, err = tx.Exec("UPDATE items SET state='queued',error='' WHERE id=? AND NOT EXISTS(SELECT 1 FROM texts WHERE item_id=?)", id, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -439,26 +411,15 @@ func (s *Store) Manual(id int64, text string) error {
 	if err = tx.QueryRow("SELECT title FROM active_items WHERE id=?", id).Scan(&title); err != nil {
 		return err
 	}
-	var selected sql.NullInt64
-	var currentHash string
-	if err = tx.QueryRow("SELECT selected_snapshot,coalesce((SELECT hash FROM source_versions WHERE id=selected_snapshot),'') FROM items WHERE id=?", id).Scan(&selected, &currentHash); err != nil {
-		return err
-	}
-	if selected.Valid && currentHash == textHash(text) {
-		return nil
-	}
-	sid, err := s.insertSnapshot(tx, id, nil, Snapshot{Text: text, Title: title, Origin: "manual", Extractor: "manual-v1", Completeness: "unknown", Warning: "Повнота ручного тексту невідома"})
+	changed, erased, err := s.installText(tx, id, Snapshot{Text: text, Title: title, Origin: "manual", Extractor: "manual-v1", Completeness: "unknown", Warning: "Повнота ручного тексту невідома"}, false)
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec("UPDATE items SET selected_snapshot=?,state='ready',error='' WHERE id=?", sid, id); err != nil {
-		return err
+	if !changed {
+		return nil
 	}
-	var erased map[string]bool
-	if selected.Valid {
-		if erased, err = s.replaceText(tx, id, sid); err != nil {
-			return err
-		}
+	if _, err = tx.Exec("UPDATE items SET state='ready',error='' WHERE id=?", id); err != nil {
+		return err
 	}
 	if _, err = tx.Exec("UPDATE jobs SET state='cancelled' WHERE item_id=? AND stage='fetch' AND state IN ('queued','retry_wait')", id); err != nil {
 		return err
@@ -466,7 +427,7 @@ func (s *Store) Manual(id int64, text string) error {
 	if err = indexSnapshot(tx, id, title, text); err != nil {
 		return err
 	}
-	if err = s.processSnapshot(tx, id, sid, Snapshot{Text: text, Title: title}, false); err != nil {
+	if err = s.processSnapshot(tx, id, id, Snapshot{Text: text, Title: title}, false); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -533,8 +494,8 @@ func (s *Store) SetTags(id int64, tags []string) error {
 	return tx.Commit()
 }
 
-const confidenceExpr = `(SELECT p.probability FROM generated_artifacts a LEFT JOIN interest_predictions p ON p.digest_id=a.id WHERE a.snapshot_id=i.selected_snapshot ORDER BY a.id DESC LIMIT 1)`
-const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.state,i.error,i.is_read,i.selected_snapshot,i.rating,i.rated_at,(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
+const confidenceExpr = `(SELECT probability FROM interest_predictions WHERE item_id=i.id)`
+const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.state,i.error,i.is_read,(SELECT item_id FROM texts WHERE texts.item_id=i.id),i.rating,i.rated_at,(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var i Item
@@ -554,7 +515,7 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		for _, word := range strings.Fields(f.Query) {
 			terms = append(terms, `"`+strings.ReplaceAll(word, `"`, `""`)+`"`)
 		}
-		query += " AND (i.id IN (SELECT rowid FROM item_fts WHERE item_fts MATCH ?) OR EXISTS(SELECT 1 FROM article_knowledge k WHERE k.item_id=i.id AND k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND instr(k.search_text,?)>0))"
+		query += " AND (i.id IN (SELECT rowid FROM item_fts WHERE item_fts MATCH ?) OR EXISTS(SELECT 1 FROM article_knowledge k WHERE k.item_id=i.id AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND instr(k.search_text,?)>0))"
 		args = append(args, strings.Join(terms, " AND "), strings.ToLower(f.Query))
 	}
 	for _, pair := range []struct{ v, column string }{{f.State, "i.state"}} {
@@ -571,7 +532,7 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		args = append(args, f.Filter)
 	}
 	if f.Category != "" {
-		query += " AND EXISTS(SELECT 1 FROM article_knowledge k WHERE k.item_id=i.id AND k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND k.category=?)"
+		query += " AND EXISTS(SELECT 1 FROM article_knowledge k WHERE k.item_id=i.id AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND k.category=?)"
 		args = append(args, f.Category)
 	}
 	var minimum, maximum *float64
@@ -611,7 +572,7 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		args = append(args, n)
 	}
 	if len(f.Tags) > 0 {
-		query += " AND (EXISTS(SELECT 1 FROM item_tags WHERE item_id=i.id AND tag IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.Tags)), ",") + ")) OR EXISTS(SELECT 1 FROM article_knowledge k,json_each(k.tags_json) t WHERE k.item_id=i.id AND k.snapshot_id=i.selected_snapshot AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id AND a.snapshot_id=i.selected_snapshot ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND t.value IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.Tags)), ",") + ")))"
+		query += " AND (EXISTS(SELECT 1 FROM item_tags WHERE item_id=i.id AND tag IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.Tags)), ",") + ")) OR EXISTS(SELECT 1 FROM article_knowledge k,json_each(k.tags_json) t WHERE k.item_id=i.id AND k.id=(SELECT a.id FROM article_knowledge a JOIN knowledge_runs r ON r.id=a.run_id WHERE a.item_id=i.id ORDER BY r.updated_at DESC,a.id DESC LIMIT 1) AND t.value IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.Tags)), ",") + ")))"
 		for range 2 {
 			for _, tag := range f.Tags {
 				args = append(args, tag)
@@ -671,7 +632,7 @@ type JobStatus struct {
 }
 
 func (s *Store) Jobs(id int64) ([]JobStatus, error) {
-	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage,snapshot_id,coalesce((SELECT kind FROM job_failures WHERE job_id=jobs.id ORDER BY id DESC LIMIT 1),'') FROM jobs WHERE item_id=? ORDER BY id DESC", id)
+	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage,CASE WHEN stage='digest' THEN item_id END,coalesce((SELECT kind FROM job_failures WHERE job_id=jobs.id ORDER BY id DESC LIMIT 1),'') FROM jobs WHERE item_id=? ORDER BY id DESC", id)
 	if err != nil {
 		return nil, err
 	}

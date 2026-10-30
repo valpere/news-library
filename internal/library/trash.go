@@ -13,7 +13,7 @@ import (
 func trashMissingPage(tx *sql.Tx, id int64, reason string) error {
 	_, err := tx.Exec(`INSERT INTO trash_entries(item_id,reason,moved_at)
  SELECT id,?,? FROM items WHERE id=?
- AND NOT EXISTS(SELECT 1 FROM source_versions WHERE item_id=items.id)
+ AND NOT EXISTS(SELECT 1 FROM texts WHERE item_id=items.id)
  AND rating IS NULL
  AND NOT EXISTS(SELECT 1 FROM jobs WHERE item_id=items.id AND state IN ('queued','running','retry_wait'))
  ON CONFLICT(item_id) DO NOTHING`, reason, nowUTC(), id)
@@ -133,7 +133,7 @@ type TrashCard struct {
 func (s *Store) TrashCard(id int64) (TrashCard, error) {
 	var c TrashCard
 	var selected int64
-	err := s.DB.QueryRow(`SELECT i.id,i.original_url,i.title,t.reason,t.moved_at,coalesce(i.selected_snapshot,0)
+	err := s.DB.QueryRow(`SELECT i.id,i.original_url,i.title,t.reason,t.moved_at,coalesce((SELECT item_id FROM texts WHERE texts.item_id=i.id),0)
  FROM items i JOIN trash_entries t ON t.item_id=i.id WHERE i.id=?`, id).Scan(&c.ID, &c.URL, &c.Title, &c.Reason, &c.MovedAt, &selected)
 	if err != nil {
 		return c, err

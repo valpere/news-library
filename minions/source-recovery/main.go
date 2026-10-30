@@ -44,7 +44,7 @@ func plan(s *library.Store, ids string, limit int) ([]int64, error) {
 		}
 		return out, nil
 	}
-	rows, e := s.DB.Query("SELECT id FROM active_items WHERE selected_snapshot IS NULL ORDER BY id LIMIT ?", limit)
+	rows, e := s.DB.Query("SELECT id FROM active_items WHERE NOT EXISTS(SELECT 1 FROM texts WHERE texts.item_id=active_items.id) ORDER BY id LIMIT ?", limit)
 	if e != nil {
 		return nil, e
 	}

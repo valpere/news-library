@@ -36,7 +36,7 @@ func (s *Store) PurgeBlocker(id int64) (string, error) {
 
 // purgeFileColumns lists every place that references a stored file by path.
 var purgeFileColumns = [][2]string{
-	{"source_versions", "text_path"}, {"generated_artifacts", "markdown_path"}, {"digest_checkpoints", "markdown_path"},
+	{"texts", "text_path"}, {"digests", "markdown_path"}, {"digest_checkpoints", "markdown_path"},
 	{"article_knowledge", "markdown_path"}, {"job_failures", "response_path"}, {"knowledge_failures", "response_path"},
 	{"connection_versions", "markdown_path"}, {"cache_entries", "body_path"},
 }
@@ -80,8 +80,8 @@ func (s *Store) PurgeTrashed(id int64) error {
 		return rows.Err()
 	}
 	for _, q := range []string{
-		`SELECT text_path FROM source_versions WHERE item_id=?`,
-		`SELECT markdown_path FROM generated_artifacts WHERE item_id=?`,
+		`SELECT text_path FROM texts WHERE item_id=?`,
+		`SELECT markdown_path FROM digests WHERE item_id=?`,
 		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=?)`,
 		`SELECT markdown_path FROM article_knowledge WHERE item_id=?`,
 		`SELECT response_path FROM job_failures WHERE job_id IN (SELECT id FROM jobs WHERE item_id=?)`,
@@ -99,26 +99,24 @@ func (s *Store) PurgeTrashed(id int64) error {
 		return err
 	}
 	defer tx.Rollback()
-	snaps := `(SELECT id FROM source_versions WHERE item_id=?)`
-	runs := `(SELECT id FROM knowledge_runs WHERE item_id=?)`
-	arts := `(SELECT id FROM generated_artifacts WHERE item_id=?)`
 	jobs := `(SELECT id FROM jobs WHERE item_id=?)`
+	runs := `(SELECT id FROM knowledge_runs WHERE item_id=?)`
 	for _, q := range []string{
-		`DELETE FROM embedding_chunks WHERE snapshot_id IN ` + snaps,
-		`DELETE FROM embedding_runs WHERE snapshot_id IN ` + snaps,
+		`DELETE FROM embedding_chunks WHERE item_id=?`,
+		`DELETE FROM embedding_runs WHERE item_id=?`,
 		`DELETE FROM knowledge_failures WHERE run_id IN ` + runs,
 		`DELETE FROM article_knowledge WHERE item_id=?`,
 		`DELETE FROM knowledge_runs WHERE item_id=?`,
-		`DELETE FROM interest_predictions WHERE digest_id IN ` + arts,
+		`DELETE FROM interest_predictions WHERE item_id=?`,
 		`DELETE FROM digest_feedback WHERE item_id=?`,
 		`DELETE FROM digest_checkpoints WHERE job_id IN ` + jobs,
 		`DELETE FROM job_failures WHERE job_id IN ` + jobs,
 		`DELETE FROM filter_decisions WHERE item_id=?`,
 		`DELETE FROM search_judgments WHERE item_id=?`,
-		`DELETE FROM completeness_confirmations WHERE snapshot_id IN ` + snaps,
-		`DELETE FROM generated_artifacts WHERE item_id=?`,
+		`DELETE FROM completeness_confirmations WHERE item_id=?`,
+		`DELETE FROM digests WHERE item_id=?`,
 		`DELETE FROM jobs WHERE item_id=?`,
-		`DELETE FROM source_versions WHERE item_id=?`,
+		`DELETE FROM texts WHERE item_id=?`,
 		`DELETE FROM item_tags WHERE item_id=?`,
 		`DELETE FROM source_aliases WHERE item_id=?`,
 		`DELETE FROM trash_entries WHERE item_id=?`,

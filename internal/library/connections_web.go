@@ -105,7 +105,7 @@ func (w *Web) connectionForm(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if item.Selected.Valid {
-			n.Members = append(n.Members, ConnectionMember{ItemID: id, SnapshotID: item.Selected.Int64, Title: item.Title, URL: item.URL})
+			n.Members = append(n.Members, ConnectionMember{ItemID: id, Title: item.Title, URL: item.URL})
 		}
 	}
 	w.renderConnectionForm(rw, r, n, "", 200)
@@ -116,22 +116,16 @@ func parseConnectionMembers(raw string) ([]ConnectionMember, error) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 4)
-		if len(parts) != 4 {
-			return nil, errors.New("матеріали: ID | версія тексту | дайджест | роль")
+		parts := strings.SplitN(line, "|", 2)
+		if len(parts) != 2 {
+			return nil, errors.New("матеріали: ID | роль")
 		}
-		m := ConnectionMember{Role: strings.TrimSpace(parts[3])}
-		for i, target := range []*int64{&m.ItemID, &m.SnapshotID, &m.DigestID} {
-			value := strings.TrimSpace(parts[i])
-			if value == "" && i > 0 {
-				continue
-			}
-			id, err := strconv.ParseInt(value, 10, 64)
-			if err != nil || id < 0 || (i == 0 && id == 0) {
-				return nil, errors.New("некоректні ID матеріалу та версій")
-			}
-			*target = id
+		m := ConnectionMember{Role: strings.TrimSpace(parts[1])}
+		id, err := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 64)
+		if err != nil || id <= 0 {
+			return nil, errors.New("некоректний ID матеріалу")
 		}
+		m.ItemID = id
 		out = append(out, m)
 	}
 	return out, nil
@@ -152,8 +146,8 @@ func (w *Web) saveConnection(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	items, sources, digests, roles := r.PostForm["item"], r.PostForm["source"], r.PostForm["digest"], r.PostForm["role"]
-	if len(items) != len(sources) || len(items) != len(digests) || len(items) != len(roles) || len(items) > 24 {
+	items, roles := r.PostForm["item"], r.PostForm["role"]
+	if len(items) != len(roles) || len(items) > 24 {
 		http.Error(rw, "некоректні матеріали", 400)
 		return
 	}
@@ -165,7 +159,7 @@ func (w *Web) saveConnection(rw http.ResponseWriter, r *http.Request) {
 		if value == "" || omit[strconv.Itoa(i)] {
 			continue
 		}
-		row, e := parseConnectionMembers(value + " | " + sources[i] + " | " + digests[i] + " | " + roles[i])
+		row, e := parseConnectionMembers(value + " | " + roles[i])
 		if e != nil {
 			err = e
 			break
@@ -208,7 +202,7 @@ func (w *Web) renderConnectionForm(rw http.ResponseWriter, r *http.Request, n Co
 		id, _ := strconv.ParseInt(r.URL.Query().Get("item"), 10, 64)
 		item, e := w.Store.Item(id)
 		if e == nil && item.Selected.Valid {
-			n.Members = append(n.Members, ConnectionMember{ItemID: id, SnapshotID: item.Selected.Int64, Title: item.Title, URL: item.URL})
+			n.Members = append(n.Members, ConnectionMember{ItemID: id, Title: item.Title, URL: item.URL})
 		}
 	}
 	for i := range n.Members {

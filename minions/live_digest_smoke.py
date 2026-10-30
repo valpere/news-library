@@ -23,7 +23,7 @@ def inspect(db, data, prediction):
         return None
     if row[0] in ("needs_input", "failed", "digest_failed"):
         raise ValueError(f"fixture processing failed: {row[0]}")
-    result = db.execute("SELECT id,markdown_path,actual_model,provider,prompt_version FROM generated_artifacts WHERE item_id=1 ORDER BY id DESC LIMIT 1").fetchone()
+    result = db.execute("SELECT item_id,markdown_path,actual_model,provider,prompt_version FROM digests WHERE item_id=1").fetchone()
     if row[0] != "ready" or not result:
         return None
     markdown = (data / result[1]).read_text()
@@ -31,7 +31,7 @@ def inspect(db, data, prediction):
               "prompt_version": result[4], "data": str(data), "words": len(markdown.split()),
               "sections": [line for line in markdown.splitlines() if line.startswith("## ")]}
     if prediction:
-        predicted = db.execute("SELECT probability FROM interest_predictions WHERE digest_id=?", (result[0],)).fetchone()
+        predicted = db.execute("SELECT probability FROM interest_predictions WHERE item_id=?", (result[0],)).fetchone()
         if not predicted:
             raise ValueError("ready digest lacks the requested fixture prediction")
         output["fixture_confidence"] = predicted[0]

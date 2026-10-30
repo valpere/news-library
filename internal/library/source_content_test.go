@@ -96,7 +96,7 @@ func TestScopedKnowledgeDoesNotClaimOrCancelOtherItems(t *testing.T) {
 		t.Fatal(state, err)
 	}
 	// A stale job elsewhere must also remain untouched by scoped cleanup.
-	if _, err := s.DB.Exec("UPDATE items SET selected_snapshot=NULL WHERE id=1"); err != nil {
+	if _, err := s.DB.Exec("UPDATE items SET filter_state='rejected' WHERE id=1"); err != nil {
 		t.Fatal(err)
 	}
 	if worked, err := w.Step(context.Background()); err != nil || worked {
@@ -168,7 +168,7 @@ func TestCopyrightOnlyPreservedBeforeAnyAI(t *testing.T) {
 	}
 	manual(t, s, id, "A meaningful short announcement describes AI agents for defenders.")
 	item, _ = s.Item(id)
-	if item.Selected.Int64 == saved.ID || item.State != "enriching" {
+	if item.State != "enriching" {
 		t.Fatal(item)
 	}
 	snapshots, _ := s.Snapshots(id)

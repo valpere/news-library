@@ -6,87 +6,158 @@ import (
 	"strings"
 )
 
-// replaceText is called once sid has become the item's current text, replacing an
-// earlier one: the human rating no longer describes this text, so it is erased,
-// and so is everything stored for the earlier texts.
-func (s *Store) replaceText(tx *sql.Tx, itemID, sid int64) (map[string]bool, error) {
-	if _, err := tx.Exec(`UPDATE items SET rating=NULL,rated_at=NULL WHERE id=?`, itemID); err != nil {
-		return nil, err
+// installText makes snap the item's only text. When it replaces a different text,
+// the rating and everything derived from the old one (digest, knowledge, embeddings,
+// filter decision, completeness confirmation, digest jobs) are erased. Identical
+// text only refreshes the metadata (changed=false). It returns the file paths the
+// erased rows used; the caller removes the ones nothing else uses after the
+// transaction commits.
+func (s *Store) installText(tx *sql.Tx, itemID int64, snap Snapshot, refreshOnly bool) (changed bool, paths map[string]bool, err error) {
+	var oldHash, oldPath string
+	err = tx.QueryRow(`SELECT hash,text_path FROM texts WHERE item_id=?`, itemID).Scan(&oldHash, &oldPath)
+	exists := err == nil
+	if err != nil && err != sql.ErrNoRows {
+		return false, nil, err
 	}
-	return s.eraseEarlierTexts(tx, itemID, sid)
+	retrieved := snap.RetrievedAt
+	if retrieved == "" {
+		retrieved = nowUTC()
+	}
+	hash := textHash(snap.Text)
+	if exists && oldHash == hash {
+		if refreshOnly {
+			_, err = tx.Exec(`UPDATE texts SET retrieved_at=?,extractor=?,completeness=?,warning=? WHERE item_id=?`, retrieved, snap.Extractor, snap.Completeness, snap.Warning, itemID)
+		}
+		return false, nil, err
+	}
+	if exists {
+		if paths, err = s.eraseDerived(tx, itemID); err != nil {
+			return false, nil, err
+		}
+		if _, err = tx.Exec(`UPDATE items SET rating=NULL,rated_at=NULL WHERE id=?`, itemID); err != nil {
+			return false, nil, err
+		}
+		paths[oldPath] = true
+	}
+	path, err := s.Files.Put("texts", []byte(snap.Text))
+	if err != nil {
+		return false, nil, err
+	}
+	_, err = tx.Exec(`INSERT INTO texts(item_id,text_path,title,hash,retrieved_at,origin,extractor,completeness,warning) VALUES(?,?,?,?,?,?,?,?,?)
+ ON CONFLICT(item_id) DO UPDATE SET text_path=excluded.text_path,title=excluded.title,hash=excluded.hash,retrieved_at=excluded.retrieved_at,origin=excluded.origin,extractor=excluded.extractor,completeness=excluded.completeness,warning=excluded.warning`,
+		itemID, path, snap.Title, hash, retrieved, snap.Origin, snap.Extractor, snap.Completeness, snap.Warning)
+	return true, paths, err
 }
 
-// eraseEarlierTexts removes everything stored for the item's texts other than the
-// current one (keep): the earlier text rows, their digests, checkpoints, knowledge,
-// embeddings, filter decisions, completeness confirmations and the jobs that made
-// them. A text a connection note mentions stays until notes lose their revisions.
-// It returns the file paths the erased rows used; the caller removes the ones
-// nothing else uses after the transaction commits.
-func (s *Store) eraseEarlierTexts(tx *sql.Tx, itemID, keep int64) (map[string]bool, error) {
-	snaps, err := queryIDs(tx, `SELECT id FROM source_versions WHERE item_id=? AND id<>? AND id NOT IN (SELECT snapshot_id FROM connection_members)`, itemID, keep)
-	if err != nil || len(snaps) == 0 {
-		return nil, err
-	}
-	in := idList(snaps)
-	arts, err := queryIDs(tx, `SELECT id FROM generated_artifacts WHERE snapshot_id IN `+in)
-	if err != nil {
-		return nil, err
-	}
-	runs, err := queryIDs(tx, `SELECT id FROM knowledge_runs WHERE snapshot_id IN `+in)
-	if err != nil {
-		return nil, err
-	}
-	jobs, err := queryIDs(tx, `SELECT id FROM jobs WHERE snapshot_id IN `+in+` OR id IN (SELECT job_id FROM source_versions WHERE id IN `+in+`) OR id IN (SELECT job_id FROM generated_artifacts WHERE snapshot_id IN `+in+`)`)
-	if err != nil {
-		return nil, err
-	}
+// eraseDerived deletes everything produced from the item's current text: the
+// digest and its prediction and feedback, knowledge, embeddings, source-stage filter
+// decisions, completeness confirmations and the digest jobs with their checkpoints
+// and failures. The text row itself and the item stay.
+func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) {
 	paths := map[string]bool{}
 	for _, q := range []string{
-		`SELECT text_path FROM source_versions WHERE id IN ` + in,
-		`SELECT markdown_path FROM generated_artifacts WHERE snapshot_id IN ` + in,
-		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN ` + idList(jobs),
-		`SELECT markdown_path FROM article_knowledge WHERE snapshot_id IN ` + in,
-		`SELECT response_path FROM job_failures WHERE job_id IN ` + idList(jobs),
-		`SELECT response_path FROM knowledge_failures WHERE run_id IN ` + idList(runs),
+		`SELECT markdown_path FROM digests WHERE item_id=?`,
+		`SELECT markdown_path FROM article_knowledge WHERE item_id=?`,
+		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
+		`SELECT response_path FROM job_failures WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
+		`SELECT response_path FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
 	} {
-		rows, e := tx.Query(q)
-		if e != nil {
-			return nil, e
+		rows, err := tx.Query(q, itemID)
+		if err != nil {
+			return nil, err
 		}
 		for rows.Next() {
 			var p string
-			if e = rows.Scan(&p); e != nil {
+			if err = rows.Scan(&p); err != nil {
 				rows.Close()
-				return nil, e
+				return nil, err
 			}
 			if p != "" {
 				paths[p] = true
 			}
 		}
-		if e = rows.Close(); e != nil {
-			return nil, e
+		if err = rows.Close(); err != nil {
+			return nil, err
 		}
 	}
 	for _, q := range []string{
-		`DELETE FROM embedding_chunks WHERE snapshot_id IN ` + in,
-		`DELETE FROM embedding_runs WHERE snapshot_id IN ` + in,
-		`DELETE FROM knowledge_failures WHERE run_id IN ` + idList(runs),
-		`DELETE FROM article_knowledge WHERE snapshot_id IN ` + in,
-		`DELETE FROM knowledge_runs WHERE snapshot_id IN ` + in,
-		`DELETE FROM interest_predictions WHERE digest_id IN ` + idList(arts),
-		`DELETE FROM digest_feedback WHERE digest_id IN ` + idList(arts),
-		`DELETE FROM digest_checkpoints WHERE job_id IN ` + idList(jobs),
-		`DELETE FROM job_failures WHERE job_id IN ` + idList(jobs),
-		`UPDATE filter_decisions SET override_of=NULL WHERE override_of IN (SELECT id FROM filter_decisions WHERE snapshot_id IN ` + in + `)`,
-		`DELETE FROM filter_decisions WHERE snapshot_id IN ` + in,
-		`DELETE FROM completeness_confirmations WHERE snapshot_id IN ` + in,
-		`DELETE FROM generated_artifacts WHERE snapshot_id IN ` + in,
-		`UPDATE source_versions SET job_id=NULL WHERE id IN ` + in,
-		`DELETE FROM jobs WHERE id IN ` + idList(jobs),
-		`DELETE FROM source_versions WHERE id IN ` + in,
+		`DELETE FROM embedding_chunks WHERE item_id=?`,
+		`DELETE FROM embedding_runs WHERE item_id=?`,
+		`DELETE FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
+		`DELETE FROM article_knowledge WHERE item_id=?`,
+		`DELETE FROM knowledge_runs WHERE item_id=?`,
+		`DELETE FROM interest_predictions WHERE item_id=?`,
+		`DELETE FROM digest_feedback WHERE item_id=?`,
+		`DELETE FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
+		`DELETE FROM job_failures WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
+		`UPDATE filter_decisions SET override_of=NULL WHERE override_of IN (SELECT id FROM filter_decisions WHERE item_id=? AND stage='source')`,
+		`DELETE FROM filter_decisions WHERE item_id=? AND stage='source'`,
+		`DELETE FROM completeness_confirmations WHERE item_id=?`,
+		`DELETE FROM digests WHERE item_id=?`,
+		`DELETE FROM jobs WHERE item_id=? AND stage='digest'`,
 	} {
-		if _, err = tx.Exec(q); err != nil {
+		if _, err := tx.Exec(q, itemID); err != nil {
 			return nil, fmt.Errorf("%s: %w", q, err)
+		}
+	}
+	return paths, nil
+}
+
+// eraseDigest deletes the item's current digest with what hangs on it (prediction,
+// feedback, knowledge, the digest job and its checkpoints and failures), except the
+// job keepJob that is producing the replacement.
+func (s *Store) eraseDigest(tx *sql.Tx, itemID, keepJob int64) (map[string]bool, error) {
+	jobs, err := queryIDs(tx, `SELECT id FROM jobs WHERE item_id=? AND stage='digest' AND id<>?`, itemID, keepJob)
+	if err != nil {
+		return nil, err
+	}
+	paths := map[string]bool{}
+	for _, q := range []string{
+		`SELECT markdown_path FROM digests WHERE item_id=?`,
+		`SELECT markdown_path FROM article_knowledge WHERE item_id=?`,
+		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN ` + idList(jobs),
+		`SELECT response_path FROM job_failures WHERE job_id IN ` + idList(jobs),
+		`SELECT response_path FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
+	} {
+		var rows *sql.Rows
+		if strings.Contains(q, "?") {
+			rows, err = tx.Query(q, itemID)
+		} else {
+			rows, err = tx.Query(q)
+		}
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var p string
+			if err = rows.Scan(&p); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if p != "" {
+				paths[p] = true
+			}
+		}
+		if err = rows.Close(); err != nil {
+			return nil, err
+		}
+	}
+	for _, d := range []struct {
+		query string
+		args  []any
+	}{
+		{`DELETE FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`, []any{itemID}},
+		{`DELETE FROM article_knowledge WHERE item_id=?`, []any{itemID}},
+		{`DELETE FROM knowledge_runs WHERE item_id=?`, []any{itemID}},
+		{`DELETE FROM interest_predictions WHERE item_id=?`, []any{itemID}},
+		{`DELETE FROM digest_feedback WHERE item_id=?`, []any{itemID}},
+		{`DELETE FROM digest_checkpoints WHERE job_id IN ` + idList(jobs), nil},
+		{`DELETE FROM job_failures WHERE job_id IN ` + idList(jobs), nil},
+		{`DELETE FROM digests WHERE item_id=?`, []any{itemID}},
+		{`DELETE FROM jobs WHERE id IN ` + idList(jobs), nil},
+	} {
+		if _, err = tx.Exec(d.query, d.args...); err != nil {
+			return nil, fmt.Errorf("%s: %w", d.query, err)
 		}
 	}
 	return paths, nil
@@ -119,65 +190,4 @@ func idList(ids []int64) string {
 		parts[i] = fmt.Sprint(id)
 	}
 	return "(" + strings.Join(parts, ",") + ")"
-}
-
-// eraseEarlierDigests removes the other digests of the same text (keep is the new
-// one) with their predictions, feedback, knowledge, checkpoints, failures and
-// jobs. A digest a connection note mentions stays until notes lose revisions.
-func (s *Store) eraseEarlierDigests(tx *sql.Tx, snapshotID, keep int64) (map[string]bool, error) {
-	arts, err := queryIDs(tx, `SELECT id FROM generated_artifacts WHERE snapshot_id=? AND id<>? AND id NOT IN (SELECT digest_id FROM connection_members WHERE digest_id IS NOT NULL)`, snapshotID, keep)
-	if err != nil || len(arts) == 0 {
-		return nil, err
-	}
-	in := idList(arts)
-	runs, err := queryIDs(tx, `SELECT id FROM knowledge_runs WHERE digest_id IN `+in)
-	if err != nil {
-		return nil, err
-	}
-	jobs, err := queryIDs(tx, `SELECT job_id FROM generated_artifacts WHERE id IN `+in)
-	if err != nil {
-		return nil, err
-	}
-	paths := map[string]bool{}
-	for _, q := range []string{
-		`SELECT markdown_path FROM generated_artifacts WHERE id IN ` + in,
-		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN ` + idList(jobs),
-		`SELECT markdown_path FROM article_knowledge WHERE run_id IN ` + idList(runs),
-		`SELECT response_path FROM job_failures WHERE job_id IN ` + idList(jobs),
-		`SELECT response_path FROM knowledge_failures WHERE run_id IN ` + idList(runs),
-	} {
-		rows, e := tx.Query(q)
-		if e != nil {
-			return nil, e
-		}
-		for rows.Next() {
-			var p string
-			if e = rows.Scan(&p); e != nil {
-				rows.Close()
-				return nil, e
-			}
-			if p != "" {
-				paths[p] = true
-			}
-		}
-		if e = rows.Close(); e != nil {
-			return nil, e
-		}
-	}
-	for _, q := range []string{
-		`DELETE FROM knowledge_failures WHERE run_id IN ` + idList(runs),
-		`DELETE FROM article_knowledge WHERE run_id IN ` + idList(runs),
-		`DELETE FROM knowledge_runs WHERE id IN ` + idList(runs),
-		`DELETE FROM interest_predictions WHERE digest_id IN ` + in,
-		`DELETE FROM digest_feedback WHERE digest_id IN ` + in,
-		`DELETE FROM digest_checkpoints WHERE job_id IN ` + idList(jobs),
-		`DELETE FROM job_failures WHERE job_id IN ` + idList(jobs),
-		`DELETE FROM generated_artifacts WHERE id IN ` + in,
-		`DELETE FROM jobs WHERE id IN ` + idList(jobs),
-	} {
-		if _, err = tx.Exec(q); err != nil {
-			return nil, fmt.Errorf("%s: %w", q, err)
-		}
-	}
-	return paths, nil
 }

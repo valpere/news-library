@@ -28,25 +28,25 @@ class OperationsTests(unittest.TestCase):
         with sqlite3.connect(self.path) as db:
             db.executescript('''
                 PRAGMA user_version=1;
-                CREATE TABLE items(id,state,filter_state,selected_snapshot);
+                CREATE TABLE items(id,state,filter_state);
                 CREATE VIEW active_items AS SELECT * FROM items WHERE id!=99;
-                CREATE TABLE source_versions(id,item_id);
-                CREATE TABLE generated_artifacts(id,item_id,snapshot_id);
-                CREATE TABLE article_knowledge(id,item_id,snapshot_id,digest_id);
-                CREATE TABLE jobs(id,item_id,stage,snapshot_id,state);
+                CREATE TABLE texts(item_id);
+                CREATE TABLE digests(item_id);
+                CREATE TABLE article_knowledge(id,item_id);
+                CREATE TABLE jobs(id,item_id,stage,state);
                 CREATE TABLE job_failures(id,job_id,kind,retryable);
-                CREATE TABLE knowledge_runs(id,item_id,snapshot_id,digest_id,state,kind);
-                INSERT INTO items VALUES(1,'ready','passed',11),(2,'failed','passed',22),
-                  (3,'failed','passed',33),(4,'needs_input','passed',44),(99,'failed','passed',NULL);
-                INSERT INTO source_versions VALUES(11,1),(22,2),(33,3),(44,4);
-                INSERT INTO generated_artifacts VALUES(1,1,11),(2,2,22);
-                INSERT INTO article_knowledge VALUES(1,1,11,1),(2,2,22,2);
-                INSERT INTO jobs VALUES(1,1,'digest',11,'failed'),(2,3,'digest',3,'failed'),(3,3,'digest',33,'failed');
+                CREATE TABLE knowledge_runs(id,item_id,state,kind);
+                INSERT INTO items VALUES(1,'ready','passed'),(2,'failed','passed'),
+                  (3,'failed','passed'),(4,'needs_input','passed'),(99,'failed','passed');
+                INSERT INTO texts VALUES(1),(2),(3),(4);
+                INSERT INTO digests VALUES(1),(2);
+                INSERT INTO article_knowledge VALUES(1,1),(2,2);
+                INSERT INTO jobs VALUES(1,1,'digest','failed'),(3,3,'digest','failed');
                 INSERT INTO job_failures VALUES(1,1,'format',0),(2,2,'format',0),(3,3,'temporary',1);
-                INSERT INTO knowledge_runs VALUES(1,1,11,1,'done',''),(2,2,22,2,'failed','format');
+                INSERT INTO knowledge_runs VALUES(1,1,'done',''),(2,2,'failed','format');
             ''')
 
-    def test_completed_stages_old_snapshot_and_trash_not_retried(self):
+    def test_completed_stages_and_trash_not_retried(self):
         before = hashlib.sha256(self.path.read_bytes()).hexdigest()
         r = failure_triage.inspect(self.data)
         items = {i['item_id']: i for i in r['items']}
@@ -175,7 +175,7 @@ class OperationsTests(unittest.TestCase):
     def test_failed_refresh_preserves_completed_stages_in_plan(self):
         with sqlite3.connect(self.path) as db:
             db.execute("UPDATE items SET state='failed' WHERE id=1")
-            db.execute("INSERT INTO jobs VALUES(4,1,'fetch',NULL,'failed')")
+            db.execute("INSERT INTO jobs VALUES(4,1,'fetch','failed')")
             db.execute("INSERT INTO job_failures VALUES(4,4,'source',0)")
         item = failure_triage.inspect(self.data)['items'][0]
         self.assertTrue(all(item['completed'].values()))

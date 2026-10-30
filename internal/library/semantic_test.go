@@ -162,7 +162,7 @@ func TestEmbeddingCheckpointRestartRejectAndLeaseFencing(t *testing.T) {
 	if err != nil || job == nil {
 		t.Fatal(job, err)
 	}
-	s.DB.Exec("UPDATE embedding_runs SET lease_until=0 WHERE snapshot_id=? AND version=?", job.SnapshotID, job.Version)
+	s.DB.Exec("UPDATE embedding_runs SET lease_until=0 WHERE item_id=? AND version=?", job.SnapshotID, job.Version)
 	if err = semantic.finish(*job, []string{"database new source"}, []float64{1, 0}); !errors.Is(err, ErrLeaseLost) {
 		t.Fatal("stale worker published", err)
 	}
@@ -311,7 +311,7 @@ func TestReadContextUsesSavedDigestAndCorrectBounds(t *testing.T) {
 	}
 	var got map[string]any
 	json.Unmarshal(rw.Body.Bytes(), &got)
-	if got["text"] != fixtureDigest || got["truncated"] != false || got["text_kind"] != "digest" || got["digest_id"] == nil || got["source"] == nil {
+	if got["text"] != fixtureDigest || got["truncated"] != false || got["text_kind"] != "digest" || got["digest"] == nil || got["source"] == nil {
 		t.Fatal(got)
 	}
 	jobs, _ := s.Jobs(id)

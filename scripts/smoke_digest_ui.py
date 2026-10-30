@@ -85,11 +85,9 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-digest-smo
                     assert 'Стійка черга' in exported.get_by_role('tabpanel').inner_text()
                     assert exported.get_by_role('link',name='Markdown',exact=True).count() == 0
                     exported.close()
-            digest_id=page.locator('input[name=digest]').first.input_value()
             page.locator('select[name=score]').select_option('2')
             page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
-            page.get_by_text('Історія оцінок (1)',exact=True).click()
-            assert f'дайджест: #{digest_id}' in page.locator('body').inner_text()
+            assert 'корисність: Низька' in page.locator('body').inner_text()
             page.screenshot(path=str(root/'tmp/smoke-digest.png'),full_page=True)
             Gateway.fail=True
             submit_source('http://127.0.0.1/digest-failure','Preserved source after model failure')

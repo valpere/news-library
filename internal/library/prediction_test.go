@@ -87,8 +87,8 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 	if e = s.CompleteDigest(j, Digest{Markdown: fixtureDigest, ActualModel: j.Model, Provider: "fixture", Prediction: &InterestPrediction{Probability: .1, Reason: "A changed fixture profile predicts less interest", Profile: j.Interests}}); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.Digest(db.ID, b); e == nil {
-		t.Fatal("replaced digest and its prediction kept")
+	if cur, e := s.Digest(db.ID, b); e != nil || cur.Prediction == nil || cur.Prediction.Probability != .1 || cur.Prediction.Profile != "Different fixture profile" {
+		t.Fatal("prediction of the replaced digest kept", e)
 	}
 	i, _ = s.Item(b)
 	r, _ := s.Ratings(b)

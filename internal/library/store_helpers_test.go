@@ -24,7 +24,7 @@ func (s *Store) Ratings(id int64) ([]ratingRow, error) {
 
 // Snapshots returns the item's stored texts (at most one in production).
 func (s *Store) Snapshots(id int64) ([]Snapshot, error) {
-	rows, err := s.DB.Query(snapshotSelect+" WHERE v.item_id=? ORDER BY v.id DESC", id)
+	rows, err := s.DB.Query(snapshotSelect+" WHERE v.item_id=?", id)
 	if err != nil {
 		return nil, err
 	}

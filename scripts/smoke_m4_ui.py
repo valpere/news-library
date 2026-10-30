@@ -31,7 +31,7 @@ threading.Thread(target=gateway.serve_forever,daemon=True).start()
 def start(data):
     process=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',str(data),
         '-bind','127.0.0.1:0','-knowledge=false', '-model','fixture:cloud','-ollama-url',
-        f'http://127.0.0.1:{gateway.server_port}/api/chat','-telegram=false','-telegram-daily','09:00'],
+        f'http://127.0.0.1:{gateway.server_port}/api/chat'],
         stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     line=process.stdout.readline().strip();assert line.startswith('news-library: http://'),line
     return process,line.removeprefix('news-library: ')

@@ -50,13 +50,14 @@ def audit(data):
             problems.append({'kind': 'foreign_key', 'details': list(row)})
         files = 0
         for table, column, prefix in (
-            ('source_versions', 'text_path', 'texts'),
-            ('generated_artifacts', 'markdown_path', 'digests'),
+            ('texts', 'text_path', 'texts'),
+            ('digests', 'markdown_path', 'digests'),
             ('article_knowledge', 'markdown_path', 'digests'),
             ('connection_versions', 'markdown_path', 'digests'),
         ):
-            for row in db.execute(f'SELECT id,{column},hash FROM {table}'):
-                ref = {'table': table, 'id': row['id'], 'path': row[column]}
+            key = 'item_id' if table in ('texts', 'digests') else 'id'
+            for row in db.execute(f'SELECT {key},{column},hash FROM {table}'):
+                ref = {'table': table, 'id': row[key], 'path': row[column]}
                 try:
                     if Path(row[column]).parts[0] != prefix:
                         raise ValueError('unexpected primary directory')
@@ -66,38 +67,31 @@ def audit(data):
                     content = path.read_bytes()
                     if hashlib.sha256(content).hexdigest() != row['hash']:
                         raise ValueError('hash mismatch')
-                    text_cache[(table, row['id'])] = content.decode('utf-8')
+                    text_cache[(table, row[key])] = content.decode('utf-8')
                     files += 1
                 except (OSError, ValueError, IndexError) as exc:
                     problems.append({'kind': 'primary_file', **ref, 'details': str(exc)})
-        sources = {r['id']: dict(r) for r in db.execute('SELECT * FROM source_versions')}
-        digests = {r['id']: dict(r) for r in db.execute('SELECT * FROM generated_artifacts')}
-        for d in digests.values():
-            s = sources.get(d['snapshot_id'])
-            if not s or s['item_id'] != d['item_id']:
-                problems.append({'kind': 'digest_ownership', 'digest_id': d['id']})
-        for k in db.execute('SELECT * FROM article_knowledge'):
-            s, d = sources.get(k['snapshot_id']), digests.get(k['digest_id'])
-            if not s or s['item_id'] != k['item_id'] or not d or d['item_id'] != k['item_id'] or d['snapshot_id'] != k['snapshot_id']:
-                problems.append({'kind': 'metadata_ownership', 'metadata_id': k['id']})
+        sources = {r['item_id']: dict(r) for r in db.execute('SELECT * FROM texts')}
+        digests = {r['item_id']: dict(r) for r in db.execute('SELECT * FROM digests')}
+        for item_id in digests:
+            if item_id not in sources:
+                problems.append({'kind': 'digest_without_text', 'item_id': item_id})
         active = {r['id']: dict(r) for r in db.execute('SELECT * FROM active_items')}
         completeness = Counter()
         for item in active.values():
             iid = item['id']
-            source = sources.get(item['selected_snapshot'])
-            if not source or source['item_id'] != iid:
+            source = sources.get(iid)
+            if not source:
                 problems.append({'kind': 'selected_source', 'item_id': iid})
                 continue
             completeness[source['completeness']] += 1
-            choices = [d for d in digests.values() if d['snapshot_id'] == source['id'] and d['item_id'] == iid]
-            digest = max(choices, key=lambda d: d['id']) if choices else None
+            digest = digests.get(iid)
             if digest is None:
                 signals.append({'kind': 'missing_digest', 'item_id': iid})
-            src = text_cache.get(('source_versions', source['id']), '')
-            md = text_cache.get(('generated_artifacts', digest['id']), '') if digest else ''
+            src = text_cache.get(('texts', iid), '')
+            md = text_cache.get(('digests', iid), '') if digest else ''
             sw, dw = len(src.split()), len(md.split())
-            record = {'id': iid, 'title': item['title'], 'snapshot_id': source['id'],
-                      'digest_id': digest['id'] if digest else None,
+            record = {'id': iid, 'title': item['title'],
                       'source_path': source['text_path'], 'digest_path': digest['markdown_path'] if digest else None,
                       'completeness': source['completeness'], 'warning': source['warning'],
                       'source_words': sw, 'digest_words': dw}
@@ -106,8 +100,7 @@ def audit(data):
                 signals.append({'kind': 'short_source', 'item_id': iid, 'words': sw})
             if sw and dw > sw:
                 signals.append({'kind': 'digest_longer_than_source', 'item_id': iid, 'ratio': round(dw / sw, 2)})
-            metadata = db.execute('SELECT * FROM article_knowledge WHERE item_id=? AND snapshot_id=? AND digest_id=? ORDER BY id DESC LIMIT 1',
-                                  (iid, source['id'], digest['id'] if digest else -1)).fetchone()
+            metadata = db.execute('SELECT * FROM article_knowledge WHERE item_id=? ORDER BY id DESC LIMIT 1', (iid,)).fetchone()
             if metadata is None:
                 signals.append({'kind': 'missing_current_metadata', 'item_id': iid})
         current = list(db.execute('SELECT v.* FROM connection_versions v WHERE v.id=(SELECT v2.id FROM connection_versions v2 WHERE v2.note_id=v.note_id ORDER BY revision DESC LIMIT 1) ORDER BY v.id'))
@@ -116,15 +109,10 @@ def audit(data):
         for row in db.execute('SELECT * FROM connection_members ORDER BY version_id,item_id'):
             m = dict(row)
             members[m['version_id']].append(m)
-            s, d = sources.get(m['snapshot_id']), digests.get(m['digest_id'])
-            if not s or s['item_id'] != m['item_id'] or (m['digest_id'] is not None and
-                    (not d or d['snapshot_id'] != m['snapshot_id'] or d['item_id'] != m['item_id'])):
+            if m['item_id'] not in sources:
                 problems.append({'kind': 'connection_ownership', **m})
-            if m['version_id'] in current_ids:
-                if m['item_id'] not in active:
-                    signals.append({'kind': 'connection_inactive_member', **m})
-                elif active[m['item_id']]['selected_snapshot'] != m['snapshot_id']:
-                    signals.append({'kind': 'connection_historical_source', **m})
+            if m['version_id'] in current_ids and m['item_id'] not in active:
+                signals.append({'kind': 'connection_inactive_member', **m})
         title_groups = defaultdict(list)
         for row in current:
             vid = row['id']

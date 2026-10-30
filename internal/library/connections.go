@@ -11,8 +11,8 @@ import (
 )
 
 type ConnectionMember struct {
-	ItemID, SnapshotID, DigestID int64
-	Title, URL, Role             string
+	ItemID           int64
+	Title, URL, Role string
 }
 type ConnectionNote struct {
 	Author, Model, PromptVersion                         string
@@ -55,21 +55,12 @@ func connectionMarkdown(n ConnectionNote) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "---\nschema: news-library/connection-v1\ntype: connection\nid: %s\nrevision: %d\ntitle: %s\ncategory: %s\ntags: %s\nquestions: %s\ncreated_at: %s\nauthor: %s\nmodel: %s\nprompt_version: %s\nsources:\n", jsonString(n.StableID), n.Revision, jsonString(n.Title), jsonString(n.Category), jsonString(n.Tags), jsonString(n.Questions), jsonString(n.CreatedAt), jsonString(n.Author), jsonString(n.Model), jsonString(n.PromptVersion))
 	for _, m := range n.Members {
-		fmt.Fprintf(&b, "  - item_id: %d\n    snapshot_id: %d\n    digest_id: ", m.ItemID, m.SnapshotID)
-		if m.DigestID == 0 {
-			b.WriteString("null\n")
-		} else {
-			fmt.Fprintf(&b, "%d\n", m.DigestID)
-		}
+		fmt.Fprintf(&b, "  - item_id: %d\n", m.ItemID)
 		fmt.Fprintf(&b, "    title: %s\n    url: %s\n    role: %s\n", jsonString(m.Title), jsonString(m.URL), jsonString(m.Role))
 	}
 	fmt.Fprintf(&b, "---\n\n# %s\n\n%s\n\n## Матеріали\n", n.Title, n.Body)
 	for _, m := range n.Members {
-		fmt.Fprintf(&b, "\n- [Матеріал #%d](/items/%d?source=%d", m.ItemID, m.ItemID, m.SnapshotID)
-		if m.DigestID > 0 {
-			fmt.Fprintf(&b, "&digest=%d", m.DigestID)
-		}
-		fmt.Fprintf(&b, ") — %s\n", m.Role)
+		fmt.Fprintf(&b, "\n- [Матеріал #%d](/items/%d) — %s\n", m.ItemID, m.ItemID, m.Role)
 	}
 	return b.String()
 }
@@ -150,31 +141,9 @@ func (s *Store) saveConnectionTx(tx *sql.Tx, n ConnectionNote, expectedVersion i
 			return 0, errors.New("кожному різному матеріалу потрібне коротке пояснення ролі")
 		}
 		seen[m.ItemID] = true
-		if m.SnapshotID == 0 {
-			var sid sql.NullInt64
-			if err = tx.QueryRow("SELECT selected_snapshot FROM items WHERE id=?", m.ItemID).Scan(&sid); err != nil {
-				return 0, errors.New("матеріал не існує")
-			}
-			if !sid.Valid {
-				return 0, errors.New("матеріал ще не має збереженого тексту")
-			}
-			m.SnapshotID = sid.Int64
-		}
-		err = tx.QueryRow(`SELECT v.title,i.original_url FROM source_versions v JOIN items i ON i.id=v.item_id WHERE v.id=? AND v.item_id=?`, m.SnapshotID, m.ItemID).Scan(&m.Title, &m.URL)
+		err = tx.QueryRow(`SELECT v.title,i.original_url FROM texts v JOIN items i ON i.id=v.item_id WHERE v.item_id=?`, m.ItemID).Scan(&m.Title, &m.URL)
 		if err != nil {
-			return 0, errors.New("версія тексту не належить матеріалу")
-		}
-		// A blank digest intentionally means source-only evidence.
-		if m.DigestID > 0 {
-			var count int
-			if err = tx.QueryRow("SELECT count(*) FROM generated_artifacts WHERE id=? AND snapshot_id=? AND item_id=?", m.DigestID, m.SnapshotID, m.ItemID).Scan(&count); err != nil {
-				return 0, err
-			}
-			if count != 1 {
-				return 0, errors.New("дайджест не належить обраному тексту")
-			}
-		} else if m.DigestID < 0 {
-			return 0, errors.New("некоректний дайджест")
+			return 0, errors.New("матеріал не існує або ще не має збереженого тексту")
 		}
 	}
 	n.Markdown = connectionMarkdown(n)
@@ -191,11 +160,7 @@ func (s *Store) saveConnectionTx(tx *sql.Tx, n ConnectionNote, expectedVersion i
 		return 0, err
 	}
 	for _, m := range n.Members {
-		var digest any
-		if m.DigestID > 0 {
-			digest = m.DigestID
-		}
-		if _, err = tx.Exec("INSERT INTO connection_members(version_id,item_id,snapshot_id,digest_id,role) VALUES(?,?,?,?,?)", vid, m.ItemID, m.SnapshotID, digest, m.Role); err != nil {
+		if _, err = tx.Exec("INSERT INTO connection_members(version_id,item_id,role) VALUES(?,?,?)", vid, m.ItemID, m.Role); err != nil {
 			return 0, err
 		}
 	}
@@ -219,14 +184,14 @@ func (s *Store) Connection(id, version int64) (ConnectionNote, error) {
 		return n, err
 	}
 	n.Markdown = string(data)
-	rows, err := s.DB.Query(`SELECT m.item_id,m.snapshot_id,coalesce(m.digest_id,0),v.title,i.original_url,m.role FROM connection_members m JOIN source_versions v ON v.id=m.snapshot_id JOIN items i ON i.id=m.item_id WHERE m.version_id=? ORDER BY m.item_id`, n.VersionID)
+	rows, err := s.DB.Query(`SELECT m.item_id,v.title,i.original_url,m.role FROM connection_members m JOIN texts v ON v.item_id=m.item_id JOIN items i ON i.id=m.item_id WHERE m.version_id=? ORDER BY m.item_id`, n.VersionID)
 	if err != nil {
 		return n, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var m ConnectionMember
-		if err = rows.Scan(&m.ItemID, &m.SnapshotID, &m.DigestID, &m.Title, &m.URL, &m.Role); err != nil {
+		if err = rows.Scan(&m.ItemID, &m.Title, &m.URL, &m.Role); err != nil {
 			return n, err
 		}
 		n.Members = append(n.Members, m)
@@ -291,7 +256,7 @@ func (s *Store) ConnectionVocabulary() (map[string][]string, error) {
 }
 
 func (s *Store) ConnectionArticles() ([]Item, error) {
-	rows, err := s.DB.Query(itemSelect + ` WHERE i.selected_snapshot IS NOT NULL ORDER BY i.added_at DESC,i.id DESC LIMIT 100`)
+	rows, err := s.DB.Query(itemSelect + ` WHERE EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) ORDER BY i.added_at DESC,i.id DESC LIMIT 100`)
 	if err != nil {
 		return nil, err
 	}

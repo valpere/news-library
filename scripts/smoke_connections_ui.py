@@ -12,7 +12,7 @@ with tempfile.TemporaryDirectory(dir=root / 'tmp', prefix='connections-smoke-') 
     process = subprocess.Popen([
         str(root / 'build/news-library'), '-env-file', '', '-data', directory,
         '-bind', '127.0.0.1:0', '-no-worker', '-no-digests', '-embeddings=false',
-        '-telegram=false', '-read-token', 'fixture-read-token-1234567890123456',
+         '-read-token', 'fixture-read-token-1234567890123456',
     ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         line = process.stdout.readline().strip()
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(dir=root / 'tmp', prefix='connections-smoke-') 
             page.locator('input[name=role]').nth(2).fill('Уточнення меж')
             page.get_by_role('button', name='Зберегти нову версію').click()
             assert 'версія 2' in page.locator('body').inner_text()
-            assert page.locator('article a[href^="/items/3?"]').count() == 1
+            assert page.locator('article a[href="/items/3"]').count() == 1
             page.locator('summary').filter(has_text='Історія версій').click()
             old = page.get_by_role('link', name='Версія 1', exact=False)
             old_url = old.get_attribute('href')

@@ -36,7 +36,7 @@ func count(t *testing.T, s *Store, query string, args ...any) int {
 func textPath(t *testing.T, s *Store, id int64) string {
 	t.Helper()
 	var p string
-	if err := s.DB.QueryRow(`SELECT text_path FROM source_versions WHERE item_id=?`, id).Scan(&p); err != nil {
+	if err := s.DB.QueryRow(`SELECT text_path FROM texts WHERE item_id=?`, id).Scan(&p); err != nil {
 		t.Fatal(err)
 	}
 	return filepath.Join(s.Files.Root, p)
@@ -54,7 +54,7 @@ func TestPurgeErasesTheTrashedMaterialAndItsFile(t *testing.T) {
 	if err := s.PurgeTrashed(id); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"items", "source_versions", "trash_entries", "source_aliases", "jobs"} {
+	for _, table := range []string{"items", "texts", "trash_entries", "source_aliases", "jobs"} {
 		col := "item_id"
 		if table == "items" {
 			col = "id"
@@ -66,11 +66,11 @@ func TestPurgeErasesTheTrashedMaterialAndItsFile(t *testing.T) {
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("text file kept: %v", err)
 	}
-	if n := count(t, s, `SELECT count(*) FROM source_versions WHERE item_id=?`, keep); n != 1 {
+	if n := count(t, s, `SELECT count(*) FROM texts WHERE item_id=?`, keep); n != 1 {
 		t.Errorf("another material was touched: %d", n)
 	}
 	again := add(t, s, "https://example.com/purge-me")
-	if count(t, s, `SELECT count(*) FROM source_versions WHERE item_id=?`, again)+count(t, s, `SELECT count(*) FROM trash_entries WHERE item_id=?`, again) != 0 {
+	if count(t, s, `SELECT count(*) FROM texts WHERE item_id=?`, again)+count(t, s, `SELECT count(*) FROM trash_entries WHERE item_id=?`, again) != 0 {
 		t.Error("a purged URL must come back as a brand new material without the old history")
 	}
 }
@@ -84,9 +84,6 @@ func TestPurgeRefusesLiveMaterialsAndKeepsTheirImmutability(t *testing.T) {
 	}
 	if err := s.PurgeTrashed(id); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("live material: %v", err)
-	}
-	if _, err := s.DB.Exec(`DELETE FROM source_versions WHERE item_id=?`, id); err == nil {
-		t.Fatal("history of a live material must stay immutable")
 	}
 }
 

@@ -21,11 +21,20 @@ func (s *Store) Feedback(itemID, digestID int64, quality, note string) error {
 	if utf8.RuneCountInString(note) > 4000 {
 		return errors.New("відгук завеликий")
 	}
-	_, err := s.DB.Exec("INSERT INTO digest_feedback(item_id,digest_id,quality,note,recorded_at) VALUES(?,?,?,?,?)", itemID, digestID, quality, note, nowUTC())
-	return err
+	if digestID != itemID {
+		return errors.New("дайджест не належить цьому матеріалу")
+	}
+	r, err := s.DB.Exec("INSERT INTO digest_feedback(item_id,quality,note,recorded_at) SELECT item_id,?,?,? FROM digests WHERE item_id=?", quality, note, nowUTC(), itemID)
+	if err != nil {
+		return err
+	}
+	if n, _ := r.RowsAffected(); n != 1 {
+		return errors.New("дайджест не знайдено")
+	}
+	return nil
 }
 func (s *Store) FeedbackHistory(itemID, digestID int64) ([]DigestFeedback, error) {
-	rows, err := s.DB.Query("SELECT id,item_id,digest_id,quality,note,recorded_at FROM digest_feedback WHERE item_id=? AND digest_id=? ORDER BY id DESC", itemID, digestID)
+	rows, err := s.DB.Query("SELECT id,item_id,item_id,quality,note,recorded_at FROM digest_feedback WHERE item_id=? AND item_id=? ORDER BY id DESC", itemID, digestID)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +63,7 @@ func (s *Store) RegenerateDigest(itemID int64) error {
 	defer tx.Rollback()
 	var selected sql.NullInt64
 	var filtered string
-	if err = tx.QueryRow("SELECT selected_snapshot,filter_state FROM items WHERE id=?", itemID).Scan(&selected, &filtered); err != nil {
+	if err = tx.QueryRow("SELECT (SELECT item_id FROM texts WHERE texts.item_id=items.id),filter_state FROM items WHERE id=?", itemID).Scan(&selected, &filtered); err != nil {
 		return err
 	}
 	if !selected.Valid {
@@ -65,7 +74,7 @@ func (s *Store) RegenerateDigest(itemID int64) error {
 		return errors.New("спершу явно поверніть матеріал до обробки")
 	}
 	var active int
-	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE snapshot_id=? AND stage='digest' AND state IN ('queued','running','retry_wait')", snapshotID).Scan(&active); err != nil {
+	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE item_id=? AND stage='digest' AND state IN ('queued','running','retry_wait')", snapshotID).Scan(&active); err != nil {
 		return err
 	}
 	if active > 0 {
@@ -85,14 +94,14 @@ func (s *Store) RegenerateDigest(itemID int64) error {
 func (s *Store) queueRegeneration(tx *sql.Tx, itemID, snapshotID int64) error {
 	var err error
 	var active int
-	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE snapshot_id=? AND stage='digest' AND state IN ('queued','running','retry_wait')", snapshotID).Scan(&active); err != nil {
+	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE item_id=? AND stage='digest' AND state IN ('queued','running','retry_wait')", snapshotID).Scan(&active); err != nil {
 		return err
 	}
 	if active > 0 {
 		return errors.New("генерація вже активна")
 	}
 	c := s.DigestConfig
-	_, err = tx.Exec("INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests,chunk_limit,chunk_max_parts) VALUES(?,'digest',?,?,?,?,?,?,?,?)", itemID, snapshotID, c.Version()+"|regenerate:"+rand.Text(), c.Model, c.PromptVersion, c.MaxInputBytes, c.Interests, c.ChunkLimit, c.ChunkMaxParts)
+	_, err = tx.Exec("INSERT INTO jobs(item_id,stage,config_version,model,prompt_version,input_limit,interests,chunk_limit,chunk_max_parts) VALUES(?,'digest',?,?,?,?,?,?,?)", itemID, c.Version()+"|regenerate:"+rand.Text(), c.Model, c.PromptVersion, c.MaxInputBytes, c.Interests, c.ChunkLimit, c.ChunkMaxParts)
 	if err != nil {
 		return err
 	}

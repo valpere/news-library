@@ -36,7 +36,7 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 		t.Fatal(item, err)
 	}
 	var artifacts int
-	if err = s.DB.QueryRow("SELECT count(*) FROM generated_artifacts").Scan(&artifacts); err != nil || artifacts != 0 || generationCalls != 0 || fetchCalls != 1 {
+	if err = s.DB.QueryRow("SELECT count(*) FROM digests").Scan(&artifacts); err != nil || artifacts != 0 || generationCalls != 0 || fetchCalls != 1 {
 		t.Fatal("missing text generated a digest", artifacts, generationCalls, fetchCalls, err)
 	}
 	manual(t, s, id, "User supplied source")
@@ -106,8 +106,8 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	if err != nil || len(after) != 0 {
 		t.Fatal("rating survived a text change", after, err)
 	}
-	if _, err = s.Snapshot(sourceID); err == nil {
-		t.Fatal("replaced text kept")
+	if cur, err := s.Snapshot(sourceID); err != nil || cur.Text != "Newer source version" {
+		t.Fatal("old text kept", cur.Text, err)
 	}
 	item, err = s.Item(id)
 	if err != nil || !item.Read || item.Tags != "human-tag" {

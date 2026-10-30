@@ -56,7 +56,7 @@ func (s *Store) EnableDigests(c DigestConfig) error {
 		return err
 	}
 	defer tx.Rollback()
-	rows, err := tx.Query(`SELECT id,selected_snapshot FROM items WHERE selected_snapshot IS NOT NULL AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=items.selected_snapshot) AND NOT EXISTS(SELECT 1 FROM jobs WHERE stage='digest' AND snapshot_id=items.selected_snapshot)`)
+	rows, err := tx.Query(`SELECT id,id FROM items WHERE EXISTS(SELECT 1 FROM texts WHERE texts.item_id=items.id) AND NOT EXISTS(SELECT 1 FROM digests WHERE digests.item_id=items.id) AND NOT EXISTS(SELECT 1 FROM jobs WHERE stage='digest' AND jobs.item_id=items.id)`)
 	if err != nil {
 		return err
 	}
@@ -105,17 +105,17 @@ func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
 		if len(strings.Fields(text)) < c.MinSourceWords {
 			// Tiny source: no digest. A foreign-language one is translated.
 			if !needsUkrainianTranslation(text) {
-				_, err = tx.Exec(`UPDATE items SET state='ready',error='' WHERE id=? AND selected_snapshot=? AND state NOT IN ('needs_input')`, itemID, snapshotID)
+				_, err = tx.Exec(`UPDATE items SET state='ready',error='' WHERE id=? AND state NOT IN ('needs_input')`, itemID)
 				return err
 			}
 			prompt, interests, chunkLimit, chunkMaxParts = TranslationPromptVersion, "", 0, 0
 		}
 	}
-	_, err = tx.Exec(`INSERT INTO jobs(item_id,stage,snapshot_id,config_version,model,prompt_version,input_limit,interests,chunk_limit,chunk_max_parts) VALUES(?,'digest',?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, itemID, snapshotID, c.Version(), c.Model, prompt, c.MaxInputBytes, interests, chunkLimit, chunkMaxParts)
+	_, err = tx.Exec(`INSERT INTO jobs(item_id,stage,config_version,model,prompt_version,input_limit,interests,chunk_limit,chunk_max_parts) VALUES(?,'digest',?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, itemID, c.Version(), c.Model, prompt, c.MaxInputBytes, interests, chunkLimit, chunkMaxParts)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(`UPDATE items SET state='enriching',error='' WHERE id=? AND selected_snapshot=? AND NOT EXISTS(SELECT 1 FROM generated_artifacts WHERE snapshot_id=?)`, itemID, snapshotID, snapshotID)
+	_, err = tx.Exec(`UPDATE items SET state='enriching',error='' WHERE id=? AND NOT EXISTS(SELECT 1 FROM digests WHERE item_id=?)`, itemID, itemID)
 	return err
 }
 
@@ -123,14 +123,14 @@ func (s *Store) queueDigest(tx *sql.Tx, itemID, snapshotID int64) error {
 // has one connection, so s.DB must not be used here).
 func snapshotText(tx *sql.Tx, f Files, snapshotID int64) (string, error) {
 	var path, hash string
-	if err := tx.QueryRow(`SELECT text_path,hash FROM source_versions WHERE id=?`, snapshotID).Scan(&path, &hash); err != nil {
+	if err := tx.QueryRow(`SELECT text_path,hash FROM texts WHERE item_id=?`, snapshotID).Scan(&path, &hash); err != nil {
 		return "", err
 	}
 	data, err := f.Read(path, hash)
 	return string(data), err
 }
 func (s *Store) Snapshot(id int64) (Snapshot, error) {
-	v, path, err := scanSnapshot(s.DB.QueryRow(snapshotSelect+` WHERE v.id=?`, id))
+	v, path, err := scanSnapshot(s.DB.QueryRow(snapshotSelect+` WHERE v.item_id=?`, id))
 	if err != nil {
 		return v, err
 	}
@@ -176,38 +176,28 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 		return err
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(d.Markdown)))
-	result, err := tx.Exec(`INSERT INTO generated_artifacts(item_id,snapshot_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, j.ItemID, j.SnapshotID.Int64, j.ID, path, j.Model, d.ActualModel, d.Provider, j.PromptVersion, nowUTC(), d.InputTokens, d.OutputTokens, hash, max(d.ChunkCount, 1))
+	erased, err := s.eraseDigest(tx, j.ItemID, j.ID)
 	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO digests(item_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, j.ItemID, j.ID, path, j.Model, d.ActualModel, d.Provider, j.PromptVersion, nowUTC(), d.InputTokens, d.OutputTokens, hash, max(d.ChunkCount, 1)); err != nil {
 		return err
 	}
 	if d.Prediction != nil {
-		id, err := result.LastInsertId()
-		if err != nil {
-			return err
-		}
 		p := d.Prediction
-		if _, err = tx.Exec("INSERT INTO interest_predictions(digest_id,probability,reason,profile,profile_hash) VALUES(?,?,?,?,?)", id, p.Probability, p.Reason, j.Interests, profileHash(j.Interests)); err != nil {
+		if _, err = tx.Exec("INSERT INTO interest_predictions(item_id,probability,reason,profile,profile_hash) VALUES(?,?,?,?,?)", j.ItemID, p.Probability, p.Reason, j.Interests, profileHash(j.Interests)); err != nil {
 			return err
 		}
-	}
-	newID, err := result.LastInsertId()
-	if err != nil {
-		return err
-	}
-	erased, err := s.eraseEarlierDigests(tx, j.SnapshotID.Int64, newID)
-	if err != nil {
-		return err
 	}
 	if s.KnowledgeEnabled && !translation {
-		did := newID
-		if err = s.queueKnowledge(tx, j.ItemID, j.SnapshotID.Int64, did, j.Model); err != nil {
+		if err = s.queueKnowledge(tx, j.ItemID, j.Model); err != nil {
 			return err
 		}
 	}
 	if _, err = tx.Exec(`UPDATE jobs SET state='done',lease_until=0,error='' WHERE id=?`, j.ID); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`UPDATE items SET state='ready',error='' WHERE id=? AND selected_snapshot=?`, j.ItemID, j.SnapshotID); err != nil {
+	if _, err = tx.Exec(`UPDATE items SET state='ready',error='' WHERE id=?`, j.ItemID); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -217,7 +207,7 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	return nil
 }
 
-const digestSelect = `SELECT id,item_id,snapshot_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count FROM generated_artifacts`
+const digestSelect = `SELECT item_id,item_id,item_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count FROM digests`
 
 func (s *Store) scanDigest(row interface{ Scan(...any) error }) (Digest, error) {
 	var d Digest
@@ -231,7 +221,7 @@ func (s *Store) scanDigest(row interface{ Scan(...any) error }) (Digest, error) 
 	return d, err
 }
 func (s *Store) DigestForSnapshot(id int64) (*Digest, error) {
-	d, e := s.scanDigest(s.DB.QueryRow(digestSelect+" WHERE snapshot_id=? ORDER BY id DESC LIMIT 1", id))
+	d, e := s.scanDigest(s.DB.QueryRow(digestSelect+" WHERE item_id=?", id))
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -241,7 +231,7 @@ func (s *Store) DigestForSnapshot(id int64) (*Digest, error) {
 	return &d, e
 }
 func (s *Store) Digest(id, itemID int64) (Digest, error) {
-	d, e := s.scanDigest(s.DB.QueryRow(digestSelect+" WHERE id=? AND item_id=?", id, itemID))
+	d, e := s.scanDigest(s.DB.QueryRow(digestSelect+" WHERE item_id=? AND item_id=?", id, itemID))
 	if e == nil {
 		d.Prediction, e = s.Prediction(d.ID)
 	}
@@ -266,7 +256,7 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 	var err error
 
 	var sid sql.NullInt64
-	if err = tx.QueryRow("SELECT selected_snapshot FROM items WHERE id=?", itemID).Scan(&sid); err != nil {
+	if err = tx.QueryRow("SELECT (SELECT item_id FROM texts WHERE texts.item_id=items.id) FROM items WHERE id=?", itemID).Scan(&sid); err != nil {
 		return false, err
 	}
 	if !sid.Valid {
@@ -287,7 +277,7 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 		return false, nil
 	}
 	var active int
-	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE stage='digest' AND snapshot_id=? AND state IN ('queued','running','retry_wait')", sid).Scan(&active); err != nil {
+	if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE stage='digest' AND item_id=? AND state IN ('queued','running','retry_wait')", sid).Scan(&active); err != nil {
 		return false, err
 	}
 	if active > 0 {
@@ -295,12 +285,12 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 	}
 	c := s.DigestConfig
 	var state string
-	err = tx.QueryRow("SELECT state FROM jobs WHERE stage='digest' AND snapshot_id=? AND config_version=?", sid, c.Version()).Scan(&state)
+	err = tx.QueryRow("SELECT state FROM jobs WHERE stage='digest' AND item_id=? AND config_version=?", sid, c.Version()).Scan(&state)
 	if err == nil {
 		if state != "failed" && state != "cancelled" {
 			return false, errors.New("дайджест уже готовий або генерація активна")
 		}
-		if _, err = tx.Exec("UPDATE jobs SET state='queued',attempts=0,next_attempt=0,lease_until=0,error='' WHERE stage='digest' AND snapshot_id=? AND config_version=?", sid, c.Version()); err != nil {
+		if _, err = tx.Exec("UPDATE jobs SET state='queued',attempts=0,next_attempt=0,lease_until=0,error='' WHERE stage='digest' AND item_id=? AND config_version=?", sid, c.Version()); err != nil {
 			return false, err
 		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
@@ -316,13 +306,13 @@ func (s *Store) retryDigestTx(tx *sql.Tx, itemID int64) (bool, error) {
 // first new generation; configuration changes leave existing decisions alone.
 func (s *Store) ensureFilterForSnapshot(tx *sql.Tx, itemID, snapshotID int64) (bool, error) {
 	var decisions int
-	if err := tx.QueryRow("SELECT count(*) FROM filter_decisions WHERE item_id=? AND snapshot_id=?", itemID, snapshotID).Scan(&decisions); err != nil {
+	if err := tx.QueryRow("SELECT count(*) FROM filter_decisions WHERE item_id=? AND stage='source'", itemID).Scan(&decisions); err != nil {
 		return false, err
 	}
 	if decisions == 0 {
 		var snap Snapshot
 		var path, hash string
-		if err := tx.QueryRow("SELECT text_path,hash,title FROM source_versions WHERE id=? AND item_id=?", snapshotID, itemID).Scan(&path, &hash, &snap.Title); err != nil {
+		if err := tx.QueryRow("SELECT text_path,hash,title FROM texts WHERE item_id=?", itemID).Scan(&path, &hash, &snap.Title); err != nil {
 			return false, err
 		}
 		data, err := s.Files.Read(path, hash)

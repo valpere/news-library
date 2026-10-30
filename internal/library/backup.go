@@ -92,7 +92,7 @@ func primaryRefs(db *sql.DB) (map[string]string, error) {
 				break
 			}
 			kind := "digests"
-			if ref.table == "source_versions" {
+			if ref.table == "texts" {
 				kind = "texts"
 			}
 			expected, _ := blobPath(kind, hash) // Hash and kind were validated above.
@@ -421,8 +421,8 @@ type primaryTable struct{ table, column string }
 // One inventory covers every file the database references, including diagnostics.
 func primaryTables() []primaryTable {
 	return []primaryTable{
-		{"source_versions", "text_path"},
-		{"generated_artifacts", "markdown_path"},
+		{"texts", "text_path"},
+		{"digests", "markdown_path"},
 		{"digest_checkpoints", "markdown_path"},
 		{"connection_versions", "markdown_path"},
 		{"job_failures", "response_path"},

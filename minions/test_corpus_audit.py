@@ -22,19 +22,19 @@ class CorpusAuditTests(unittest.TestCase):
         with sqlite3.connect(self.db) as db:
             db.executescript('''
                 PRAGMA user_version=1;
-                CREATE TABLE items(id PRIMARY KEY,title,selected_snapshot);
+                CREATE TABLE items(id PRIMARY KEY,title);
                 CREATE VIEW active_items AS SELECT * FROM items;
-                CREATE TABLE source_versions(id PRIMARY KEY,item_id,text_path,hash,completeness,warning);
-                CREATE TABLE generated_artifacts(id PRIMARY KEY,item_id,snapshot_id,markdown_path,hash);
-                CREATE TABLE article_knowledge(id PRIMARY KEY,item_id,snapshot_id,digest_id,markdown_path,hash);
+                CREATE TABLE texts(item_id PRIMARY KEY,text_path,hash,completeness,warning);
+                CREATE TABLE digests(item_id PRIMARY KEY,markdown_path,hash);
+                CREATE TABLE article_knowledge(id PRIMARY KEY,item_id,markdown_path,hash);
                 CREATE TABLE connection_versions(id PRIMARY KEY,note_id,revision,title,markdown_path,hash);
-                CREATE TABLE connection_members(version_id,item_id,snapshot_id,digest_id);
+                CREATE TABLE connection_members(version_id,item_id);
             ''')
             source = self.blob('texts/source.txt', 'Copyright only')
             digest = self.blob('digests/digest.md', 'This digest is longer than the source')
-            db.execute('INSERT INTO items VALUES(1,?,1)', ('Synthetic short source',))
-            db.execute('INSERT INTO source_versions VALUES(1,1,?,?,?,?)', (*source, 'unknown', 'fixture'))
-            db.execute('INSERT INTO generated_artifacts VALUES(1,1,1,?,?)', digest)
+            db.execute('INSERT INTO items VALUES(1,?)', ('Synthetic short source',))
+            db.execute('INSERT INTO texts VALUES(1,?,?,?,?)', (*source, 'unknown', 'fixture'))
+            db.execute('INSERT INTO digests VALUES(1,?,?)', digest)
 
     def blob(self, relative, content):
         p = self.data / relative
@@ -51,13 +51,13 @@ class CorpusAuditTests(unittest.TestCase):
                          {s['kind'] for s in report['signals']})
         self.assertEqual(before, {p: p.read_bytes() for p in self.data.rglob('*') if p.is_file()})
 
-    def test_corrupt_primary_and_foreign_ownership(self):
+    def test_corrupt_primary_and_orphan_digest(self):
         (self.data / 'texts/source.txt').write_text('different')
         with sqlite3.connect(self.db) as db:
-            db.execute('UPDATE generated_artifacts SET item_id=2')
+            db.execute('UPDATE digests SET item_id=2')
         report = corpus_audit.audit(self.data)
         self.assertIn('primary_file', {p['kind'] for p in report['problems']})
-        self.assertIn('digest_ownership', {p['kind'] for p in report['problems']})
+        self.assertIn('digest_without_text', {p['kind'] for p in report['problems']})
 
     def test_no_symlink_or_path_escape_reads(self):
         outside = self.root / 'outside'
@@ -102,32 +102,22 @@ class CorpusAuditTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 corpus_audit.save_report({}, link / 'report')
 
-    def test_current_revisions_and_historical_sources(self):
+    def test_current_revisions(self):
         with sqlite3.connect(self.db) as db:
             source = self.blob('texts/second.txt', 'second source')
             note = self.blob('digests/note.md', 'a synthetic connection')
-            db.execute('INSERT INTO source_versions VALUES(2,1,?,?,?,?)', (*source, 'unknown', ''))
-            db.execute('INSERT INTO source_versions VALUES(3,2,?,?,?,?)', (*source, 'unknown', ''))
-            db.execute('INSERT INTO items VALUES(2,?,3)', ('Second item',))
-            db.execute('UPDATE items SET selected_snapshot=2 WHERE id=1')
+            db.execute('INSERT INTO texts VALUES(2,?,?,?,?)', (*source, 'unknown', ''))
+            db.execute('INSERT INTO items VALUES(2,?)', ('Second item',))
             for vid, nid, revision in [(1,1,1), (2,1,2), (3,2,1)]:
                 db.execute('INSERT INTO connection_versions VALUES(?,?,?,?,?,?)',
                            (vid,nid,revision,'Shared title',*note))
-                db.execute('INSERT INTO connection_members VALUES(?,?,?,NULL)', (vid,1,1 if vid == 1 else 2))
-                db.execute('INSERT INTO connection_members VALUES(?,?,?,NULL)', (vid,2,3))
+                db.execute('INSERT INTO connection_members VALUES(?,?)', (vid,1))
+                db.execute('INSERT INTO connection_members VALUES(?,?)', (vid,2))
         report = corpus_audit.audit(self.data)
         self.assertEqual(0, report['summary']['integrity_problems'])
         self.assertEqual([2,3], [n['version_id'] for n in report['connections']])
-        self.assertNotIn('connection_historical_source', {s['kind'] for s in report['signals']})
         repeated = [s for s in report['signals'] if s['kind'] == 'repeated_connection_title']
         self.assertEqual([2,3], repeated[0]['version_ids'])
-        with sqlite3.connect(self.db) as db:
-            db.execute('UPDATE connection_members SET snapshot_id=1 WHERE version_id=2 AND item_id=1')
-        report = corpus_audit.audit(self.data)
-        historical = [s for s in report['signals'] if s['kind'] == 'connection_historical_source']
-        self.assertEqual(1, len(historical))
-        self.assertEqual(2, historical[0]['version_id'])
-        self.assertEqual(0, report['summary']['integrity_problems'])
 
 
 if __name__ == '__main__':

@@ -94,7 +94,7 @@ func TestDigestQueueRecoveryAndRatingContext(t *testing.T) {
 		t.Fatal("digest of a replaced text accepted", e)
 	}
 	i, _ = s.Item(id)
-	if i.Selected.Int64 == older.SnapshotID.Int64 || i.State != "enriching" {
+	if i.State != "enriching" {
 		t.Fatal("old completion overwrote manual text")
 	}
 }
