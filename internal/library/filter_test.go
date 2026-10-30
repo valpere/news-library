@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -89,9 +90,8 @@ func TestURLRejectZeroModelCallsAndExplicitOverride(t *testing.T) {
 	if i.FilterState != "overridden" || i.State != "ready" || i.Score.Valid {
 		t.Fatal("override lost state", i)
 	}
-	history, e := s.FilterDecisions(id)
-	if e != nil || len(history) != 3 || history[1].OverrideOf.Int64 != history[2].ID || history[2].Result != "rejected" {
-		t.Fatal("override history", history, e)
+	if reason, e := s.FilterReason(id); e != nil || reason == "" || !strings.Contains(reason, "T=") {
+		t.Fatal("override lost the reason of the rejection", reason, e)
 	}
 }
 
@@ -130,11 +130,11 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	if e = s.RegenerateDigest(id); e == nil {
 		t.Fatal("regeneration bypassed reject")
 	}
-	before, _ := s.FilterDecisions(id)
+	before, _ := s.FilterReason(id)
 	configureRules(t, s, .8, nil)
-	after, _ := s.FilterDecisions(id)
+	after, _ := s.FilterReason(id)
 	i, _ := s.Item(id)
-	if i.FilterState != "rejected" || !i.Read || i.Score.Int64 != 3 || len(before) != len(after) {
+	if i.FilterState != "rejected" || !i.Read || i.Score.Int64 != 3 || before == "" || before != after {
 		t.Fatal("config change reprocessed judgments")
 	}
 	if e = s.OverrideFilter(id); e != nil {
@@ -144,5 +144,24 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	r, _ := s.Ratings(id)
 	if len(r) != 1 || r[0].Score != 3 || r[0].AssessedAt.Valid {
 		t.Fatal("history changed")
+	}
+}
+
+func TestFilterKeepsOnlyCurrentVerdictAndReasonOnItem(t *testing.T) {
+	s := testStore(t)
+	configureRules(t, s, .5, []FilterRule{{ID: "ad-1", Reason: "Promotion", Field: "url", Contains: "promo", Probability: .9}})
+	id := add(t, s, "https://example.com/promo")
+	reason, err := s.FilterReason(id)
+	if err != nil || !strings.Contains(reason, "promotion: 90%") || !strings.Contains(reason, "ad-1") || !strings.Contains(reason, "T=0.5") {
+		t.Fatal(reason, err)
+	}
+	for _, table := range []string{"filter_decisions", "filter_rule_versions"} {
+		if _, err = s.DB.Exec("SELECT 1 FROM " + table); err == nil {
+			t.Fatal("history table still exists", table)
+		}
+	}
+	clean := add(t, s, "https://example.com/plain")
+	if reason, err = s.FilterReason(clean); err != nil || reason != "" {
+		t.Fatal("reason without matches", reason, err)
 	}
 }

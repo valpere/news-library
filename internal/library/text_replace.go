@@ -89,8 +89,6 @@ func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) 
 		`DELETE FROM interest_predictions WHERE item_id=?`,
 		`DELETE FROM digest_feedback WHERE item_id=?`,
 		`DELETE FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=? AND stage='digest')`,
-		`UPDATE filter_decisions SET override_of=NULL WHERE override_of IN (SELECT id FROM filter_decisions WHERE item_id=? AND stage='source')`,
-		`DELETE FROM filter_decisions WHERE item_id=? AND stage='source'`,
 		`DELETE FROM completeness_confirmations WHERE item_id=?`,
 		`DELETE FROM digests WHERE item_id=?`,
 		`DELETE FROM jobs WHERE item_id=? AND stage='digest'`,

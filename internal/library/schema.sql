@@ -6,7 +6,8 @@ CREATE TABLE items (
  is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0,1)),
  state TEXT NOT NULL DEFAULT 'queued', error TEXT NOT NULL DEFAULT '',
  rating INTEGER CHECK(rating BETWEEN 0 AND 6), rated_at TEXT CHECK(rated_at IS NULL OR rating IS NOT NULL),
- filter_state TEXT NOT NULL DEFAULT 'not_checked' CHECK(filter_state IN ('not_checked','passed','rejected','overridden')));
+ filter_state TEXT NOT NULL DEFAULT 'not_checked' CHECK(filter_state IN ('not_checked','passed','rejected','overridden')),
+ filter_reason TEXT NOT NULL DEFAULT '');
 CREATE TABLE source_aliases (
  url TEXT PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id)
 );
@@ -38,14 +39,6 @@ CREATE TABLE digests (
 );
 CREATE VIRTUAL TABLE item_fts USING fts5(title,text,url,content='',contentless_delete=1,tokenize='unicode61');
 CREATE TABLE cache_entries (url TEXT PRIMARY KEY,final_url TEXT NOT NULL,content_type TEXT NOT NULL,body_path TEXT NOT NULL,hash TEXT NOT NULL,fetched_at TEXT NOT NULL,expires_at INTEGER NOT NULL,partial INTEGER NOT NULL, last_accessed INTEGER NOT NULL DEFAULT 0, response_headers TEXT NOT NULL DEFAULT '{}', checked_at TEXT NOT NULL DEFAULT '');
-CREATE TABLE filter_rule_versions (version TEXT PRIMARY KEY,config TEXT NOT NULL,created_at TEXT NOT NULL);
-CREATE TABLE filter_decisions (
- id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
- rules_version TEXT NOT NULL REFERENCES filter_rule_versions(version), stage TEXT NOT NULL CHECK(stage IN ('url','source')),
- result TEXT NOT NULL CHECK(result IN ('passed','rejected','overridden')), probability REAL NOT NULL CHECK(probability BETWEEN 0 AND 1),
- threshold REAL NOT NULL CHECK(threshold BETWEEN 0 AND 1), contributions TEXT NOT NULL, created_at TEXT NOT NULL,
- override_of INTEGER REFERENCES filter_decisions(id)
-);
 CREATE TABLE digest_feedback (
  id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
  quality TEXT NOT NULL CHECK(quality IN ('good','inaccurate','incomplete','unclear')), note TEXT NOT NULL, recorded_at TEXT NOT NULL
@@ -151,7 +144,6 @@ CREATE VIEW active_items AS SELECT * FROM items
  WHERE NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=items.id);
 CREATE UNIQUE INDEX one_active_fetch ON jobs(item_id) WHERE stage='fetch' AND state IN ('queued','running','retry_wait');
 CREATE UNIQUE INDEX one_digest_job ON jobs(item_id,config_version) WHERE stage='digest';
-CREATE INDEX filter_history ON filter_decisions(item_id,id DESC);
 CREATE INDEX embedding_version_state ON embedding_runs(version,state,item_id);
 CREATE INDEX embedding_chunk_version ON embedding_chunks(version,item_id);
 CREATE INDEX connection_backlinks ON connection_members(item_id,version_id);
@@ -159,8 +151,6 @@ CREATE INDEX knowledge_current ON knowledge_runs(item_id,updated_at DESC,id DESC
 CREATE INDEX chat_history ON chat_turns(session_id,id DESC);
 CREATE INDEX search_judgments_event ON search_judgments(event_id,item_id,id);
 CREATE INDEX completeness_confirmations_item ON completeness_confirmations(item_id,id);
-CREATE TRIGGER immutable_rules_update BEFORE UPDATE ON filter_rule_versions BEGIN SELECT RAISE(ABORT,'immutable rules'); END;
-CREATE TRIGGER immutable_rules_delete BEFORE DELETE ON filter_rule_versions BEGIN SELECT RAISE(ABORT,'immutable rules'); END;
 CREATE TRIGGER immutable_connection_version_update BEFORE UPDATE ON connection_versions BEGIN SELECT RAISE(ABORT,'immutable connection version'); END;
 CREATE TRIGGER immutable_connection_version_delete BEFORE DELETE ON connection_versions BEGIN SELECT RAISE(ABORT,'immutable connection version'); END;
 CREATE TRIGGER immutable_connection_member_update BEFORE UPDATE ON connection_members BEGIN SELECT RAISE(ABORT,'immutable connection member'); END;

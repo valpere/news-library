@@ -120,7 +120,7 @@ func (s *Semantic) version(revision string) string {
 func (s *Semantic) schedule(revision string) error {
 	_, err := s.Store.DB.Exec(`INSERT INTO embedding_runs(item_id,version,model_revision,chunk_bytes,dimensions,created_at)
  SELECT i.id,?,?,?,?,? FROM active_items i WHERE EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) AND i.filter_state IN ('passed','overridden')
- AND EXISTS(SELECT 1 FROM filter_decisions d WHERE d.item_id=i.id AND d.result IN ('passed','overridden'))
+
  ON CONFLICT DO NOTHING`, s.version(revision), revision, s.ChunkBytes, s.Dimensions, nowUTC())
 	return err
 }

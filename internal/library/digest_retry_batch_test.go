@@ -177,8 +177,8 @@ func TestBatchDigestRetryMigratedFilterAndPartialProgress(t *testing.T) {
 	enableDigests(t, s)
 	a := failedDigestFixture(t, s, "format")
 	b := failedDigestFixture(t, s, "format")
-	// Model a migrated source with no historical filter decision.
-	if _, err := s.DB.Exec("DELETE FROM filter_decisions WHERE item_id=?", a.ItemID); err != nil {
+	// Model a source the rules never checked.
+	if _, err := s.DB.Exec("UPDATE items SET filter_state='not_checked',filter_reason='' WHERE id=?", a.ItemID); err != nil {
 		t.Fatal(err)
 	}
 	configureRules(t, s, .8, []FilterRule{{ID: "exclude", Reason: "fixture exclusion", Field: "text", Contains: "Persistent", Probability: .9}})
