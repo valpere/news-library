@@ -28,7 +28,7 @@ func TestArchiveCLIAndRestorePause(t *testing.T) {
 	for _, command := range []struct {
 		name string
 		args []string
-	}{{"backup", []string{"-source", source, "-output", backup}}, {"verify-backup", []string{"-source", backup}}, {"restore", []string{"-source", backup, "-output", restored}}, {"repack-files", []string{"-source", backup, "-output", filepath.Join(root, "repacked")}}} {
+	}{{"backup", []string{"-source", source, "-output", backup}}, {"verify-backup", []string{"-source", backup}}, {"restore", []string{"-source", backup, "-output", restored}}} {
 		if err = archiveCommand(command.name, command.args); err != nil {
 			t.Fatal(command.name, err)
 		}

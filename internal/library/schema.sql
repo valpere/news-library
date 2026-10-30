@@ -267,4 +267,4 @@ CREATE TRIGGER immutable_article_knowledge_delete BEFORE DELETE ON article_knowl
 CREATE TRIGGER immutable_knowledge_failure_delete BEFORE DELETE ON knowledge_failures
  WHEN NOT EXISTS(SELECT 1 FROM trash_entries WHERE item_id=(SELECT item_id FROM knowledge_runs WHERE id=OLD.run_id))
  BEGIN SELECT RAISE(ABORT,'immutable failure'); END;
-PRAGMA user_version=18;
+PRAGMA user_version=1;

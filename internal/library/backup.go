@@ -18,7 +18,7 @@ import (
 
 const transferMarker = ".transfer-in-progress"
 const restorePause = ".restore-paused"
-const CurrentSchema = 18
+const CurrentSchema = 1
 
 type BackupFile struct {
 	Path string `json:"path"`
@@ -70,12 +70,9 @@ func regularPath(root, relative string) (string, error) {
 	}
 	return path, nil
 }
-func primaryRefs(db *sql.DB, schema int) (map[string]string, error) {
+func primaryRefs(db *sql.DB) (map[string]string, error) {
 	refs := map[string]string{}
-	if schema < 3 {
-		return refs, nil
-	} // Earlier schemas keep primary text inside SQLite.
-	for _, ref := range primaryTables(schema) {
+	for _, ref := range primaryTables() {
 		query := "SELECT " + ref.column + ",hash FROM " + ref.table
 		if ref.column == "response_path" {
 			query += " WHERE response_path<>''"
@@ -94,13 +91,12 @@ func primaryRefs(db *sql.DB, schema int) (map[string]string, error) {
 				err = errors.New("invalid primary hash")
 				break
 			}
-			kind, extension := "digests", ".md"
+			kind := "digests"
 			if ref.table == "source_versions" {
-				kind, extension = "texts", ".txt"
+				kind = "texts"
 			}
 			expected, _ := blobPath(kind, hash) // Hash and kind were validated above.
-			legacy := filepath.Join(kind, hash+extension)
-			if path != expected && path != legacy {
+			if path != expected {
 				err = errors.New("invalid primary reference")
 				break
 			}
@@ -126,7 +122,7 @@ func dbIntegrity(db *sql.DB) (int, error) {
 	if err := db.QueryRow("PRAGMA user_version").Scan(&schema); err != nil {
 		return 0, err
 	}
-	if schema < 1 || schema > CurrentSchema {
+	if schema != CurrentSchema {
 		return 0, errors.New("unsupported backup schema")
 	}
 	var check string
@@ -288,7 +284,7 @@ func Backup(ctx context.Context, source, destination string) (BackupManifest, er
 	schema, err := dbIntegrity(frozen)
 	var refs map[string]string
 	if err == nil {
-		refs, err = primaryRefs(frozen, schema)
+		refs, err = primaryRefs(frozen)
 	}
 	frozen.Close()
 	if err != nil {
@@ -366,7 +362,7 @@ func VerifyBackup(source string) (BackupManifest, error) {
 	if err = json.Unmarshal(data, &manifest); err != nil {
 		return manifest, err
 	}
-	if manifest.Format != 1 || manifest.Schema < 1 || manifest.Schema > CurrentSchema {
+	if manifest.Format != 1 || manifest.Schema != CurrentSchema {
 		return manifest, errors.New("unsupported backup format")
 	}
 	listed := map[string]BackupFile{}
@@ -403,7 +399,7 @@ func VerifyBackup(source string) (BackupManifest, error) {
 	if schema != manifest.Schema {
 		return manifest, errors.New("backup schema mismatch")
 	}
-	refs, err := primaryRefs(db, schema)
+	refs, err := primaryRefs(db)
 	if err != nil {
 		return manifest, err
 	}
@@ -418,42 +414,29 @@ func VerifyBackup(source string) (BackupManifest, error) {
 	}
 	return manifest, nil
 }
+
+// primaryTable names a stored file path column the backup must carry.
+type primaryTable struct{ table, column string }
+
+// One inventory covers every file the database references, including diagnostics.
+func primaryTables() []primaryTable {
+	return []primaryTable{
+		{"source_versions", "text_path"},
+		{"generated_artifacts", "markdown_path"},
+		{"digest_checkpoints", "markdown_path"},
+		{"delivery_parts", "text_path"},
+		{"connection_versions", "markdown_path"},
+		{"job_failures", "response_path"},
+		{"article_knowledge", "markdown_path"},
+		{"knowledge_failures", "response_path"},
+	}
+}
+
 func Restore(ctx context.Context, source, destination string) error {
-	return restore(ctx, source, destination, false)
+	return restore(ctx, source, destination)
 }
 
-// RepackFiles restores a verified backup into a new root with sharded paths.
-// Source data stays untouched and incomplete output cannot be opened.
-func RepackFiles(ctx context.Context, source, destination string) error {
-	// Resolve parent aliases before reserving output: never create it inside
-	// the input backup, even when the caller uses a symlink to its parent.
-	sourcePath, err := filepath.EvalSymlinks(source)
-	if err != nil {
-		return err
-	}
-	sourcePath, err = filepath.Abs(sourcePath)
-	if err != nil {
-		return err
-	}
-	parent, err := filepath.EvalSymlinks(filepath.Dir(destination))
-	if err != nil {
-		return err
-	}
-	target, err := filepath.Abs(filepath.Join(parent, filepath.Base(destination)))
-	if err != nil {
-		return err
-	}
-	relative, err := filepath.Rel(sourcePath, target)
-	if err != nil {
-		return err
-	}
-	if relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))) {
-		return errors.New("repack output must be outside the source backup")
-	}
-	return restore(ctx, sourcePath, target, true)
-}
-
-func restore(ctx context.Context, source, destination string, repack bool) error {
+func restore(ctx context.Context, source, destination string) error {
 	manifest, err := VerifyBackup(source)
 	if err != nil {
 		return err
@@ -474,12 +457,7 @@ func restore(ctx context.Context, source, destination string, repack bool) error
 			return err
 		}
 	}
-	if repack {
-		if err = repackCopiedFiles(ctx, output, manifest.Schema); err != nil {
-			return err
-		}
-	}
-	if err = recoverCopiedDeliveries(output, manifest.Schema); err != nil {
+	if err = recoverCopiedDeliveries(output); err != nil {
 		return err
 	}
 	if err = syncedWrite(filepath.Join(output, restorePause), []byte("Workers and delivery paused. Resume explicitly with -resume-restored.\n")); err != nil {
@@ -510,10 +488,7 @@ func ResumeRestored(root string) error {
 
 // Activity after the snapshot cannot be reconstructed. Preserve message IDs
 // already confirmed in it, but quarantine every unfinished imported delivery.
-func recoverCopiedDeliveries(root string, schema int) error {
-	if schema < 8 {
-		return nil
-	}
+func recoverCopiedDeliveries(root string) error {
 	u := url.URL{Scheme: "file", Path: filepath.Join(root, "library.sqlite")}
 	q := u.Query()
 	q.Set("mode", "rw")
