@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='batch-smoke-') as direct
             assert 'Нових: 180 · Уже були: 1 · Не додано: 0' in page.locator('body').inner_text()
             page.screenshot(path=str(root/'tmp/smoke-batch.png'),full_page=False)
             page.get_by_role('link',name='Переглянути непрочитані вхідні',exact=True).click()
-            assert 'placement=inbox' in page.url and 'read=0' in page.url
+            assert 'read=0' in page.url
             page.goto(origin+'/items/1')
             assert 'непрочитано' in page.locator('body').inner_text()
             stop(process)

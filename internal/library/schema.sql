@@ -3,7 +3,6 @@
 CREATE TABLE items (
  id INTEGER PRIMARY KEY, original_url TEXT NOT NULL, canonical_url TEXT NOT NULL UNIQUE,
  title TEXT NOT NULL DEFAULT '', added_at TEXT NOT NULL,
- placement TEXT NOT NULL DEFAULT 'inbox' CHECK(placement IN ('inbox','library','deferred')),
  is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0,1)),
  state TEXT NOT NULL DEFAULT 'queued', error TEXT NOT NULL DEFAULT '', selected_snapshot INTEGER
 , filter_state TEXT NOT NULL DEFAULT 'not_checked' CHECK(filter_state IN ('not_checked','passed','rejected','overridden')));

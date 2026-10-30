@@ -109,7 +109,6 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	if e := s.Rate(id, 3, nil, nil, "already familiar"); e != nil {
 		t.Fatal(e)
 	}
-	s.SetPlacement(id, "deferred")
 	s.SetRead(id, true)
 	j := claim(t, s)
 	if e := s.Complete(j, Snapshot{Text: "Searchable advertisement", Title: "Source"}); e != nil {
@@ -120,7 +119,7 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	if worked, e := worker.Step(context.Background()); worked || e != nil || calls != 0 {
 		t.Fatal("rejected source invoked model")
 	}
-	got, e := s.Search(Filters{Query: "Searchable", Filter: "rejected", Placement: "deferred", Rating: "3", Read: "1"})
+	got, e := s.Search(Filters{Query: "Searchable", Filter: "rejected", Rating: "3", Read: "1"})
 	if e != nil || len(got) != 1 {
 		t.Fatal("filtered text not searchable", e)
 	}
@@ -138,7 +137,7 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	configureRules(t, s, .8, nil)
 	after, _ := s.FilterDecisions(id)
 	i, _ := s.Item(id)
-	if i.FilterState != "rejected" || i.Placement != "deferred" || !i.Read || i.Score.Int64 != 3 || len(before) != len(after) {
+	if i.FilterState != "rejected" || !i.Read || i.Score.Int64 != 3 || len(before) != len(after) {
 		t.Fatal("config change reprocessed judgments")
 	}
 	if e = s.OverrideFilter(id); e != nil {

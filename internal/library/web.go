@@ -182,17 +182,7 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 			}
 			return s
 		},
-		"placement": func(s string) string {
-			switch s {
-			case "inbox":
-				return "Вхідні"
-			case "library":
-				return "Бібліотека"
-			case "deferred":
-				return "Відкладені"
-			}
-			return s
-		}, "states": func() []string {
+		"states": func() []string {
 			return []string{"queued", "fetching", "ready", "needs_input", "retry_wait", "failed", "enriching", "digest_retry_wait", "digest_failed", "filtered"}
 		}, "ratingScore": func(n int64) sql.NullInt64 { return sql.NullInt64{Int64: n, Valid: true} }, "numberString": func(n int64) string { return strconv.FormatInt(n, 10) }, "usefulnessLevels": usefulnessLevels, "translationHTML": translationHTML, "searchScores": searchScores, "searchJudgment": searchJudgmentLabel, "ratingLabel": ratingLabel, "usefulnessFilterLabel": usefulnessFilterLabel, "date": func(raw string) string {
 			t, err := time.Parse(time.RFC3339Nano, raw)
@@ -337,7 +327,7 @@ func (w *Web) renderStatus(rw http.ResponseWriter, name string, data pageData, s
 }
 func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), Placement: q.Get("placement"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
+	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), Rating: q.Get("rating"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
 	for _, tag := range strings.Split(q.Get("tags"), ",") {
 		if tag = strings.TrimSpace(tag); tag != "" {
 			f.Tags = append(f.Tags, tag)
@@ -568,8 +558,6 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 	}
 	form := r.PostForm
 	switch r.PathValue("action") {
-	case "placement":
-		err = w.Store.SetPlacement(id, form.Get("placement"))
 	case "read":
 		value := form.Get("read")
 		if value != "0" && value != "1" {

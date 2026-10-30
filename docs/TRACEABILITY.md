@@ -99,7 +99,7 @@ Browser fixture — `scripts/smoke_connections_ui.py`. Автоматичний 
 
 Пакетне введення розширює FR-01/02/10/17. `batch_test.go` перевіряє
 partial acceptance, canonical duplicates/repeated submit, перезапуск зі
-стійкими jobs, незмінність read/placement, bounds-before-write, ізольований
+стійкими jobs, незмінність read, bounds-before-write, ізольований
 DB failure, CSRF/Origin/agent guards і escaped correction form.
 Browser fixture: `scripts/smoke_batch_ui.py` — пачка, виправлення рядка,
 повтор, непрочитані вхідні та збереження черги після restart.

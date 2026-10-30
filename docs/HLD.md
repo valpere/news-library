@@ -113,7 +113,6 @@ flowchart LR
 |---|---|
 | Обробка | queued, fetching, enriching, ready, needs_input, retry_wait, failed |
 | Рішення правил | not_checked, passed, rejected, overridden |
-| Розміщення користувачем | inbox, library, deferred |
 | Власна оцінка | немає або остання подія з числом; попередні події збережені |
 | Читання користувачем | unread / read; змінюється тільки явною дією |
 | Генерація/індексація | окремий стан кожного етапу й причина пропуску |
@@ -162,7 +161,7 @@ Rollback може лишити файл без посилання, але не �
 
 | Сутність | Призначення |
 |---|---|
-| items, source_aliases | Оригінальний і канонічний URL, назва, джерело, час додавання, користувацьке розміщення |
+| items, source_aliases | Оригінальний і канонічний URL, назва, джерело, час додавання |
 | source_versions | Текст, hash, час отримання, extractor, повнота й попередження; старі версії не перезаписуються |
 | jobs | Етап, payload IDs, спроби, next_attempt, lease, стан, помилка |
 | generated_artifacts | Дайджест/оцінка, snapshot, модель і фактичний провайдер, prompt/profile version, час, usage |
@@ -271,7 +270,7 @@ assessed_at UTC timestamp (коли користувач поставив оці
 
 ### FUN-NL-LIBRARY
 
-Розміщення та read/unread змінюються незалежно від оцінки й обробки.
+Read/unread змінюються незалежно від оцінки й обробки.
 GET не має таких побічних ефектів. Людський тег не перезаписується
 пропозицією моделі; походження тегів зберігається.
 
@@ -318,7 +317,7 @@ Read API відокремлений від користувацьких мута
 ### FUN-NL-CONTEXT
 
 Контекст складається з наявного дайджесту/фрагмента, версії, посилань,
-оцінки, тегів і розміщення. Лімітований фрагмент позначається як обрізаний.
+оцінки і тегів. Лімітований фрагмент позначається як обрізаний.
 Endpoint не генерує нового тексту й не змінює стану читання.
 
 ### FUN-NL-DELIVERY
@@ -549,9 +548,9 @@ no-store. Mutation із Authorization відхиляється до handlers. Se
 Item включає source та saved digest/model provenance і dated rating history,
 unknown date → null. Fragment перевіряє ownership/UTF-8 boundaries/16KiB.
 Context бере saved digest або source excerpt, обмежує його 4000 bytes і
-повертає current explicit rating event, placement/tags, source completeness,
+повертає current explicit rating event, tags, source completeness,
 truncation і text_kind: offsets digest не видаються за source offsets.
-Жоден read endpoint не змінює read/placement/ratings і не ставить jobs.
+Жоден read endpoint не змінює read/ratings і не ставить jobs.
 
 
 ## M4: резервна копія та доставка (schema v8)
@@ -793,7 +792,6 @@ source/digest context та незмінність історії збереже�
 Usefulness filter/sort працюють лише з останньою оцінкою EUv1; старий
 числовий rating criterion лишається технічною сумісністю. Чат має окреме
 usefulness field і перевіряє явне користувацьке походження назви рівня.
-Непрочитане більше не обмежується placement=inbox.
 
 
 Knowledge recovery: strict decoder допускає JSON links із повною валідною

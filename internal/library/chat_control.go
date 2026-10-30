@@ -74,7 +74,7 @@ func chatEventLabel(event, value string) string {
 	if event == "item" {
 		parts := strings.Split(value, ":")
 		if len(parts) >= 2 {
-			text = map[string]string{"save": "Збережи до бібліотеки", "defer": "Відклади", "inbox": "Поверни до вхідних", "read": "Познач прочитаним", "unread": "Познач непрочитаним", "rate": "Оціни", "tags": "Додай теги"}[parts[0]] + " матеріал №" + parts[1]
+			text = map[string]string{"read": "Познач прочитаним", "unread": "Познач непрочитаним", "rate": "Оціни", "tags": "Додай теги"}[parts[0]] + " матеріал №" + parts[1]
 			if len(parts) == 3 {
 				text += " на " + parts[2]
 			}
@@ -257,7 +257,7 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 		from *string
 		to   *string
 		max  int
-	}{{p.Query, &f.Query, 4096}, {p.Category, &f.Category, 600}, {p.Placement, &f.Placement, 32}, {p.Read, &f.Read, 8}, {p.Rating, &f.Rating, 24}, {p.Usefulness, &f.Usefulness, 64}, {p.State, &f.State, 32}, {p.Filter, &f.Filter, 32}, {p.ConfidenceMin, &f.ConfidenceMin, 16}, {p.ConfidenceMax, &f.ConfidenceMax, 16}, {p.Sort, &f.Sort, 32}, {p.Direction, &f.Direction, 8}, {p.Mode, &state.Mode, 16}} {
+	}{{p.Query, &f.Query, 4096}, {p.Category, &f.Category, 600}, {p.Read, &f.Read, 8}, {p.Rating, &f.Rating, 24}, {p.Usefulness, &f.Usefulness, 64}, {p.State, &f.State, 32}, {p.Filter, &f.Filter, 32}, {p.ConfidenceMin, &f.ConfidenceMin, 16}, {p.ConfidenceMax, &f.ConfidenceMax, 16}, {p.Sort, &f.Sort, 32}, {p.Direction, &f.Direction, 8}, {p.Mode, &state.Mode, 16}} {
 		if pair.from != nil {
 			if len(*pair.from) > pair.max || !utf8.ValidString(*pair.from) {
 				return errors.New("критерій пошуку завеликий")
@@ -284,7 +284,7 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 	for _, pair := range []struct {
 		value   string
 		allowed []string
-	}{{f.Placement, []string{"", "inbox", "library", "deferred"}}, {f.Read, []string{"", "0", "1"}}, {f.Filter, []string{"", "passed", "rejected", "overridden", "not_checked"}}, {f.State, []string{"", "queued", "fetching", "ready", "enriching", "needs_input", "retry_wait", "digest_failed", "digest_retry_wait", "filtered", "failed"}}, {f.Sort, []string{"", "added", "rating", "usefulness", "confidence", "relevance"}}, {f.Direction, []string{"", "asc", "desc"}}} {
+	}{{f.Read, []string{"", "0", "1"}}, {f.Filter, []string{"", "passed", "rejected", "overridden", "not_checked"}}, {f.State, []string{"", "queued", "fetching", "ready", "enriching", "needs_input", "retry_wait", "digest_failed", "digest_retry_wait", "filtered", "failed"}}, {f.Sort, []string{"", "added", "rating", "usefulness", "confidence", "relevance"}}, {f.Direction, []string{"", "asc", "desc"}}} {
 		valid := false
 		for _, v := range pair.allowed {
 			if v == pair.value {
@@ -635,11 +635,6 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 			}
 		} else {
 			switch command.ItemAction {
-			case "save", "defer", "inbox":
-				placement := map[string]string{"save": "library", "defer": "deferred", "inbox": "inbox"}[command.ItemAction]
-				if err := w.Store.SetPlacement(id, placement); err != nil {
-					return ChatReply{}, err
-				}
 			case "read", "unread":
 				if err := w.Store.SetRead(id, command.ItemAction == "read"); err != nil {
 					return ChatReply{}, err
@@ -809,7 +804,7 @@ func chatCommandLabel(c ChatCommand) string {
 	case "index":
 		return "перебудувати індекс пошуку"
 	case "item":
-		return fmt.Sprintf("%s для матеріалу №%d", map[string]string{"save": "зберегти до бібліотеки", "defer": "відкласти", "inbox": "повернути до вхідних", "read": "позначити прочитаним", "unread": "позначити непрочитаним", "rate": "дати власну оцінку", "tags": "додати теги"}[c.ItemAction], c.Index)
+		return fmt.Sprintf("%s для матеріалу №%d", map[string]string{"read": "позначити прочитаним", "unread": "позначити непрочитаним", "rate": "дати власну оцінку", "tags": "додати теги"}[c.ItemAction], c.Index)
 	}
 	return c.Action
 }

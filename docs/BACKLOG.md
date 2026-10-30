@@ -211,7 +211,7 @@ quality/рекомендації й latency під навантаженням з
 
 Погоджена шкала estimative usefulness: сім словесних рівнів, версії
 оцінок без переосмислення legacy numbers, окремий пошук/сортування,
-простий UI без save/defer дій. Непрочитане охоплює всі старі placement.
+простий UI без save/defer дій.
 
 
 Дообробка старих format failures: явний recovery helper перевіряє saved

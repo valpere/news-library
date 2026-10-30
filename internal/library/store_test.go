@@ -228,9 +228,6 @@ func TestRatingHistoryAndIndependentActions(t *testing.T) {
 	if _, e = s.DB.Exec("DELETE FROM rating_events"); e == nil {
 		t.Fatal("rating deletable")
 	}
-	if e = s.SetPlacement(id, "deferred"); e != nil {
-		t.Fatal(e)
-	}
 	if e = s.SetRead(id, true); e != nil {
 		t.Fatal(e)
 	}
@@ -238,15 +235,12 @@ func TestRatingHistoryAndIndependentActions(t *testing.T) {
 		t.Fatal(e)
 	}
 	i, e := s.Item(id)
-	if e != nil || !i.Read || i.Placement != "deferred" || !i.Score.Valid || i.Score.Int64 != 0 {
+	if e != nil || !i.Read || !i.Score.Valid || i.Score.Int64 != 0 {
 		t.Fatal("independence", e)
 	}
 	unrated, e := s.Item(other)
 	if e != nil || unrated.Score.Valid {
 		t.Fatal("unrated became zero")
-	}
-	if e = s.SetPlacement(other, "invalid"); e == nil {
-		t.Fatal("bad placement")
 	}
 	if e = s.SetRead(999, true); e != sql.ErrNoRows {
 		t.Fatal("missing item", e)
@@ -259,9 +253,6 @@ func TestFTSFiltersAndStableOrder(t *testing.T) {
 	c := add(t, s, "https://example.com/c")
 	for _, id := range []int64{a, b, c} {
 		manual(t, s, id, "Ukraine knowledge store")
-		if e := s.SetPlacement(id, "library"); e != nil {
-			t.Fatal(e)
-		}
 	}
 	s.Rate(a, 0, nil, nil, "")
 	s.Rate(b, 0, nil, nil, "")
@@ -274,7 +265,7 @@ func TestFTSFiltersAndStableOrder(t *testing.T) {
 			t.Fatal("stable null order", e)
 		}
 	}
-	got, e := s.Search(Filters{Query: "knowledge", Placement: "library", Tags: []string{"one", "two"}, Read: "0", Rating: "0", State: "ready"})
+	got, e := s.Search(Filters{Query: "knowledge", Tags: []string{"one", "two"}, Read: "0", Rating: "0", State: "ready"})
 	if e != nil || len(got) != 1 || got[0].ID != a {
 		t.Fatal("AND/OR filters", e)
 	}

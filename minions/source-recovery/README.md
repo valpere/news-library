@@ -24,7 +24,7 @@ Existing accepted source/digest stages are reused. A recognized saved browser
 challenge is fetched again rather than digested. At most one fetch/digest attempt
 per item is made; chunk checkpoints and immutable diagnostics remain in the store.
 Knowledge work is scoped to the selected item. The report is saved after each
-item, and human ratings/read/placement state are checked for exact preservation.
+item, and human ratings/read state are checked for exact preservation.
 Read each item's result: successful process exit does not mean every remote
 source or generation succeeded. Resolve diagnosed failures before explicit retry.
 

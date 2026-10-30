@@ -4,7 +4,7 @@
 текст і дайджест → власна оцінка з історією → поступовий перегляд непрочитаного → пошук.
 
 M1 реалізовано: один локальний Go-сервіс, SQLite, стійка черга, статті та
-YouTube-субтитри, ручний текст, незалежні оцінки/розміщення/читання, теги,
+YouTube-субтитри, ручний текст, незалежні оцінки/читання, теги,
 FTS і фільтри. Додано дайджести Ollama cloud, окремі файли текстів та
 спільний HTTP-кеш, пояснювані правила відсіву, окремі відгуки про
 дайджести й прогноз інтересу за явно заданим профілем. Free-only резерв дайджестів
@@ -149,7 +149,7 @@ TTL=0 вимикає кешування й умовні запити.
 Файли перевіряються за SHA-256; відсутність первинного файла показується
 як помилка. Пошкоджений кеш отримується повторно. Backup/restore commands наведені нижче.
 
-Текст одразу зберігається у власних незмінних файлах; «Зберегти» лише змінює розміщення.
+Текст одразу зберігається у власних незмінних файлах.
 Нова власна оцінка — рівень estimative usefulness 0..6; історичні `legacy_numeric` — ціле
 0..9223372036854775807. Відсутня оцінка відрізняється від 0. Кожна оцінка додає незмінну подію з відомими версіями показаного тексту й дайджесту.
 Для історичного рішення можна явно залишити дату невідомою. GET не
@@ -310,11 +310,11 @@ semantic сортування — relevance, можна явно обрати д
 (32..256 random non-whitespace bytes). Порожній token вимикає API.
 Запити мають `Authorization: Bearer …`; секрет не вставляйте в чат/репозиторій.
 
-- `GET /api/read/search?q=…&mode=hybrid&placement=deferred&limit=20` — спільні
+- `GET /api/read/search?q=…&mode=hybrid&limit=20` — спільні
   UI metadata filters; mode fts/vector/hybrid, default fts, limit1..100.
 - `GET /api/read/items/1` — збережений текст, digest/model provenance і rating history.
 - `GET /api/read/items/1/context` — до 4000 UTF-8 bytes saved digest/excerpt,
-  власна оцінка з датою/null, source completeness, placement і tags.
+  власна оцінка з датою/null, source completeness і tags.
 - `GET /api/read/items/1/fragment?start=0&end=100` — source byte boundaries,
   до 16384 bytes; optional `source=ID` дозволяє historical snapshot цього item.
 

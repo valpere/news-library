@@ -192,9 +192,6 @@ def main():
                 check('backup' in state['Filters']['Tags'] and state['Filters']['Query'] == query, 'tag was not added to the active search')
                 state, _ = send('Прибери обмеження за тегом, тему і непрочитане залиш')
                 check(not state['Filters']['Tags'] and state['Filters']['Read'] == '0' and state['Filters']['Query'] == query, 'removing a tag lost other criteria')
-                second = state['Cards'][1]['Item']['ID']
-                state, _ = send('Збережи другий матеріал до моєї бібліотеки')
-                check(db.execute('SELECT placement FROM items WHERE id=?', (second,)).fetchone()[0] == 'library', 'second card was not saved')
                 first = state['Cards'][0]['Item']['ID']
                 state, reply = send('Оціни перший матеріал')
                 check(reply['Kind'] == 'question' and db.execute('SELECT count(*) FROM rating_events').fetchone()[0] == 0, 'missing score was invented')
