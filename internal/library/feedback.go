@@ -4,27 +4,18 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"errors"
-	"strings"
-	"unicode/utf8"
 )
 
-type DigestFeedback struct {
-	ID, ItemID, DigestID      int64
-	Quality, Note, RecordedAt string
-}
-
-func (s *Store) Feedback(itemID, digestID int64, quality, note string) error {
-	if quality != "good" && quality != "inaccurate" && quality != "incomplete" && quality != "unclear" {
+// Feedback sets (or, with "", clears) the digest's quality flag (one current value; a new digest starts without it).
+func (s *Store) Feedback(itemID, digestID int64, quality string) error {
+	// An empty quality clears the flag.
+	if quality != "" && quality != "good" && quality != "inaccurate" && quality != "incomplete" && quality != "unclear" {
 		return errors.New("оберіть якість дайджесту")
-	}
-	note = strings.TrimSpace(note)
-	if utf8.RuneCountInString(note) > 4000 {
-		return errors.New("відгук завеликий")
 	}
 	if digestID != itemID {
 		return errors.New("дайджест не належить цьому матеріалу")
 	}
-	r, err := s.DB.Exec("INSERT INTO digest_feedback(item_id,quality,note,recorded_at) SELECT item_id,?,?,? FROM digests WHERE item_id=?", quality, note, nowUTC(), itemID)
+	r, err := s.DB.Exec("UPDATE digests SET feedback=? WHERE item_id=?", quality, itemID)
 	if err != nil {
 		return err
 	}
@@ -32,22 +23,6 @@ func (s *Store) Feedback(itemID, digestID int64, quality, note string) error {
 		return errors.New("дайджест не знайдено")
 	}
 	return nil
-}
-func (s *Store) FeedbackHistory(itemID, digestID int64) ([]DigestFeedback, error) {
-	rows, err := s.DB.Query("SELECT id,item_id,item_id,quality,note,recorded_at FROM digest_feedback WHERE item_id=? AND item_id=? ORDER BY id DESC", itemID, digestID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := []DigestFeedback{}
-	for rows.Next() {
-		var f DigestFeedback
-		if err = rows.Scan(&f.ID, &f.ItemID, &f.DigestID, &f.Quality, &f.Note, &f.RecordedAt); err != nil {
-			return nil, err
-		}
-		result = append(result, f)
-	}
-	return result, rows.Err()
 }
 
 // Regeneration is an explicit action with a new job; the new digest replaces the

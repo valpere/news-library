@@ -34,6 +34,7 @@ type Digest struct {
 	Markdown, Model, ActualModel, Provider, PromptVersion, CreatedAt string
 	InputTokens, OutputTokens                                        int64
 	Prediction                                                       *InterestPrediction
+	Feedback                                                         string
 	ChunkCount                                                       int
 }
 
@@ -211,12 +212,12 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	return nil
 }
 
-const digestSelect = `SELECT item_id,item_id,item_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count FROM digests`
+const digestSelect = `SELECT item_id,item_id,item_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count,feedback FROM digests`
 
 func (s *Store) scanDigest(row interface{ Scan(...any) error }) (Digest, error) {
 	var d Digest
 	var path, hash string
-	err := row.Scan(&d.ID, &d.ItemID, &d.SnapshotID, &path, &d.Model, &d.ActualModel, &d.Provider, &d.PromptVersion, &d.CreatedAt, &d.InputTokens, &d.OutputTokens, &hash, &d.ChunkCount)
+	err := row.Scan(&d.ID, &d.ItemID, &d.SnapshotID, &path, &d.Model, &d.ActualModel, &d.Provider, &d.PromptVersion, &d.CreatedAt, &d.InputTokens, &d.OutputTokens, &hash, &d.ChunkCount, &d.Feedback)
 	if err != nil {
 		return d, err
 	}

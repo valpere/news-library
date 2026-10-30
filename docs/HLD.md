@@ -169,7 +169,7 @@ Rollback може лишити файл без посилання, але не �
 | digests | Один поточний дайджест матеріалу (`item_id`): модель і фактичний провайдер, prompt/profile version, час, usage |
 | items.rating, items.rated_at | Одна поточна оцінка 0..6 і її дата (NULL = дата невідома); детальний контракт — FUN-NL-RATING |
 | interest_predictions | Confidence, Reasoning, snapshot профілю та hash; metadata конкретного digest artifact |
-| digest_feedback | Відгук на конкретну версію дайджесту, окремо від оцінки |
+| digests.feedback | Одна поточна позначка якості дайджесту, окремо від оцінки; зникає разом із дайджестом |
 | tags, item_tags | Теги та походження; модельні пропозиції відрізняються від користувацьких |
 | items.filter_state, items.filter_reason | Поточний вердикт правил і одним рядком чому (R, T, збіги); правила — один поточний набір з `.env`, без таблиць і версій |
 | chunks, embeddings, FTS | Похідні індекси з посиланням на snapshot; embeddings також мають model/version |
@@ -474,10 +474,11 @@ snapshot; новий результат без prediction не успадков�
 Помилка JSON/probability не публікує недійсний прогноз; URL і текст лишаються.
 Без профілю генерація повертає тільки дайджест, без вигаданої персоналізації.
 
-`feedback.go` додає незалежні immutable digest_feedback з ownership trigger.
-Запис feedback не запускає AI. Regeneration має новий unique config key,
-фіксує поточну модель/профіль і створює immutable artifact; активний job для
-snapshot блокує паралельний повтор. Старі посилання rating/feedback незмінні.
+`feedback.go` ставить одну позначку `digests.feedback` (порожня значить «без відгуку»);
+вона зникає разом із дайджестом. Запис feedback не запускає AI. Regeneration має
+новий unique config key, фіксує поточну модель/профіль, а готовий дайджест замінює
+старий разом із позначкою; активний job для матеріалу блокує паралельний повтор.
+(Старі описи нижче про immutable artifact і версії дайджестів — стара реалізація.)
 Web може вибирати source/digest IDs, показує історію версій та збережений
 результат під час регенерації, використовує readonly polling із захистом
 unsent input. Confidence sorting/filtering SQL не змінює людських даних.
