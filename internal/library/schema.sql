@@ -12,10 +12,13 @@ CREATE TABLE source_aliases (
 );
 CREATE TABLE jobs (
  id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
- state TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0,
+ state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','running','retry_wait','failed','cancelled')), attempts INTEGER NOT NULL DEFAULT 0,
  next_attempt INTEGER NOT NULL DEFAULT 0, lease_until INTEGER NOT NULL DEFAULT 0,
  token TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT ''
-, stage TEXT NOT NULL DEFAULT 'fetch' CHECK(stage IN ('fetch','digest')), config_version TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', prompt_version TEXT NOT NULL DEFAULT '', input_limit INTEGER NOT NULL DEFAULT 0, refresh INTEGER NOT NULL DEFAULT 0, filter_override INTEGER NOT NULL DEFAULT 0 CHECK(filter_override IN (0,1)), interests TEXT NOT NULL DEFAULT '', chunk_limit INTEGER NOT NULL DEFAULT 0, chunk_max_parts INTEGER NOT NULL DEFAULT 0);
+, stage TEXT NOT NULL DEFAULT 'fetch' CHECK(stage IN ('fetch','digest')), config_version TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', prompt_version TEXT NOT NULL DEFAULT '', input_limit INTEGER NOT NULL DEFAULT 0, refresh INTEGER NOT NULL DEFAULT 0, filter_override INTEGER NOT NULL DEFAULT 0 CHECK(filter_override IN (0,1)), interests TEXT NOT NULL DEFAULT '', chunk_limit INTEGER NOT NULL DEFAULT 0, chunk_max_parts INTEGER NOT NULL DEFAULT 0,
+ failure_kind TEXT NOT NULL DEFAULT '' CHECK(failure_kind IN ('','temporary','format','configuration','limit','source','unknown')),
+ failure_retryable INTEGER NOT NULL DEFAULT 0 CHECK(failure_retryable IN (0,1)),
+ response_path TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL DEFAULT '');
 CREATE TABLE texts (
  item_id INTEGER PRIMARY KEY REFERENCES items(id), title TEXT NOT NULL,
  hash TEXT NOT NULL, retrieved_at TEXT NOT NULL, origin TEXT NOT NULL,
@@ -27,7 +30,7 @@ CREATE TABLE item_tags (
  PRIMARY KEY(item_id,tag,origin)
 );
 CREATE TABLE digests (
- item_id INTEGER PRIMARY KEY REFERENCES items(id), job_id INTEGER REFERENCES jobs(id),
+ item_id INTEGER PRIMARY KEY REFERENCES items(id),
  model TEXT NOT NULL, actual_model TEXT NOT NULL, provider TEXT NOT NULL,
  prompt_version TEXT NOT NULL, created_at TEXT NOT NULL, input_tokens INTEGER NOT NULL DEFAULT 0,
  output_tokens INTEGER NOT NULL DEFAULT 0,
@@ -87,12 +90,6 @@ CREATE TABLE connection_members (
  version_id INTEGER NOT NULL REFERENCES connection_versions(id),
  item_id INTEGER NOT NULL REFERENCES items(id), role TEXT NOT NULL,
  PRIMARY KEY(version_id,item_id)
-);
-CREATE TABLE job_failures (
- id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL REFERENCES jobs(id), attempt INTEGER NOT NULL,
- kind TEXT NOT NULL CHECK(kind IN ('temporary','format','configuration','limit','source','unknown')),
- message TEXT NOT NULL, retryable INTEGER NOT NULL CHECK(retryable IN (0,1)),
- response_path TEXT NOT NULL DEFAULT '', hash TEXT NOT NULL DEFAULT '', recorded_at TEXT NOT NULL
 );
 CREATE TABLE knowledge_runs (
  id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id),
@@ -158,7 +155,6 @@ CREATE INDEX filter_history ON filter_decisions(item_id,id DESC);
 CREATE INDEX embedding_version_state ON embedding_runs(version,state,item_id);
 CREATE INDEX embedding_chunk_version ON embedding_chunks(version,item_id);
 CREATE INDEX connection_backlinks ON connection_members(item_id,version_id);
-CREATE INDEX job_failure_history ON job_failures(job_id,id DESC);
 CREATE INDEX knowledge_current ON knowledge_runs(item_id,updated_at DESC,id DESC);
 CREATE INDEX chat_history ON chat_turns(session_id,id DESC);
 CREATE INDEX search_judgments_event ON search_judgments(event_id,item_id,id);

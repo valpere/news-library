@@ -285,8 +285,13 @@ func (s *Store) recordAttemptFailure(j Job, err error) error {
 	if e = leaseValid(tx, j); e != nil {
 		return e
 	}
-	if e = s.recordFailure(tx, j, FailureFromError(err)); e != nil {
+	replaced, e := s.recordFailure(tx, j, FailureFromError(err))
+	if e != nil {
 		return e
 	}
-	return tx.Commit()
+	if e = tx.Commit(); e != nil {
+		return e
+	}
+	s.removeUnusedFiles(map[string]bool{replaced: replaced != ""}) // best effort
+	return nil
 }

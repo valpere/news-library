@@ -37,7 +37,7 @@ func (s *Store) PurgeBlocker(id int64) (string, error) {
 // purgeFileColumns lists every place that references a stored file by path.
 var purgeFileColumns = [][2]string{
 	{"texts", "text_path"}, {"digests", "markdown_path"}, {"digest_checkpoints", "markdown_path"},
-	{"article_knowledge", "markdown_path"}, {"job_failures", "response_path"}, {"knowledge_failures", "response_path"},
+	{"article_knowledge", "markdown_path"}, {"jobs", "response_path"}, {"knowledge_failures", "response_path"},
 	{"connection_versions", "markdown_path"}, {"cache_entries", "body_path"},
 }
 
@@ -84,7 +84,7 @@ func (s *Store) PurgeTrashed(id int64) error {
 		`SELECT markdown_path FROM digests WHERE item_id=?`,
 		`SELECT markdown_path FROM digest_checkpoints WHERE job_id IN (SELECT id FROM jobs WHERE item_id=?)`,
 		`SELECT markdown_path FROM article_knowledge WHERE item_id=?`,
-		`SELECT response_path FROM job_failures WHERE job_id IN (SELECT id FROM jobs WHERE item_id=?)`,
+		`SELECT response_path FROM jobs WHERE item_id=?`,
 		`SELECT response_path FROM knowledge_failures WHERE run_id IN (SELECT id FROM knowledge_runs WHERE item_id=?)`,
 	} {
 		if err = collect(q, id); err != nil {
@@ -110,7 +110,6 @@ func (s *Store) PurgeTrashed(id int64) error {
 		`DELETE FROM interest_predictions WHERE item_id=?`,
 		`DELETE FROM digest_feedback WHERE item_id=?`,
 		`DELETE FROM digest_checkpoints WHERE job_id IN ` + jobs,
-		`DELETE FROM job_failures WHERE job_id IN ` + jobs,
 		`DELETE FROM filter_decisions WHERE item_id=?`,
 		`DELETE FROM search_judgments WHERE item_id=?`,
 		`DELETE FROM completeness_confirmations WHERE item_id=?`,

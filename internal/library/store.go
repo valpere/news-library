@@ -284,7 +284,6 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 	} else if err != sql.ErrNoRows {
 		return err
 	}
-	jobState, jobMessage := "done", ""
 	contentErr := ValidateSourceContent(snap)
 	var erased map[string]bool
 	// A fresh response that contains only a notice does not replace a prior source;
@@ -308,13 +307,30 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 		}
 	}
 	if contentErr != nil {
-		jobState, jobMessage = "failed", contentErr.Error()
-		if err = s.recordFailure(tx, j, FailureFromError(contentErr)); err != nil {
+		replaced, e := s.recordFailure(tx, j, FailureFromError(contentErr))
+		if e != nil {
+			return e
+		}
+		if replaced != "" {
+			if erased == nil {
+				erased = map[string]bool{}
+			}
+			erased[replaced] = true
+		}
+		if _, err = tx.Exec("UPDATE jobs SET state='failed',lease_until=0,error=? WHERE id=?", contentErr.Error(), j.ID); err != nil {
 			return err
 		}
-	}
-	if _, err = tx.Exec("UPDATE jobs SET state=?,lease_until=0,error=? WHERE id=?", jobState, jobMessage, j.ID); err != nil {
-		return err
+	} else {
+		finished, e := finishJob(tx, j.ID)
+		if e != nil {
+			return e
+		}
+		if erased == nil {
+			erased = map[string]bool{}
+		}
+		for p := range finished {
+			erased[p] = true
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return err
@@ -334,8 +350,14 @@ func (s *Store) fail(j Job, message string, retry bool, maxAttempts int, now tim
 	if err = leaseValid(tx, j); err != nil {
 		return err
 	}
+	var replaced string
 	if failure != nil {
-		if err = s.recordFailure(tx, j, *failure); err != nil {
+		if replaced, err = s.recordFailure(tx, j, *failure); err != nil {
+			return err
+		}
+	} else {
+		// A failure without a classification must not keep an older record that no longer matches the message.
+		if replaced, err = s.clearFailure(tx, j.ID); err != nil {
 			return err
 		}
 	}
@@ -369,7 +391,11 @@ func (s *Store) fail(j Job, message string, retry bool, maxAttempts int, now tim
 			}
 		}
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.removeUnusedFiles(map[string]bool{replaced: replaced != ""}) // best effort
+	return nil
 }
 func (s *Store) Retry(id int64) error {
 	tx, err := s.DB.Begin()
@@ -385,6 +411,21 @@ func (s *Store) Retry(id int64) error {
 		return errors.New("спершу явно поверніть матеріал до обробки")
 	}
 
+	// The new attempt replaces the failed one together with its recorded failure.
+	failed, err := queryIDs(tx, "SELECT id FROM jobs WHERE item_id=? AND stage='fetch' AND state='failed'", id)
+	if err != nil {
+		return err
+	}
+	erased := map[string]bool{}
+	for _, job := range failed {
+		finished, e := finishJob(tx, job)
+		if e != nil {
+			return e
+		}
+		for p := range finished {
+			erased[p] = true
+		}
+	}
 	r, err := tx.Exec("INSERT INTO jobs(item_id,refresh) SELECT id,1 FROM items WHERE id=? AND NOT EXISTS(SELECT 1 FROM jobs WHERE item_id=? AND stage='fetch' AND state IN ('queued','running','retry_wait'))", id, id)
 	if err != nil {
 		return err
@@ -396,7 +437,11 @@ func (s *Store) Retry(id int64) error {
 	if _, err = tx.Exec("UPDATE items SET state='queued',error='' WHERE id=? AND NOT EXISTS(SELECT 1 FROM texts WHERE item_id=?)", id, id); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.removeUnusedFiles(erased) // best effort
+	return nil
 }
 func (s *Store) Manual(id int64, text string) error {
 	if strings.TrimSpace(text) == "" {
@@ -421,8 +466,22 @@ func (s *Store) Manual(id int64, text string) error {
 	if _, err = tx.Exec("UPDATE items SET state='ready',error='' WHERE id=?", id); err != nil {
 		return err
 	}
-	if _, err = tx.Exec("UPDATE jobs SET state='cancelled' WHERE item_id=? AND stage='fetch' AND state IN ('queued','retry_wait')", id); err != nil {
+	// The text is here, so the pending or failed fetch (and its failure) is no longer needed.
+	fetches, err := queryIDs(tx, "SELECT id FROM jobs WHERE item_id=? AND stage='fetch' AND state IN ('queued','retry_wait','failed')", id)
+	if err != nil {
 		return err
+	}
+	if erased == nil {
+		erased = map[string]bool{}
+	}
+	for _, job := range fetches {
+		finished, e := finishJob(tx, job)
+		if e != nil {
+			return e
+		}
+		for p := range finished {
+			erased[p] = true
+		}
 	}
 	if err = indexSnapshot(tx, id, title, text); err != nil {
 		return err
@@ -632,7 +691,7 @@ type JobStatus struct {
 }
 
 func (s *Store) Jobs(id int64) ([]JobStatus, error) {
-	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage,CASE WHEN stage='digest' THEN item_id END,coalesce((SELECT kind FROM job_failures WHERE job_id=jobs.id ORDER BY id DESC LIMIT 1),'') FROM jobs WHERE item_id=? ORDER BY id DESC", id)
+	rows, err := s.DB.Query("SELECT id,state,attempts,error,next_attempt,lease_until,stage,CASE WHEN stage='digest' THEN item_id END,failure_kind FROM jobs WHERE item_id=? ORDER BY id DESC", id)
 	if err != nil {
 		return nil, err
 	}

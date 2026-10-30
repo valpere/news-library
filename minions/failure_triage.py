@@ -55,7 +55,7 @@ def inspect(data):
                     kind = run['kind'] if run['kind'] in ADVICE else 'unknown'
                     retryable = kind == 'temporary'
                 else:
-                    failure = db.execute('SELECT kind,retryable FROM job_failures WHERE job_id=? ORDER BY id DESC LIMIT 1', (run['id'],)).fetchone()
+                    failure = db.execute("SELECT failure_kind AS kind,failure_retryable AS retryable FROM jobs WHERE id=? AND failure_kind<>''", (run['id'],)).fetchone()
                     kind = failure['kind'] if failure and failure['kind'] in ADVICE else 'unknown'
                     retryable = bool(failure and failure['retryable'])
                 issue = {'stage': stage, 'status': 'failed', 'run_id': run['id'], 'kind': kind,

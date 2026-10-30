@@ -75,14 +75,14 @@ func TestGenerationFailureKindsHistoryAndBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	events, err = s.JobFailures(job.ID)
-	if err != nil || len(events) != 2 || events[1].Response == "" {
-		t.Fatal("failure history lost on explicit retry", events, err)
+	if err != nil || len(events) != 1 || events[0].Response == "" {
+		t.Fatal("last failure lost on explicit retry", events, err)
 	}
 	if e := s.FailError(Job{ID: job.ID, Token: "wrong", Attempts: 1}, &SourceError{Kind: "format", Diagnostic: "stale reply", Message: "stale"}, false, 3, time.Now(), 0); !errors.Is(e, ErrLeaseLost) {
 		t.Fatal("stale lease published failure", e)
 	}
 	preserved, _ := s.JobFailures(job.ID)
-	if len(preserved) != 2 {
+	if len(preserved) != 1 {
 		t.Fatal(preserved)
 	}
 	root := t.TempDir()
@@ -100,11 +100,11 @@ func TestGenerationFailureKindsHistoryAndBackup(t *testing.T) {
 	}
 	defer restored.Close()
 	old, err := restored.JobFailures(job.ID)
-	if err != nil || len(old) != 2 || old[0].Response != events[0].Response {
+	if err != nil || len(old) != 1 || old[0].Response != events[0].Response {
 		t.Fatal(old, err)
 	}
 	var path string
-	s.DB.QueryRow("SELECT response_path FROM job_failures ORDER BY id DESC LIMIT 1").Scan(&path)
+	s.DB.QueryRow("SELECT response_path FROM jobs WHERE response_path<>'' ORDER BY id DESC LIMIT 1").Scan(&path)
 	if err = os.WriteFile(filepath.Join(s.Files.Root, path), []byte("corruption"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestGenerationFailureAdviceAndTemporaryRetry(t *testing.T) {
 	}
 	jobs, _ := s.Jobs(id)
 	events, err := s.JobFailures(jobs[0].ID)
-	if err != nil || len(events) != 2 || !events[0].Retryable || events[0].Kind != "temporary" {
+	if err != nil || len(events) != 1 || !events[0].Retryable || events[0].Kind != "temporary" {
 		t.Fatal(events, err)
 	}
 }
@@ -177,7 +177,7 @@ func TestDigestFailureUIAndNonRetryableCategories(t *testing.T) {
 				t.Fatal(response.Code, response.Body.String())
 			}
 			var path string
-			s.DB.QueryRow("SELECT response_path FROM job_failures ORDER BY id DESC LIMIT 1").Scan(&path)
+			s.DB.QueryRow("SELECT response_path FROM jobs WHERE response_path<>'' ORDER BY id DESC LIMIT 1").Scan(&path)
 			os.Remove(filepath.Join(s.Files.Root, path))
 			response = webRequest(w, "GET", fmt.Sprintf("/items/%d", id), nil, nil)
 			if response.Code != 200 || !strings.Contains(response.Body.String(), "Primary source remains readable") || !strings.Contains(response.Body.String(), "діагностична відповідь недоступна") {

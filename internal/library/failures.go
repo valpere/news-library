@@ -45,61 +45,57 @@ func (s *Store) FailError(j Job, err error, retry bool, maxAttempts int, now tim
 	f.Retryable = retry
 	return s.fail(j, err.Error(), retry, maxAttempts, now, backoff, &f)
 }
-func (s *Store) recordFailure(tx *sql.Tx, j Job, f JobFailure) error {
+
+// recordFailure keeps the job's last failure only: a later failure replaces it and
+// finishing the job deletes it. The replaced diagnostic file is left for removeUnusedFiles.
+func (s *Store) recordFailure(tx *sql.Tx, j Job, f JobFailure) (replaced string, err error) {
 	path, hash := "", ""
 	if f.Response != "" {
 		// The response reader is bounded; diagnostics never contain request headers.
 		if len(f.Response) > 2<<20 {
-			return errors.New("generation diagnostic too large")
+			return "", errors.New("generation diagnostic too large")
 		}
-		var err error
-		path, err = s.Files.Put("digests", []byte(f.Response))
-		if err != nil {
-			return err
+		if path, err = s.Files.Put("digests", []byte(f.Response)); err != nil {
+			return "", err
 		}
 		hash = textHash(f.Response)
 	}
-	_, err := tx.Exec(`INSERT INTO job_failures(job_id,attempt,kind,message,retryable,response_path,hash,recorded_at) VALUES(?,?,?,?,?,?,?,?)`, j.ID, j.Attempts, f.Kind, f.Message, f.Retryable, path, hash, nowUTC())
-	return err
+	if err = tx.QueryRow(`SELECT response_path FROM jobs WHERE id=?`, j.ID).Scan(&replaced); err != nil {
+		return "", err
+	}
+	_, err = tx.Exec(`UPDATE jobs SET failure_kind=?,failure_retryable=?,response_path=?,hash=? WHERE id=?`, f.Kind, f.Retryable, path, hash, j.ID)
+	return replaced, err
 }
+
+// clearFailure forgets the job's last failure and returns its diagnostic file.
+func (s *Store) clearFailure(tx *sql.Tx, jobID int64) (path string, err error) {
+	if err = tx.QueryRow(`SELECT response_path FROM jobs WHERE id=?`, jobID).Scan(&path); err != nil {
+		return "", err
+	}
+	_, err = tx.Exec(`UPDATE jobs SET failure_kind='',failure_retryable=0,response_path='',hash='' WHERE id=?`, jobID)
+	return path, err
+}
+
+// JobFailures returns the job's last failure: zero or one element.
 func (s *Store) JobFailures(jobID int64) ([]JobFailure, error) {
-	rows, err := s.DB.Query(`SELECT id,job_id,attempt,kind,message,retryable,recorded_at,response_path,hash FROM job_failures WHERE job_id=? ORDER BY id DESC LIMIT 20`, jobID)
+	f := JobFailure{JobID: jobID}
+	var path, hash string
+	err := s.DB.QueryRow(`SELECT failure_kind,failure_retryable,error,response_path,hash FROM jobs WHERE id=? AND failure_kind<>''`, jobID).Scan(&f.Kind, &f.Retryable, &f.Message, &path, &hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	type saved struct {
-		f          JobFailure
-		path, hash string
-	}
-	records := []saved{}
-	for rows.Next() {
-		var v saved
-		if err = rows.Scan(&v.f.ID, &v.f.JobID, &v.f.Attempt, &v.f.Kind, &v.f.Message, &v.f.Retryable, &v.f.RecordedAt, &v.path, &v.hash); err != nil {
-			break
+	if path != "" {
+		data, e := s.Files.Read(path, hash)
+		if e != nil {
+			f.DiagnosticError = e.Error()
+		} else {
+			f.Response = string(data)
 		}
-		records = append(records, v)
 	}
-	rowErr := rows.Err()
-	rows.Close()
-	if err != nil {
-		return nil, err
-	}
-	if rowErr != nil {
-		return nil, rowErr
-	}
-	out := []JobFailure{}
-	for _, v := range records {
-		if v.path != "" {
-			data, e := s.Files.Read(v.path, v.hash)
-			if e != nil {
-				v.f.DiagnosticError = e.Error()
-			} else {
-				v.f.Response = string(data)
-			}
-		}
-		out = append(out, v.f)
-	}
-	return out, nil
+	return []JobFailure{f}, nil
 }
 func FailureAdvice(kind string) (label, advice, button string) {
 	button = "Повторити генерацію дайджесту"

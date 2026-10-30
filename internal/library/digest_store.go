@@ -30,7 +30,7 @@ func (c DigestConfig) Version() string {
 }
 
 type Digest struct {
-	ID, ItemID, SnapshotID, JobID                                    int64
+	ID, ItemID, SnapshotID                                           int64
 	Markdown, Model, ActualModel, Provider, PromptVersion, CreatedAt string
 	InputTokens, OutputTokens                                        int64
 	Prediction                                                       *InterestPrediction
@@ -180,7 +180,7 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT INTO digests(item_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, j.ItemID, j.ID, path, j.Model, d.ActualModel, d.Provider, j.PromptVersion, nowUTC(), d.InputTokens, d.OutputTokens, hash, max(d.ChunkCount, 1)); err != nil {
+	if _, err = tx.Exec(`INSERT INTO digests(item_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, j.ItemID, path, j.Model, d.ActualModel, d.Provider, j.PromptVersion, nowUTC(), d.InputTokens, d.OutputTokens, hash, max(d.ChunkCount, 1)); err != nil {
 		return err
 	}
 	if d.Prediction != nil {
@@ -194,8 +194,12 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 			return err
 		}
 	}
-	if _, err = tx.Exec(`UPDATE jobs SET state='done',lease_until=0,error='' WHERE id=?`, j.ID); err != nil {
+	finished, err := finishJob(tx, j.ID)
+	if err != nil {
 		return err
+	}
+	for p := range finished {
+		erased[p] = true
 	}
 	if _, err = tx.Exec(`UPDATE items SET state='ready',error='' WHERE id=?`, j.ItemID); err != nil {
 		return err
@@ -207,12 +211,12 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	return nil
 }
 
-const digestSelect = `SELECT item_id,item_id,item_id,job_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count FROM digests`
+const digestSelect = `SELECT item_id,item_id,item_id,markdown_path,model,actual_model,provider,prompt_version,created_at,input_tokens,output_tokens,hash,chunk_count FROM digests`
 
 func (s *Store) scanDigest(row interface{ Scan(...any) error }) (Digest, error) {
 	var d Digest
 	var path, hash string
-	err := row.Scan(&d.ID, &d.ItemID, &d.SnapshotID, &d.JobID, &path, &d.Model, &d.ActualModel, &d.Provider, &d.PromptVersion, &d.CreatedAt, &d.InputTokens, &d.OutputTokens, &hash, &d.ChunkCount)
+	err := row.Scan(&d.ID, &d.ItemID, &d.SnapshotID, &path, &d.Model, &d.ActualModel, &d.Provider, &d.PromptVersion, &d.CreatedAt, &d.InputTokens, &d.OutputTokens, &hash, &d.ChunkCount)
 	if err != nil {
 		return d, err
 	}

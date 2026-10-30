@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -88,7 +87,7 @@ func main() {
 		}
 	}
 	var state string
-	var snapshot, jobID int64
+	var snapshot int64
 	err = store.DB.QueryRow("SELECT state,id FROM items LIMIT 1").Scan(&state, &snapshot)
 	if err != nil {
 		fmt.Println("Fixture result unavailable")
@@ -103,27 +102,18 @@ func main() {
 		result["input_tokens"] = digest.InputTokens
 		result["output_tokens"] = digest.OutputTokens
 		result["zero_cost_non_byok_verified"] = true
-		jobID = digest.JobID
 		if err := os.WriteFile(filepath.Join(output, "digest.md"), []byte(digest.Markdown), 0600); err != nil {
 			fmt.Println("Cannot write fixture digest evidence")
 			os.Exit(1)
 		}
-	} else {
-		store.DB.QueryRow("SELECT id FROM jobs WHERE stage='digest'").Scan(&jobID)
 	}
-	failures, _ := store.JobFailures(jobID)
-	clean := []map[string]any{}
-	for _, failure := range failures {
-		clean = append(clean, map[string]any{"kind": failure.Kind, "message": strings.ReplaceAll(failure.Message, key, "[redacted]"), "retryable": failure.Retryable})
-	}
-	result["job_failures"] = clean
 	data, _ := json.MarshalIndent(result, "", "  ")
 	if err := os.WriteFile(filepath.Join(output, "result.json"), data, 0600); err != nil {
 		fmt.Println("Cannot write fixture report")
 		os.Exit(1)
 	}
 	fmt.Println(string(data))
-	if state != "ready" || digest == nil || err != nil || len(failures) != 1 || failures[0].Kind != "temporary" || primary.Calls != 1 {
+	if state != "ready" || digest == nil || err != nil || primary.Calls != 1 {
 		if err != nil && !errors.Is(err, context.Canceled) {
 			fmt.Println("Digest check failed")
 		}

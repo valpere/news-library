@@ -125,8 +125,8 @@ flowchart LR
 
 Чинний контракт. У коді вже: `texts` і `digests` з ключем `item_id` (замість `source_versions` і
 `generated_artifacts`), ембедінги, знання, прогнози й підтвердження повноти за `item_id`, одна оцінка в
-`items`. Ще немає: журналів у стані «лише поточне» (завдання, збої, правила фільтра, відгуки), нотаток
-без редакцій. Розділи нижче, що говорять про snapshots/версії, описують стару реалізацію.
+`items`; завдання без історії (завершене видаляється, на завданні лишається лише останній збій). Ще немає: журналів
+у стані «лише поточне» (правила фільтра, відгуки), нотаток без редакцій. Розділи нижче, що говорять про snapshots/версії, описують стару реалізацію.
 
 | Сутність | Призначення |
 |---|---|
@@ -659,11 +659,11 @@ canonical UI names і чіткий `DigestValidationError` (format/limit). Ві�
 SourceError.Kind, bounded Diagnostic response; transports/429/5xx separate
 від validation/config/profile/input-size, prediction errors також format.
 
-Schema 10 додає immutable `job_failures` (job FK, attempt, kind, message,
-retryable, recorded_at, response_path/hash). `Worker.FailError` і `Store.fail`
+Schema 10 додавала `job_failures`; у моделі без історії це поля `failure_kind`,
+`failure_retryable`, `response_path`, `hash` самого завдання (лише останній збій, видаляється з завданням після успіху). `Worker.FailError` і `Store.fail`
 перевіряють lease та атомарно записують failure event і job/item state. Якщо
-є raw reply, Files.Put/fsync у розрідженому каталозі digests передує DB publication. Reset
-manual retry не стирає failure history. Format/configuration/limit/source
+є raw reply, Files.Put/fsync у розрідженому каталозі digests передує DB publication. Явний
+повтор дайджесту лишає запис про останній збій до наступного результату. Format/configuration/limit/source
 примусово non-auto-retry; unknown legacy label не є вигаданим діагнозом.
 Нормальний код користувацьких оцінок/source versions не змінюється.
 
@@ -1009,8 +1009,8 @@ POST має `provider.max_price` prompt/completion/request/image = 0,
 allow не дозволяє платні маршрути і не змінює privacy акаунта.
 передається один ID, без tools/plugins/автоматичних routers. Наступний явно
 дозволений free ID можливий лише після temporary збою; решта збоїв зупиняє
-спробу. Незмінні job_failures зберігають відмови primary і резервних спроб,
-а generated_artifacts/digest_checkpoints — actual model/provider успішної відповіді.
+спробу. Останній збій завдання зберігає відмову primary чи резервної спроби до успіху;
+actual model/provider успішної відповіді лежать у `digests`.
 Схема бази не змінюється. Чат і KnowledgeWorker продовжують користуватися Ollama.
 
 Параметри `.env`: `NEWS_LIBRARY_OPENROUTER_ENABLED=false`,
