@@ -84,11 +84,11 @@ func TestAutomaticKnowledgePipelineBacklinksAndHumanHistory(t *testing.T) {
 		if err != nil || k == nil || len(k.Questions) != 1 || !strings.Contains(k.Markdown, "aliases:") || !strings.Contains(k.Markdown, "url:") {
 			t.Fatal(k, err)
 		}
-		links, err := s.Connections("", id, 0)
+		links, err := s.Connections("", id)
 		if err != nil || len(links) != 1 {
 			t.Fatal(links, err)
 		}
-		note, err := s.Connection(links[0].ID, 0)
+		note, err := s.Connection(links[0].ID)
 		if err != nil || note.Author != "model" || note.Model != "fixture:cloud" || !strings.Contains(note.Body, "Підстава зв’язку") {
 			t.Fatal(note, err)
 		}
@@ -175,7 +175,7 @@ func TestKnowledgeCheckpointFailureRetryAndBackup(t *testing.T) {
 	if g.MetadataCalls != 2 || g.LinkCalls != 2 {
 		t.Fatal("metadata checkpoint regenerated", g)
 	}
-	backlinks, err := restored.Connections("", first, 0)
+	backlinks, err := restored.Connections("", first)
 	if err != nil || len(backlinks) != 1 {
 		t.Fatal(backlinks, err)
 	}
@@ -236,7 +236,7 @@ func TestKnowledgeStaleLeaseFilterAndInvalidEvidence(t *testing.T) {
 	if err = s.completeKnowledgeLinks(*j, c, candidates, links); !errors.Is(err, ErrLeaseLost) {
 		t.Fatal("stale source published", err)
 	}
-	found, _ := s.Connections("", first, 0)
+	found, _ := s.Connections("", first)
 	if len(found) != 0 {
 		t.Fatal(found)
 	}
@@ -405,27 +405,22 @@ func TestKnowledgeGroupedThemeAndManualRevisionProvenance(t *testing.T) {
 	}
 	var note ConnectionNote
 	for _, id := range []int64{first, second, third} {
-		summaries, err := s.Connections("", id, 0)
+		summaries, err := s.Connections("", id)
 		if err != nil || len(summaries) != 1 {
 			t.Fatal(summaries, err)
 		}
-		note, err = s.Connection(summaries[0].ID, 0)
+		note, err = s.Connection(summaries[0].ID)
 		if err != nil || len(note.Members) != 3 || note.Author != "model" {
 			t.Fatal(note, err)
 		}
 	}
-	original := note
 	note.Body += "\nУточнення користувача."
-	if _, err = s.SaveConnection(note, note.VersionID); err != nil {
+	if _, err = s.SaveConnection(note); err != nil {
 		t.Fatal(err)
 	}
-	current, err := s.Connection(note.ID, 0)
-	if err != nil || current.Author != "user" || current.Model != "" {
+	current, err := s.Connection(note.ID)
+	if err != nil || current.Author != "user" || current.Model != "" || !strings.Contains(current.Body, "Уточнення") || count(t, s, "SELECT count(*) FROM connection_notes") != 1 {
 		t.Fatal(current, err)
-	}
-	historical, err := s.Connection(original.ID, original.VersionID)
-	if err != nil || historical.Author != "model" || historical.Markdown != original.Markdown {
-		t.Fatal(historical, err)
 	}
 }
 func TestKnowledgeCloudJSONValidationAndNoLocalFallback(t *testing.T) {

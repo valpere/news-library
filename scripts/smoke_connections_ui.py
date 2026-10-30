@@ -40,9 +40,8 @@ with tempfile.TemporaryDirectory(dir=root / 'tmp', prefix='connections-smoke-') 
             page.locator('select[name=item]').nth(1).select_option('2')
             page.locator('input[name=role]').nth(0).fill('Пояснення WAL')
             page.locator('input[name=role]').nth(1).fill('Приклад знімка')
-            page.get_by_role('button', name='Зберегти нову версію').click()
+            page.get_by_role('button', name='Зберегти').click()
             assert page.url == origin + '/connections/1'
-            assert 'версія 1' in page.locator('body').inner_text()
             first = page.request.get(origin + '/connections/1/markdown').text()
             assert 'type: connection' in first and 'questions:' in first
             for item in [1,2]:
@@ -54,15 +53,8 @@ with tempfile.TemporaryDirectory(dir=root / 'tmp', prefix='connections-smoke-') 
             page.locator('select[name=item]').nth(0).select_option('3')
             # Two existing source rows precede the new choices.
             page.locator('input[name=role]').nth(2).fill('Уточнення меж')
-            page.get_by_role('button', name='Зберегти нову версію').click()
-            assert 'версія 2' in page.locator('body').inner_text()
+            page.get_by_role('button', name='Зберегти').click()
             assert page.locator('article a[href="/items/3"]').count() == 1
-            page.locator('summary').filter(has_text='Історія версій').click()
-            old = page.get_by_role('link', name='Версія 1', exact=False)
-            old_url = old.get_attribute('href')
-            page.goto(origin + old_url)
-            assert 'Спільне' in page.locator('.connection-body').inner_text()
-            assert page.request.get(origin + old_url.replace('?', '/markdown?')).text() == first
             page.goto(origin + '/connections?q=як%20відновити')
             assert page.get_by_role('link', name='SQLite: узгодженість резервної копії', exact=True).count() == 1
             assert page.request.get(origin+'/api/read/connections').status == 401

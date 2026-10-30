@@ -190,7 +190,7 @@ func (s *Store) knowledgeCandidates(c KnowledgeContext) ([]KnowledgeContext, err
  coalesce((SELECT (CASE WHEN k.category=? THEN 3 ELSE 0 END)+(SELECT count(*)*5 FROM json_each(k.tags_json) t,json_each(?) q WHERE t.value=q.value) FROM article_knowledge k WHERE k.item_id=i.id ORDER BY (SELECT updated_at FROM knowledge_runs WHERE id=k.run_id) DESC,k.id DESC LIMIT 1),0)+
  CASE WHEN i.id IN (SELECT rowid FROM item_fts WHERE item_fts MATCH ?) THEN 2 ELSE 0 END AS relevance
  FROM active_items i WHERE i.id<>? AND EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id) AND i.filter_state IN ('passed','overridden')
- AND NOT EXISTS(SELECT 1 FROM connection_versions v JOIN connection_members a ON a.version_id=v.id JOIN connection_members b ON b.version_id=v.id WHERE a.item_id=? AND b.item_id=i.id AND v.revision=(SELECT max(revision) FROM connection_versions WHERE note_id=v.note_id))
+ AND NOT EXISTS(SELECT 1 FROM connection_members a JOIN connection_members b ON b.note_id=a.note_id WHERE a.item_id=? AND b.item_id=i.id)
  AND relevance>0 ORDER BY relevance DESC,i.id DESC LIMIT 3`, jsonString(c.Tags), c.Category, jsonString(c.Tags), terms, c.ItemID, c.ItemID)
 	if err != nil {
 		return nil, err
@@ -335,7 +335,7 @@ func (s *Store) completeKnowledgeLinks(j KnowledgeRun, c KnowledgeContext, candi
 		if valid != 1 {
 			continue
 		}
-		if err = tx.QueryRow(`SELECT count(*) FROM connection_versions v JOIN connection_members a ON a.version_id=v.id JOIN connection_members b ON b.version_id=v.id WHERE a.item_id=? AND b.item_id=? AND v.revision=(SELECT max(revision) FROM connection_versions WHERE note_id=v.note_id)`, j.ItemID, other.ItemID).Scan(&existing); err != nil {
+		if err = tx.QueryRow(`SELECT count(*) FROM connection_members a JOIN connection_members b ON b.note_id=a.note_id WHERE a.item_id=? AND b.item_id=?`, j.ItemID, other.ItemID).Scan(&existing); err != nil {
 			return err
 		}
 		if existing > 0 {
@@ -370,7 +370,7 @@ func (s *Store) completeKnowledgeLinks(j KnowledgeRun, c KnowledgeContext, candi
 		if len(group.Questions) > 20 {
 			group.Questions = group.Questions[:20]
 		}
-		if _, err = s.saveConnectionTx(tx, *groups[key], 0); err != nil {
+		if _, _, err = s.saveConnectionTx(tx, *groups[key]); err != nil {
 			return err
 		}
 		count++

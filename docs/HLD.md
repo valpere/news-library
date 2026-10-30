@@ -128,7 +128,7 @@ flowchart LR
 `items`; завдання без історії (завершене видаляється, на завданні лишається лише останній збій). Фільтр, відгук про дайджест і підтвердження повноти — поточний стан без історії
 (`filter_state`/`filter_reason`, `digests.feedback`, `texts.complete_confirmed`). Інформаційні дати (створення дайджесту, чекпойнтів, знань, час збоїв знань, час пакетів) прибрані;
 лишаються дати додавання, оцінки й отримання тексту та операційні (кеш, чат, пошукові оцінки, смітник).
-Ще немає: нотаток без редакцій. Розділи нижче, що говорять про snapshots/версії, описують стару реалізацію.
+Нотатки-зв'язки — одна поточна нотатка без редакцій: `connection_notes` (поля нотатки й файл Markdown) і `connection_members(note_id,item_id,role)`; редагування замінює рядок і файл, зміна тексту або видалення матеріалу прибирає його з нотаток (нотатка з одним матеріалом видаляється). Розділи нижче, що говорять про snapshots/версії, описують стару реалізацію.
 
 | Сутність | Призначення |
 |---|---|
@@ -573,7 +573,7 @@ Restore перевіряє source bundle й copied hashes, створює persis
 зберігає original IDs/events/source queue. Новий root можна відкрити без network
 execution; explicit resume знімає marker.
 
-## Нотатки-зв’язкові (schema v9)
+## Нотатки-зв’язкові (schema v9; нижче — стара реалізація з редакціями, чинна модель описана вгорі в «Цільовій моделі»)
 
 `connections.go` зберігає тематичні нотатки окремо від статей. Таблиці
 `connection_notes` (stable_id), `connection_versions` (immutable revision,
@@ -607,8 +607,8 @@ Vocabulary підказки збираються з item_tags та актуал�
 `GET /api/read/connections[/{id}?version=…]` використовує чинний bearer guard,
 `/api/read/items/{id}` також повертає current backlinks. Views escape HTML.
 
-Backup schema9 додає всі connection_versions Markdown до primaryRefs;
-restore зберігає stable IDs, revisions, members і вихідні статті. Первинні
+Backup додає Markdown поточних нотаток (`connection_notes`) до primaryRefs;
+restore зберігає нотатки, members і вихідні статті (стара схема 9 мала ще редакції та stable IDs). Первинні
 файли зв’язкових не підлягають cache cleanup. Автоматичний конвеєр schema11 описаний нижче; ручний редактор не викликає AI.
 
 ## Пакетне прийняття посилань

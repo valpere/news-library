@@ -69,7 +69,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "connections" {
-		notes, err := w.Store.Connections(r.URL.Query().Get("q"), 0, 0)
+		notes, err := w.Store.Connections(r.URL.Query().Get("q"), 0)
 		if err != nil {
 			http.Error(rw, "notes unavailable", http.StatusServiceUnavailable)
 			return
@@ -83,12 +83,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 			http.NotFound(rw, r)
 			return
 		}
-		version, err := connectionVersion(r)
-		if err != nil {
-			http.Error(rw, "invalid version", 400)
-			return
-		}
-		note, err := w.Store.Connection(id, version)
+		note, err := w.Store.Connection(id)
 		if err != nil {
 			http.NotFound(rw, r)
 			return
@@ -204,7 +199,7 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 	} else {
 		payload["text_available"] = false
 	}
-	backlinks, err := w.Store.Connections("", id, 0)
+	backlinks, err := w.Store.Connections("", id)
 	if err != nil {
 		http.Error(rw, "backlinks unavailable", http.StatusServiceUnavailable)
 		return

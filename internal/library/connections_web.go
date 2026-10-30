@@ -12,17 +12,6 @@ import (
 	"strings"
 )
 
-func connectionVersion(r *http.Request) (int64, error) {
-	raw := r.URL.Query().Get("version")
-	if raw == "" {
-		return 0, nil
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, errors.New("некоректна версія")
-	}
-	return id, nil
-}
 func (w *Web) connectionListPage(rw http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	item := int64(0)
@@ -34,7 +23,7 @@ func (w *Web) connectionListPage(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	notes, err := w.Store.Connections(query, item, 0)
+	notes, err := w.Store.Connections(query, item)
 	if err != nil {
 		http.Error(rw, "нотатки недоступні", http.StatusServiceUnavailable)
 		return
@@ -51,25 +40,15 @@ func (w *Web) connectionPage(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 		return
 	}
-	version, err := connectionVersion(r)
-	if err != nil {
-		http.Error(rw, err.Error(), 400)
-		return
-	}
-	note, err := w.Store.Connection(id, version)
+	note, err := w.Store.Connection(id)
 	if err != nil {
 		http.NotFound(rw, r)
 		return
 	}
 	if r.PathValue("format") == "markdown" {
 		rw.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-		rw.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="connection-%s-v%d.md"`, note.StableID, note.Revision))
+		rw.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="connection-%d.md"`, note.ID))
 		fmt.Fprint(rw, note.Markdown)
-		return
-	}
-	history, err := w.Store.Connections("", 0, id)
-	if err != nil {
-		http.Error(rw, "історія недоступна", http.StatusServiceUnavailable)
 		return
 	}
 	var body bytes.Buffer
@@ -77,7 +56,7 @@ func (w *Web) connectionPage(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "зміст недоступний", http.StatusServiceUnavailable)
 		return
 	}
-	w.render(rw, "connection", pageData{Connection: &note, Connections: history, ConnectionHTML: template.HTML(body.String())})
+	w.render(rw, "connection", pageData{Connection: &note, ConnectionHTML: template.HTML(body.String())})
 }
 func (w *Web) connectionForm(rw http.ResponseWriter, r *http.Request) {
 	n := ConnectionNote{}
@@ -87,7 +66,7 @@ func (w *Web) connectionForm(rw http.ResponseWriter, r *http.Request) {
 			http.NotFound(rw, r)
 			return
 		}
-		n, err = w.Store.Connection(id, 0)
+		n, err = w.Store.Connection(id)
 		if err != nil {
 			http.NotFound(rw, r)
 			return
@@ -133,16 +112,10 @@ func parseConnectionMembers(raw string) ([]ConnectionMember, error) {
 func (w *Web) saveConnection(rw http.ResponseWriter, r *http.Request) {
 	n := ConnectionNote{Title: r.PostForm.Get("title"), Category: r.PostForm.Get("category"), Body: r.PostForm.Get("body"), Tags: strings.Split(r.PostForm.Get("tags"), ","), Questions: strings.Split(r.PostForm.Get("questions"), "\n")}
 	var err error
-	var expected int64
 	if r.PathValue("id") != "" {
 		n.ID, err = pathID(r)
 		if err != nil {
 			http.NotFound(rw, r)
-			return
-		}
-		expected, err = strconv.ParseInt(r.PostForm.Get("version"), 10, 64)
-		if err != nil || expected <= 0 {
-			http.Error(rw, "потрібна базова версія", 400)
 			return
 		}
 	}
@@ -168,19 +141,14 @@ func (w *Web) saveConnection(rw http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil {
 		var saved int64
-		saved, err = w.Store.SaveConnection(n, expected)
+		saved, err = w.Store.SaveConnection(n)
 		if err == nil {
 			n.ID = saved
 		}
 	}
 	if err != nil {
-		code := 400
-		if errors.Is(err, ErrConnectionConflict) {
-			code = 409
-		}
-		// Preserve the user's draft for validation errors or concurrent edits.
-		n.VersionID = expected
-		w.renderConnectionForm(rw, r, n, err.Error(), code)
+		// Preserve the user's draft for validation errors.
+		w.renderConnectionForm(rw, r, n, err.Error(), 400)
 		return
 	}
 	http.Redirect(rw, r, "/connections/"+strconv.FormatInt(n.ID, 10), http.StatusSeeOther)
