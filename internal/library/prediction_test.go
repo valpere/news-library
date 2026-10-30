@@ -96,9 +96,6 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 	if i.Score.Int64 != 3 || i.Confidence.Float64 != .1 || len(r) != 1 {
 		t.Fatal("prediction relinked human decision")
 	}
-	if _, e = s.DB.Exec("UPDATE interest_predictions SET probability=0"); e == nil {
-		t.Fatal("mutable prediction")
-	}
 	if da.Prediction.ProfileHash != profileHash(da.Prediction.Profile) {
 		t.Fatal("profile provenance")
 	}

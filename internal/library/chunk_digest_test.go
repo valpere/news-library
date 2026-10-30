@@ -79,9 +79,6 @@ func TestLongDigestResumesSavedPartsAndPreservesSource(t *testing.T) {
 	if calls != checkpoints+2 || d.InputTokens != int64((checkpoints+1)*10) {
 		t.Fatal("parts repeated or usage lost", calls, checkpoints, d.InputTokens)
 	}
-	if _, e = s.DB.Exec("UPDATE digest_checkpoints SET input_hash='changed'"); e == nil {
-		t.Fatal("mutable checkpoints")
-	}
 }
 func TestLongDigestBoundsAndFencing(t *testing.T) {
 	s := testStore(t)

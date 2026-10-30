@@ -293,29 +293,46 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 	if err = leaseValid(tx, j); err != nil {
 		return err
 	}
-	sid, err := s.insertSnapshot(tx, j.ItemID, j.ID, snap)
-	if err != nil {
-		return err
-	}
 	// Manual input wins over an already-running fetch.
-	var origin string
+	var origin, currentHash string
 	var selected sql.NullInt64
-	if err = tx.QueryRow("SELECT coalesce((SELECT origin FROM source_versions WHERE id=selected_snapshot),''),selected_snapshot FROM items WHERE id=?", j.ItemID).Scan(&origin, &selected); err != nil {
+	if err = tx.QueryRow("SELECT coalesce((SELECT origin FROM source_versions WHERE id=selected_snapshot),''),coalesce((SELECT hash FROM source_versions WHERE id=selected_snapshot),''),selected_snapshot FROM items WHERE id=?", j.ItemID).Scan(&origin, &currentHash, &selected); err != nil {
 		return err
 	}
 	jobState, jobMessage := "done", ""
 	contentErr := ValidateSourceContent(snap)
-	// Keep a prior selected source when a fresh response contains only a notice.
-	// The new snapshot and source failure still remain in immutable history.
+	var erased map[string]bool
+	// A fresh response that contains only a notice does not replace a prior source;
+	// the failure is recorded on the job, the notice itself is dropped.
 	if (contentErr == nil || !selected.Valid) && (origin != "manual" || selected == j.SelectedAtClaim) {
-		if _, err = tx.Exec("UPDATE items SET selected_snapshot=?,title=?,state='ready',error='' WHERE id=?", sid, snap.Title, j.ItemID); err != nil {
-			return err
-		}
-		if err = indexSnapshot(tx, j.ItemID, snap.Title, snap.Text); err != nil {
-			return err
-		}
-		if err = s.processSnapshot(tx, j.ItemID, sid, snap, j.FilterOverride); err != nil {
-			return err
+		if selected.Valid && currentHash == textHash(snap.Text) {
+			// Same text: nothing derived from it is invalidated.
+			retrieved := snap.RetrievedAt
+			if retrieved == "" {
+				retrieved = nowUTC()
+			}
+			if _, err = tx.Exec("UPDATE source_versions SET retrieved_at=?,extractor=?,completeness=?,warning=? WHERE id=?", retrieved, snap.Extractor, snap.Completeness, snap.Warning, selected.Int64); err != nil {
+				return err
+			}
+		} else {
+			sid, e := s.insertSnapshot(tx, j.ItemID, j.ID, snap)
+			if e != nil {
+				return e
+			}
+			if _, err = tx.Exec("UPDATE items SET selected_snapshot=?,title=?,state='ready',error='' WHERE id=?", sid, snap.Title, j.ItemID); err != nil {
+				return err
+			}
+			if selected.Valid {
+				if erased, err = s.replaceText(tx, j.ItemID, sid); err != nil {
+					return err
+				}
+			}
+			if err = indexSnapshot(tx, j.ItemID, snap.Title, snap.Text); err != nil {
+				return err
+			}
+			if err = s.processSnapshot(tx, j.ItemID, sid, snap, j.FilterOverride); err != nil {
+				return err
+			}
 		}
 	}
 	if contentErr != nil {
@@ -327,7 +344,11 @@ func (s *Store) Complete(j Job, snap Snapshot) error {
 	if _, err = tx.Exec("UPDATE jobs SET state=?,lease_until=0,error=? WHERE id=?", jobState, jobMessage, j.ID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.removeUnusedFiles(erased) // best effort: the rows are already gone
+	return nil
 }
 func (s *Store) Fail(j Job, message string, retry bool, maxAttempts int, now time.Time, backoff time.Duration) error {
 	return s.fail(j, message, retry, maxAttempts, now, backoff, nil)
@@ -418,12 +439,26 @@ func (s *Store) Manual(id int64, text string) error {
 	if err = tx.QueryRow("SELECT title FROM active_items WHERE id=?", id).Scan(&title); err != nil {
 		return err
 	}
+	var selected sql.NullInt64
+	var currentHash string
+	if err = tx.QueryRow("SELECT selected_snapshot,coalesce((SELECT hash FROM source_versions WHERE id=selected_snapshot),'') FROM items WHERE id=?", id).Scan(&selected, &currentHash); err != nil {
+		return err
+	}
+	if selected.Valid && currentHash == textHash(text) {
+		return nil
+	}
 	sid, err := s.insertSnapshot(tx, id, nil, Snapshot{Text: text, Title: title, Origin: "manual", Extractor: "manual-v1", Completeness: "unknown", Warning: "Повнота ручного тексту невідома"})
 	if err != nil {
 		return err
 	}
 	if _, err = tx.Exec("UPDATE items SET selected_snapshot=?,state='ready',error='' WHERE id=?", sid, id); err != nil {
 		return err
+	}
+	var erased map[string]bool
+	if selected.Valid {
+		if erased, err = s.replaceText(tx, id, sid); err != nil {
+			return err
+		}
 	}
 	if _, err = tx.Exec("UPDATE jobs SET state='cancelled' WHERE item_id=? AND stage='fetch' AND state IN ('queued','retry_wait')", id); err != nil {
 		return err
@@ -434,7 +469,11 @@ func (s *Store) Manual(id int64, text string) error {
 	if err = s.processSnapshot(tx, id, sid, Snapshot{Text: text, Title: title}, false); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.removeUnusedFiles(erased) // best effort: the rows are already gone
+	return nil
 }
 
 // Rate stores the item's single current rating (0..6) and the date it was given;

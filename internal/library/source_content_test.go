@@ -162,7 +162,7 @@ func TestCopyrightOnlyPreservedBeforeAnyAI(t *testing.T) {
 	if err != nil || len(failures) != 1 || failures[0].Kind != "source" || failures[0].Retryable {
 		t.Fatal(failures, err)
 	}
-	// Human history survives replacing an insufficient source with real manual text.
+	// Replacing an insufficient source with real manual text erases the rating of the old one.
 	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -172,12 +172,11 @@ func TestCopyrightOnlyPreservedBeforeAnyAI(t *testing.T) {
 		t.Fatal(item)
 	}
 	snapshots, _ := s.Snapshots(id)
-	if len(snapshots) != 2 || snapshots[1].Text != footer {
-		t.Fatal(snapshots)
+	if len(snapshots) != 1 || snapshots[0].Text == footer {
+		t.Fatal("replaced text kept", snapshots)
 	}
-	ratings, _ := s.Ratings(id)
-	if len(ratings) != 1 || ratings[0].Score != 3 {
-		t.Fatal(ratings)
+	if ratings, _ := s.Ratings(id); len(ratings) != 0 {
+		t.Fatal("rating survived a text change", ratings)
 	}
 }
 
@@ -239,8 +238,8 @@ func TestFreshFooterKeepsExistingSelectedSource(t *testing.T) {
 		t.Fatal("good selected source replaced", before, after)
 	}
 	snapshots, _ := s.Snapshots(id)
-	if len(snapshots) != 2 || !strings.Contains(snapshots[0].Text, "Copyright") {
-		t.Fatal("bad response history lost", snapshots)
+	if len(snapshots) != 1 || strings.Contains(snapshots[0].Text, "Copyright") {
+		t.Fatal("a notice replaced or joined the good source", snapshots)
 	}
 	failures, _ := s.JobFailures(fresh.ID)
 	if len(failures) != 1 || failures[0].Kind != "source" {

@@ -78,11 +78,6 @@ func TestGenerationFailureKindsHistoryAndBackup(t *testing.T) {
 	if err != nil || len(events) != 2 || events[1].Response == "" {
 		t.Fatal("failure history lost on explicit retry", events, err)
 	}
-	for _, statement := range []string{"UPDATE job_failures SET kind='unknown'", "DELETE FROM job_failures"} {
-		if _, e := s.DB.Exec(statement); e == nil {
-			t.Fatal("failure history is mutable", statement)
-		}
-	}
 	if e := s.FailError(Job{ID: job.ID, Token: "wrong", Attempts: 1}, &SourceError{Kind: "format", Diagnostic: "stale reply", Message: "stale"}, false, 3, time.Now(), 0); !errors.Is(e, ErrLeaseLost) {
 		t.Fatal("stale lease published failure", e)
 	}

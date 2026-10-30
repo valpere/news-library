@@ -72,8 +72,8 @@ func TestConnectionVersionsBacklinksAndHumanState(t *testing.T) {
 		t.Fatal("stale backlink", links)
 	}
 	item, _ := s.Item(first.Members[0].ItemID)
-	if item.Score.Int64 != 3 || item.Read || item.Tags != "existing" {
-		t.Fatal("human state changed", item)
+	if item.Score.Valid || item.Read || item.Tags != "existing" {
+		t.Fatal("tags or read changed, or the rating survived a text change", item)
 	}
 	notes, e := s.Connections("як відновити", 0, 0)
 	if e != nil || len(notes) != 1 {
