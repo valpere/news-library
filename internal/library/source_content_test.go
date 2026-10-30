@@ -163,7 +163,7 @@ func TestCopyrightOnlyPreservedBeforeAnyAI(t *testing.T) {
 		t.Fatal(failures, err)
 	}
 	// Human history survives replacing an insufficient source with real manual text.
-	if err := s.Rate(id, 3, nil, nil, "human judgment"); err != nil {
+	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	manual(t, s, id, "A meaningful short announcement describes AI agents for defenders.")

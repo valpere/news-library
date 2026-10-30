@@ -14,7 +14,7 @@ func trashMissingPage(tx *sql.Tx, id int64, reason string) error {
 	_, err := tx.Exec(`INSERT INTO trash_entries(item_id,reason,moved_at)
  SELECT id,?,? FROM items WHERE id=?
  AND NOT EXISTS(SELECT 1 FROM source_versions WHERE item_id=items.id)
- AND NOT EXISTS(SELECT 1 FROM rating_events WHERE item_id=items.id)
+ AND rating IS NULL
  AND NOT EXISTS(SELECT 1 FROM jobs WHERE item_id=items.id AND state IN ('queued','running','retry_wait'))
  ON CONFLICT(item_id) DO NOTHING`, reason, nowUTC(), id)
 	if err != nil {
@@ -25,9 +25,8 @@ func trashMissingPage(tx *sql.Tx, id int64, reason string) error {
 }
 
 // MarkJunk is the user's own verdict that a material is junk: it records a
-// zero usefulness rating (with the current source and digest as context) and
-// moves the item to the trash in one transaction. Unlike an unavailable page,
-// its texts, digests and rating history are kept. Repeating it changes nothing.
+// zero usefulness rating and moves the item to the trash in one transaction.
+// Unlike an unavailable page, its texts and digests are kept. Repeating it changes nothing.
 func (s *Store) MarkJunk(id int64, note string) error {
 	note = strings.TrimSpace(note)
 	if utf8.RuneCountInString(note) > 500 {
@@ -56,9 +55,7 @@ func (s *Store) MarkJunk(id int64, note string) error {
 		}
 		return sql.ErrNoRows
 	}
-	if _, err = tx.Exec(`INSERT INTO rating_events(item_id,score,recorded_at,source_version_id,digest_id,reason,scale)
- SELECT i.id,0,?,i.selected_snapshot,(SELECT max(g.id) FROM generated_artifacts g WHERE g.snapshot_id=i.selected_snapshot),?,? FROM active_items i WHERE i.id=?`,
-		nowUTC(), reason, UsefulnessScale, id); err != nil {
+	if _, err = tx.Exec(`UPDATE items SET rating=0,rated_at=? WHERE id=?`, nowUTC(), id); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(`INSERT INTO trash_entries(item_id,reason,moved_at) VALUES(?,?,?)`, id, reason, nowUTC()); err != nil {

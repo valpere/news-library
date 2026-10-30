@@ -44,7 +44,7 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 	d := add(t, s, "https://example.com/d")
 	manual(t, s, d, "No current interests")
 	completeFixtureDigest(t, s)
-	if e := s.RateShown(b, 3, &db.SnapshotID, &db.ID, nil, "human assessment"); e != nil {
+	if e := s.Rate(b, 3, nil); e != nil {
 		t.Fatal(e)
 	}
 	for _, dir := range []string{"asc", "desc"} {
@@ -59,7 +59,7 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 			t.Fatal("stable prediction sort")
 		}
 	}
-	rows, e := s.Search(Filters{ConfidenceMin: "90", ConfidenceMax: "100", Rating: "3"})
+	rows, e := s.Search(Filters{ConfidenceMin: "90", ConfidenceMax: "100", Usefulness: "3"})
 	if e != nil || len(rows) != 1 || rows[0].ID != b {
 		t.Fatal("confidence filter", e)
 	}
@@ -93,7 +93,7 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 	}
 	i, _ = s.Item(b)
 	r, _ := s.Ratings(b)
-	if i.Score.Int64 != 3 || i.Confidence.Float64 != .1 || len(r) != 1 || r[0].DigestID.Int64 != db.ID {
+	if i.Score.Int64 != 3 || i.Confidence.Float64 != .1 || len(r) != 1 {
 		t.Fatal("prediction relinked human decision")
 	}
 	if _, e = s.DB.Exec("UPDATE interest_predictions SET probability=0"); e == nil {

@@ -74,27 +74,19 @@ func TestDigestQueueRecoveryAndRatingContext(t *testing.T) {
 	if e != nil || d == nil {
 		t.Fatal(e)
 	}
-	sid := d.SnapshotID
-	did := d.ID
-	if e = s.RateShown(id, 3, &sid, &did, nil, "old context"); e != nil {
+	if e = s.Rate(id, 3, nil); e != nil {
 		t.Fatal(e)
 	}
 	manual(t, s, id, "New source text")
-	newer := completeFixtureDigest(t, s)
-	if e = s.RateShown(id, 1, &newer.SnapshotID.Int64, &did, nil, ""); e == nil {
-		t.Fatal("mismatched versions accepted")
-	}
-	other := add(t, s, "https://example.com/other")
-	if e = s.RateShown(other, 1, nil, &did, nil, ""); e == nil {
-		t.Fatal("foreign digest accepted")
-	}
+	completeFixtureDigest(t, s)
 	r, _ := s.Ratings(id)
-	if len(r) != 1 || r[0].DigestID.Int64 != did || r[0].SourceVersionID.Int64 != sid || r[0].AssessedAt.Valid {
-		t.Fatal("history lost")
+	if len(r) != 1 || r[0].AssessedAt.Valid {
+		t.Fatal("rating lost")
 	}
 	if _, e = s.DB.Exec("UPDATE generated_artifacts SET model='changed'"); e == nil {
 		t.Fatal("mutable artifact")
 	}
+	other := add(t, s, "https://example.com/other")
 	manual(t, s, other, "Other text")
 	completeFixtureDigest(t, s)
 	// Finishing an older snapshot must not select it over a newer manual source.
@@ -128,8 +120,8 @@ func TestDigestPrimaryUIAndExports(t *testing.T) {
 	d, _ := s.DigestForSnapshot(snapshots[0].ID)
 	post(t, w, "/items/1/rating", url.Values{"score": {"3"}, "source": {strconv.FormatInt(d.SnapshotID, 10)}, "digest": {strconv.FormatInt(d.ID, 10)}})
 	ratings, _ := s.Ratings(id)
-	if ratings[0].DigestID.Int64 != d.ID {
-		t.Fatal("shown digest not recorded")
+	if len(ratings) != 1 || ratings[0].Score != 3 {
+		t.Fatal("rating not recorded")
 	}
 	for _, format := range []string{"markdown", "html"} {
 		rw = webRequest(w, "GET", fmt.Sprintf("/items/1/digests/%d/%s", d.ID, format), nil, nil)

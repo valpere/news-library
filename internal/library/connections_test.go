@@ -30,7 +30,7 @@ func TestConnectionVersionsBacklinksAndHumanState(t *testing.T) {
 	if err := s.SetTags(n.Members[0].ItemID, []string{"existing"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Rate(n.Members[0].ItemID, 3, nil, nil, "manual"); err != nil {
+	if err := s.Rate(n.Members[0].ItemID, 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	id, err := s.SaveConnection(n, 0)

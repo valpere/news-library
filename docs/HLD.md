@@ -123,7 +123,7 @@ flowchart LR
 
 ## Цільова модель даних (схема v19)
 
-Чинний контракт; код до v19 ще має `source_versions`, `generated_artifacts`, `rating_events`
+Чинний контракт; код до v19 ще має `source_versions`, `generated_artifacts`
 тощо, їх замінює міграція v19 (нижче «Модель даних до v19»).
 
 | Сутність | Призначення |
@@ -165,9 +165,9 @@ Rollback може лишити файл без посилання, але не �
 | source_versions | Текст, hash, час отримання, extractor, повнота й попередження; старі версії не перезаписуються |
 | jobs | Етап, payload IDs, спроби, next_attempt, lease, стан, помилка |
 | generated_artifacts | Дайджест/оцінка, snapshot, модель і фактичний провайдер, prompt/profile version, час, usage |
-| rating_events | Датовані незмінні події; детальний контракт — FUN-NL-RATING |
+| items.rating, items.rated_at | Одна поточна оцінка 0..6 і її дата (NULL = дата невідома); детальний контракт — FUN-NL-RATING |
 | interest_predictions | Confidence, Reasoning, snapshot профілю та hash; metadata конкретного digest artifact |
-| digest_feedback | Відгук на конкретну версію дайджесту, окремо від rating_events |
+| digest_feedback | Відгук на конкретну версію дайджесту, окремо від оцінки |
 | tags, item_tags | Теги та походження; модельні пропозиції відрізняються від користувацьких |
 | filter_rules, filter_decisions | Версії правил, збіги, внески, сумарний R, T, override |
 | chunks, embeddings, FTS | Похідні індекси з посиланням на snapshot; embeddings також мають model/version |
@@ -302,7 +302,7 @@ embeddings доповнюють FTS; їх недоступність має яв
 результату, що був у видачі, додається оцінка відповідності 0 (не те),
 1 (частково) або 2 (точно те); чинною є остання. Позначка «не знайшов
 потрібного» датується один раз на подію. Ці дані не є оцінкою корисності
-матеріалу, не змінюють `rating_events` і не потрапляють до правил чи прогнозів.
+матеріалу, не змінюють оцінку і не потрапляють до правил чи прогнозів.
 Запис роблять лише користувацькі POST; агентський read API їх не створює.
 `minions/search_feedback.py` читає базу `mode=ro` і формує кейси для
 `search_eval.py` та зведення за режимами.
@@ -545,7 +545,7 @@ item, fragment і context. Private bearer token порожній → API disable
 Глобальний Host guard зберігається; browser Origin відхиляється, відповідь
 no-store. Mutation із Authorization відхиляється до handlers. Search може
 використовувати лише local query embedding; ніколи generation/index writes.
-Item включає source та saved digest/model provenance і dated rating history,
+Item включає source та saved digest/model provenance і поточну оцінку з датою (rated_at),
 unknown date → null. Fragment перевіряє ownership/UTF-8 boundaries/16KiB.
 Context бере saved digest або source excerpt, обмежує його 4000 bytes і
 повертає current explicit rating event, tags, source completeness,
@@ -785,12 +785,8 @@ planner, не виконує бібліотечних операцій і збе
 
 ## Версії шкали особистої корисності
 
-Schema v14 додає rating_events.scale: existing events — legacy_numeric,
-new verbal events — estimative_usefulness_v1 з score0..6. ID, дати,
-source/digest context та незмінність історії збережені. Current Item і read API
-передають scale, щоб старий score4 не став «Висока» автоматично.
-Usefulness filter/sort працюють лише з останньою оцінкою EUv1; старий
-числовий rating criterion лишається технічною сумісністю. Чат має окреме
+Оцінка — одне значення 0..6 у `items.rating` з датою `items.rated_at`; шкал і
+історії немає. Usefulness filter/sort працюють із цим значенням. Чат має
 usefulness field і перевіряє явне користувацьке походження назви рівня.
 
 

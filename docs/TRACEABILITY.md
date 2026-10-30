@@ -22,7 +22,7 @@
 | FR-12 | UC-09, UC-14 | M3 | AT-12 | passed: [read authentication/denied mutations](../internal/library/semantic_test.go) |
 | FR-13 | UC-08 | M4 | AT-13 | Telegram-бот ще не реалізований; попередні добірки прибрано |
 | FR-14 | UC-12 | M4 | AT-14 | passed: [live backup/restore primary/history/queue/checkpoints and corruption guards](../internal/library/backup_test.go), [CLI/paused activation](../cmd/news-library/archive_test.go) |
-| FR-15 | UC-03 | M1, M2 | AT-15 | passed offline M1/M2: [rating history/null/context](../internal/library/store_test.go), [source/digest ownership](../internal/library/digest_test.go), [scale/legacy dates](../internal/library/usefulness_test.go), [exact event across new snapshot](../internal/library/acceptance_test.go); [звірка AT-15](ACCEPTANCE_AUDIT.md) |
+| FR-15 | UC-03 | M1, M2 | AT-15 | passed offline M1/M2: [rating replacement/null date](../internal/library/store_test.go), [source/digest ownership](../internal/library/digest_test.go), [levels/filter](../internal/library/usefulness_test.go), [exact event across new snapshot](../internal/library/acceptance_test.go); [звірка AT-15](ACCEPTANCE_AUDIT.md) |
 | FR-16 | UC-10 | M1, M2 | AT-16 | passed offline M1/M2: [manual wins fetch race](../internal/library/store_test.go), [missing text/manual provenance/zero generator calls](../internal/library/acceptance_test.go), [long source persistence](../internal/library/chunk_digest_test.go); [звірка AT-16](ACCEPTANCE_AUDIT.md) |
 | FR-17 | UC-11, UC-15 | M1 | AT-17 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
 | FR-18 | UC-05, UC-15 | M1, M2, M3 | AT-18 | passed M1: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); passed M2 Confidence: [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
@@ -188,9 +188,9 @@ opt-in guard, local endpoint boundary, auth-free recorded evidence й fake
 upstream failure. Live output зберігається локально в tmp, не є routine CI.
 
 
-Додаткове приймання estimative usefulness: TestUsefulnessFiltersDoNotReinterpretLegacyNumbers,
+Додаткове приймання estimative usefulness: TestUsefulnessFilterAndSort,
 TestChatUsefulnessExplicitLabelsAndAllUnread та TestWebUsefulnessAndReadAPIScale
-перевіряють версії шкали, збереження legacy/unknown dates, explicit provenance,
+перевіряють рівні шкали, unknown dates, explicit provenance,
 словесні фільтри й незалежність прочитання. Приймання FR-10/15/16 звірено окремо у
 [ACCEPTANCE_AUDIT.md](ACCEPTANCE_AUDIT.md); ці тести шкали самі по собі
 не підміняють перевірку всього recovery workflow.

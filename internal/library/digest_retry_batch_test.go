@@ -67,7 +67,7 @@ func TestBatchDigestRetryHistoryAndDuplicateSubmission(t *testing.T) {
 	enableDigests(t, s)
 	a := failedDigestFixture(t, s, "format")
 	b := failedDigestFixture(t, s, "temporary")
-	if err := s.RateShown(a.ItemID, 3, &a.SnapshotID, nil, nil, "human assessment"); err != nil {
+	if err := s.Rate(a.ItemID, 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := s.Item(a.ItemID)
@@ -105,7 +105,7 @@ func TestBatchDigestRetryHistoryAndDuplicateSubmission(t *testing.T) {
 		t.Fatal(candidates, err)
 	}
 	ratings, _ := s.Ratings(a.ItemID)
-	if len(ratings) != 1 || ratings[0].Reason != "human assessment" {
+	if len(ratings) != 1 {
 		t.Fatal(ratings)
 	}
 }

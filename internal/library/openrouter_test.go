@@ -156,7 +156,7 @@ func TestDigestFallbackPolicyPreservesHistoryAndRatings(t *testing.T) {
 	manual(t, s, id, "source")
 	item, _ := s.Item(id)
 	sid := item.Selected.Int64
-	if err := s.RateUsefulnessShown(id, 3, &sid, nil, nil, "human"); err != nil {
+	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := s.Ratings(id)

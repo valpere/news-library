@@ -61,7 +61,7 @@ func TestRestoreFromTrashReturnsTheItemAndKeepsHistory(t *testing.T) {
 	if strings.Contains(body, page+"/restore") || !strings.Contains(body, "Унікальнийсловоповернення") {
 		t.Fatalf("restored item is not an ordinary card:\n%s", body)
 	}
-	if err := s.DB.QueryRow(`SELECT count(*) FROM rating_events WHERE item_id=? AND score=0`, id).Scan(&n); err != nil || n != 1 {
+	if err := s.DB.QueryRow(`SELECT count(*) FROM items WHERE id=? AND rating=0`, id).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("rating history must stay: %d %v", n, err)
 	}
 	if err := s.DB.QueryRow(`SELECT count(*) FROM item_fts WHERE item_fts MATCH 'Унікальнийсловоповернення'`).Scan(&n); err != nil || n != 1 {

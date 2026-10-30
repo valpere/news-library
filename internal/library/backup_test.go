@@ -24,7 +24,7 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 	job := completeFixtureDigest(t, s)
 	item, _ := s.Item(id)
 	sid := item.Selected.Int64
-	s.Rate(id, 3, &sid, nil, "unknown date")
+	s.Rate(id, 3, nil)
 	// A pending regeneration with a saved digest checkpoint must survive.
 	s.RegenerateDigest(id, sid)
 	pending := claim(t, s)
@@ -38,7 +38,7 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Live source changes made after the snapshot are deliberately not in it.
-	s.Rate(id, 0, &sid, nil, "later judgment")
+	s.Rate(id, 0, nil)
 	if _, err := VerifyBackup(snapshot); err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 		t.Fatal(item, err)
 	}
 	history, _ := restored.Ratings(id)
-	if len(history) != 1 || history[0].AssessedAt.Valid || history[0].SourceVersionID.Int64 != sid {
+	if len(history) != 1 || history[0].AssessedAt.Valid {
 		t.Fatal("history changed")
 	}
 	source, err := restored.Snapshot(sid)

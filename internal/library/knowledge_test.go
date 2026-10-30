@@ -70,7 +70,7 @@ func TestAutomaticKnowledgePipelineBacklinksAndHumanHistory(t *testing.T) {
 	if err := s.SetTags(first, []string{"human-only"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Rate(first, 3, nil, nil, "human history"); err != nil {
+	if err := s.Rate(first, 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	second := knowledgeArticle(t, s, "second")

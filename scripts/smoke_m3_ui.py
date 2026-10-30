@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
             assert page.locator('article').count()==1
             with sqlite3.connect(Path(data)/'library.sqlite') as db:
                 assert db.execute('SELECT is_read FROM items').fetchone()==(0,)
-                assert db.execute('SELECT count(*) FROM rating_events').fetchone()[0]==0
+                assert db.execute('SELECT count(*) FROM items WHERE rating IS NOT NULL').fetchone()[0]==0
                 assert db.execute('SELECT count(*) FROM generated_artifacts').fetchone()[0]==0
             browser.close()
     finally:

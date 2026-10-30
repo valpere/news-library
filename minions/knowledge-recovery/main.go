@@ -19,15 +19,15 @@ import (
 )
 
 func ratingsHash(db *sql.DB) (string, error) {
-	rows, err := db.Query("SELECT id,item_id,score,scale,recorded_at,assessed_at,source_version_id,digest_id,reason FROM rating_events ORDER BY id")
+	rows, err := db.Query("SELECT id,rating,rated_at FROM items ORDER BY id")
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
 	all := [][]any{}
 	for rows.Next() {
-		row := make([]any, 9)
-		ptr := make([]any, 9)
+		row := make([]any, 3)
+		ptr := make([]any, 3)
 		for i := range row {
 			ptr[i] = &row[i]
 		}

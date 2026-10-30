@@ -63,7 +63,7 @@ func TestSearchJudgmentsDoNotChangeUsefulnessRatings(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	s.DB.QueryRow("SELECT count(*) FROM rating_events").Scan(&n)
+	s.DB.QueryRow("SELECT count(*) FROM items WHERE rating IS NOT NULL").Scan(&n)
 	if n != 0 {
 		t.Fatalf("search judgment created %d rating events", n)
 	}

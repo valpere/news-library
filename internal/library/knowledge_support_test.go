@@ -124,7 +124,7 @@ func TestKnowledgeVerificationFailurePreservesCheckpointAndHumanHistory(t *testi
 	id := add(t, s, "https://example.com/current")
 	manual(t, s, id, supportCurrent)
 	completeFixtureDigest(t, s)
-	if err := s.Rate(id, 3, nil, nil, "human assessment"); err != nil {
+	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	calls := 0
@@ -153,7 +153,7 @@ func TestKnowledgeVerificationFailurePreservesCheckpointAndHumanHistory(t *testi
 		t.Fatal("semantic failure auto-retried", worked, err, calls)
 	}
 	ratings, _ := s.Ratings(id)
-	if len(ratings) != 1 || ratings[0].Reason != "human assessment" {
+	if len(ratings) != 1 {
 		t.Fatal(ratings)
 	}
 }

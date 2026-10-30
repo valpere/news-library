@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -37,12 +36,6 @@ func (s *Semantic) Search(ctx context.Context, f Filters, mode string) (SearchRe
 	out := SearchResult{Mode: mode, Items: []Item{}}
 	if err != nil {
 		return out, err
-	}
-	if f.Rating != "" && f.Rating != "unrated" {
-		v, e := strconv.ParseInt(f.Rating, 10, 64)
-		if e != nil || v < 0 {
-			return out, errors.New("invalid rating filter")
-		}
 	}
 	if len(f.Query) > 4096 || !utf8.ValidString(f.Query) {
 		return out, errors.New("search query must be valid UTF-8 up to 4096 bytes")

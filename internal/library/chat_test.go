@@ -129,18 +129,17 @@ func TestChatPagingRefinementAndHumanRating(t *testing.T) {
 		t.Fatal(reply)
 	}
 	ratings, e := s.Ratings(7)
-	if e != nil || len(ratings) != 1 || ratings[0].Score != 3 || ratings[0].SourceVersionID.Int64 != session.State.Cards[1].SourceID {
+	if e != nil || len(ratings) != 1 || ratings[0].Score != 3 {
 		t.Fatal(ratings, e)
 	}
 	if calls != 2 {
 		t.Fatal("short score reply called model")
 	}
-	// A source added later must not change the shown reference used by a rating.
-	old := session.State.Cards[1].SourceID
+	// A new rating replaces the previous one.
 	manual(t, s, 7, "Changed article version")
 	session, _ = chatTurn(t, w, session, "", "item", "rate:2:0")
 	ratings, _ = s.Ratings(7)
-	if len(ratings) != 2 || ratings[0].SourceVersionID.Int64 != old {
+	if len(ratings) != 1 || ratings[0].Score != 0 {
 		t.Fatal(ratings)
 	}
 }
@@ -155,7 +154,7 @@ func TestChatClarificationUnknownCommandsAndUntrustedData(t *testing.T) {
 		if len(input.State.Results) != 0 || input.State.Cards[0].Summary != "" {
 			t.Fatal("full retrieved text passed to intent planner")
 		}
-		score := int64(100)
+		score := int64(5)
 		return ChatCommand{Action: "item", ItemAction: "rate", Index: 1, Score: &score}, nil
 	})
 	session, reply := chatTurn(t, w, session, "знайди щось цікаве", "", "")
@@ -562,7 +561,7 @@ func TestChatGenericRatingQuestionRetainsOperationAndShownCard(t *testing.T) {
 	}
 	session, _ = chatTurn(t, w, session, "3", "", "")
 	ratings, _ := s.Ratings(target.Item.ID)
-	if calls != 1 || len(ratings) != 1 || ratings[0].Score != 3 || ratings[0].SourceVersionID.Int64 != target.SourceID {
+	if calls != 1 || len(ratings) != 1 || ratings[0].Score != 3 {
 		t.Fatal(calls, ratings)
 	}
 	// When no card was identified, the numeric answer identifies a card first.
@@ -610,7 +609,7 @@ func TestChatPreviouslySavedGenericRatingQuestionResumesWithoutPlanner(t *testin
 	})
 	_, reply := chatTurn(t, w, session, "3", "", "")
 	ratings, _ := s.Ratings(target.Item.ID)
-	if reply.Kind == "error" || len(ratings) != 1 || ratings[0].Score != 3 || ratings[0].SourceVersionID.Int64 != target.SourceID {
+	if reply.Kind == "error" || len(ratings) != 1 || ratings[0].Score != 3 {
 		t.Fatal(reply, ratings)
 	}
 }

@@ -71,7 +71,7 @@ func TestCacheRevalidationPersistsAcrossRestart(t *testing.T) {
 		t.Fatal(response.Code, response.Header())
 	}
 	var count int
-	for _, table := range []string{"items", "jobs", "rating_events"} {
+	for _, table := range []string{"items", "jobs"} {
 		if err = s.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
 			t.Fatal(table, count, err)
 		}

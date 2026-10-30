@@ -113,7 +113,6 @@ func (s *Store) PurgeTrashed(id int64) error {
 		`DELETE FROM digest_feedback WHERE item_id=?`,
 		`DELETE FROM digest_checkpoints WHERE job_id IN ` + jobs,
 		`DELETE FROM job_failures WHERE job_id IN ` + jobs,
-		`DELETE FROM rating_events WHERE item_id=?`,
 		`DELETE FROM filter_decisions WHERE item_id=?`,
 		`DELETE FROM search_judgments WHERE item_id=?`,
 		`DELETE FROM completeness_confirmations WHERE snapshot_id IN ` + snaps,

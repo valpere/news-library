@@ -194,9 +194,9 @@ def main():
                 check(not state['Filters']['Tags'] and state['Filters']['Read'] == '0' and state['Filters']['Query'] == query, 'removing a tag lost other criteria')
                 first = state['Cards'][0]['Item']['ID']
                 state, reply = send('Оціни перший матеріал')
-                check(reply['Kind'] == 'question' and db.execute('SELECT count(*) FROM rating_events').fetchone()[0] == 0, 'missing score was invented')
+                check(reply['Kind'] == 'question' and db.execute('SELECT count(*) FROM items WHERE rating IS NOT NULL').fetchone()[0] == 0, 'missing score was invented')
                 state, _ = send('3')
-                check(db.execute('SELECT item_id,score FROM rating_events').fetchall() == [(first, 3)], 'short score reply did not complete the previous question')
+                check(db.execute('SELECT id,rating FROM items WHERE rating IS NOT NULL').fetchall() == [(first, 3)], 'short score reply did not complete the previous question')
                 state, _ = send('Перший уже прочитав, познач це')
                 check(db.execute('SELECT is_read FROM items WHERE id=?', (first,)).fetchone()[0] == 1, 'shown card was not marked read')
                 state, reply = send('Повтори обробку')
@@ -205,9 +205,9 @@ def main():
                 check('Дайджестів для такого повтору немає' in reply['Message'], 'short retry-kind answer did not choose digest retries')
                 state, reply = send('Дооброби старі статті, почни з п’яти')
                 check('нових задач 0' in reply['Message'], 'knowledge batch intent was not executed')
-                ratings = db.execute('SELECT count(*) FROM rating_events').fetchone()[0]
+                ratings = db.execute('SELECT count(*) FROM items WHERE rating IS NOT NULL').fetchone()[0]
                 state, _ = send('Знайди статті з власною оцінкою 3')
-                check(state['Filters']['Rating'] == '3' and db.execute('SELECT count(*) FROM rating_events').fetchone()[0] == ratings, 'search score became a human rating')
+                check(state['Filters']['Usefulness'] == '3' and db.execute('SELECT count(*) FROM items WHERE rating IS NOT NULL').fetchone()[0] == ratings, 'search score became a human rating')
                 state, _ = send('https://example.invalid/new-a https://example.invalid/new-b')
                 check(report['cases'][-1]['calls'] == 0, 'bare URL batch called the planner')
                 check(db.execute('SELECT count(*) FROM generated_artifacts').fetchone()[0] == 0, 'paused fixture generated a digest')

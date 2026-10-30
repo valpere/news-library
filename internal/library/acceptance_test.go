@@ -50,7 +50,7 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	if err != nil || snap.Origin != "manual" || snap.Extractor != "manual-v1" || snap.Completeness != "unknown" {
 		t.Fatal("manual provenance", snap, err)
 	}
-	if err = s.RateUsefulnessShown(id, 3, &sourceID, nil, nil, "human judgment with unknown assessment date"); err != nil {
+	if err = s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.SetRead(id, true); err != nil {
@@ -107,7 +107,7 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	// A later source must not rewrite the prior assessment or fill its null digest/date.
 	manual(t, s, id, "Newer source version")
 	after, err := s.Ratings(id)
-	if err != nil || !reflect.DeepEqual(before, after) || len(after) != 1 || after[0].DigestID.Valid || after[0].AssessedAt.Valid {
+	if err != nil || !reflect.DeepEqual(before, after) || len(after) != 1 || after[0].AssessedAt.Valid {
 		t.Fatal("judgment reinterpreted or rebound", before, after, err)
 	}
 	original, err := s.Snapshot(sourceID)

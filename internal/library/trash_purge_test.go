@@ -15,7 +15,7 @@ func junked(t *testing.T, s *Store, u, text string) int64 {
 	t.Helper()
 	id := add(t, s, u)
 	manual(t, s, id, text)
-	if err := s.Rate(id, 3, nil, nil, "до сміття"); err != nil {
+	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.MarkJunk(id, "тест"); err != nil {
@@ -54,7 +54,7 @@ func TestPurgeErasesTheTrashedMaterialAndItsFile(t *testing.T) {
 	if err := s.PurgeTrashed(id); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"items", "source_versions", "rating_events", "trash_entries", "source_aliases", "jobs"} {
+	for _, table := range []string{"items", "source_versions", "trash_entries", "source_aliases", "jobs"} {
 		col := "item_id"
 		if table == "items" {
 			col = "id"
@@ -79,7 +79,7 @@ func TestPurgeRefusesLiveMaterialsAndKeepsTheirImmutability(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/live")
 	manual(t, s, id, "Живий матеріал.")
-	if err := s.Rate(id, 3, nil, nil, "оцінка"); err != nil {
+	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.PurgeTrashed(id); !errors.Is(err, sql.ErrNoRows) {
@@ -87,9 +87,6 @@ func TestPurgeRefusesLiveMaterialsAndKeepsTheirImmutability(t *testing.T) {
 	}
 	if _, err := s.DB.Exec(`DELETE FROM source_versions WHERE item_id=?`, id); err == nil {
 		t.Fatal("history of a live material must stay immutable")
-	}
-	if _, err := s.DB.Exec(`DELETE FROM rating_events WHERE item_id=?`, id); err == nil {
-		t.Fatal("ratings of a live material must stay immutable")
 	}
 }
 

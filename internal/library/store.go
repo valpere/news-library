@@ -30,18 +30,18 @@ type Store struct {
 	Rules            RuleSet
 }
 type Item struct {
-	MatchSnippet                                              string
-	MatchSnapshot                                             int64
-	MatchStart, MatchEnd                                      int
-	ID                                                        int64
+	MatchSnippet                                   string
+	MatchSnapshot                                  int64
+	MatchStart, MatchEnd                           int
+	ID                                             int64
 	OriginalURL, URL, Title, AddedAt, State, Error string
-	Read                                                      bool
-	Selected                                                  sql.NullInt64
-	Score                                                     sql.NullInt64
-	ScoreScale                                                string
-	Tags                                                      string
-	FilterState                                               string
-	Confidence                                                sql.NullFloat64
+	Read                                           bool
+	Selected                                       sql.NullInt64
+	Score                                          sql.NullInt64
+	RatedAt                                        sql.NullString
+	Tags                                           string
+	FilterState                                    string
+	Confidence                                     sql.NullFloat64
 }
 type Snapshot struct {
 	ID, ItemID                                                               int64
@@ -50,14 +50,6 @@ type Snapshot struct {
 	// extractor's value, which stays in source_versions). ConfirmedAt is its date.
 	UserConfirmed bool
 	ConfirmedAt   string
-}
-type RatingEvent struct {
-	ID, ItemID, Score         int64
-	RecordedAt                string
-	AssessedAt                sql.NullString
-	SourceVersionID, DigestID sql.NullInt64
-	Reason                    string
-	Scale                     string
 }
 type Job struct {
 	ID, ItemID                                 int64
@@ -73,11 +65,11 @@ type Job struct {
 	ChunkLimit, ChunkMaxParts                  int
 }
 type Filters struct {
-	Usefulness                                             string
-	Category                                               string
-	Query, Rating, Read, State, Sort, Direction string
-	Filter, ConfidenceMin, ConfidenceMax                   string
-	Tags                                                   []string
+	Usefulness                           string
+	Category                             string
+	Query, Read, State, Sort, Direction  string
+	Filter, ConfidenceMin, ConfidenceMax string
+	Tags                                 []string
 }
 
 func Open(path string) (*Store, error) {
@@ -444,32 +436,18 @@ func (s *Store) Manual(id int64, text string) error {
 	}
 	return tx.Commit()
 }
-func (s *Store) Rate(id, score int64, source *int64, assessed *time.Time, reason string) error {
-	return s.RateShown(id, score, source, nil, assessed, reason)
-}
-func (s *Store) RateShown(id, score int64, source, digest *int64, assessed *time.Time, reason string) error {
-	return s.rateShown(id, score, source, digest, assessed, reason, LegacyRatingScale)
-}
-func (s *Store) rateShown(id, score int64, source, digest *int64, assessed *time.Time, reason, scale string) error {
-	if scale == UsefulnessScale && (score < 0 || score > 6) {
+
+// Rate stores the item's single current rating (0..6) and the date it was given;
+// a nil date means the date is unknown. A new rating replaces the previous one.
+func (s *Store) Rate(id, score int64, assessed *time.Time) error {
+	if score < 0 || score > 6 {
 		return errors.New("оберіть один із семи рівнів особистої корисності")
-	}
-	if score < 0 {
-		return errors.New("оцінка має бути невід’ємним цілим")
 	}
 	var at any
 	if assessed != nil {
 		at = assessed.UTC().Format(time.RFC3339Nano)
 	}
-	var sid any
-	if source != nil {
-		sid = *source
-	}
-	var did any
-	if digest != nil {
-		did = *digest
-	}
-	return s.update("INSERT INTO rating_events(item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason,scale) SELECT id,?,?,?,?,?,?,? FROM active_items WHERE id=?", score, nowUTC(), at, sid, did, reason, scale, id)
+	return s.update("UPDATE items SET rating=?,rated_at=? WHERE id=? AND id IN (SELECT id FROM active_items)", score, at, id)
 }
 func (s *Store) SetRead(id int64, value bool) error {
 	return s.update("UPDATE items SET is_read=? WHERE id=? AND id IN (SELECT id FROM active_items)", value, id)
@@ -517,12 +495,12 @@ func (s *Store) SetTags(id int64, tags []string) error {
 }
 
 const confidenceExpr = `(SELECT p.probability FROM generated_artifacts a LEFT JOIN interest_predictions p ON p.digest_id=a.id WHERE a.snapshot_id=i.selected_snapshot ORDER BY a.id DESC LIMIT 1)`
-const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.state,i.error,i.is_read,i.selected_snapshot,(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),coalesce((SELECT scale FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1),''),(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
+const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.state,i.error,i.is_read,i.selected_snapshot,i.rating,i.rated_at,(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var i Item
 	var tags sql.NullString
-	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.State, &i.Error, &i.Read, &i.Selected, &i.Score, &i.ScoreScale, &tags, &i.FilterState, &i.Confidence)
+	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.State, &i.Error, &i.Read, &i.Selected, &i.Score, &i.RatedAt, &tags, &i.FilterState, &i.Confidence)
 	i.Tags = tags.String
 	return i, err
 }
@@ -546,22 +524,6 @@ func (s *Store) Snapshots(id int64) ([]Snapshot, error) {
 			return nil, e
 		}
 		v.Text = string(data)
-		result = append(result, v)
-	}
-	return result, rows.Err()
-}
-func (s *Store) Ratings(id int64) ([]RatingEvent, error) {
-	rows, err := s.DB.Query("SELECT id,item_id,score,recorded_at,assessed_at,source_version_id,digest_id,reason,scale FROM rating_events WHERE item_id=? ORDER BY id DESC", id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var result []RatingEvent
-	for rows.Next() {
-		var v RatingEvent
-		if err = rows.Scan(&v.ID, &v.ItemID, &v.Score, &v.RecordedAt, &v.AssessedAt, &v.SourceVersionID, &v.DigestID, &v.Reason, &v.Scale); err != nil {
-			return nil, err
-		}
 		result = append(result, v)
 	}
 	return result, rows.Err()
@@ -620,25 +582,14 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 		query += " AND i.is_read=?"
 		args = append(args, f.Read)
 	}
-	scoreExpr := "(SELECT score FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1)"
-	if f.Rating == "unrated" {
-		query += " AND " + scoreExpr + " IS NULL"
-	} else if f.Rating != "" {
-		query += " AND " + scoreExpr + "=?"
-		args = append(args, f.Rating)
-	}
-	scaleExpr := "(SELECT scale FROM rating_events WHERE item_id=i.id ORDER BY id DESC LIMIT 1)"
-	usefulnessExpr := "CASE WHEN " + scaleExpr + "='" + UsefulnessScale + "' THEN " + scoreExpr + " END"
 	if f.Usefulness == "unrated" {
-		query += " AND " + scoreExpr + " IS NULL"
-	} else if f.Usefulness == "legacy" {
-		query += " AND " + scaleExpr + "='" + LegacyRatingScale + "'"
+		query += " AND i.rating IS NULL"
 	} else if f.Usefulness != "" {
 		n, err := strconv.ParseInt(f.Usefulness, 10, 64)
 		if err != nil || n < 0 || n > 6 {
 			return nil, errors.New("невідомий рівень корисності")
 		}
-		query += " AND " + usefulnessExpr + "=?"
+		query += " AND i.rating=?"
 		args = append(args, n)
 	}
 	if len(f.Tags) > 0 {
@@ -657,9 +608,7 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 	case "confidence":
 		query += " ORDER BY " + confidenceExpr + " IS NULL," + confidenceExpr + " " + direction + ",i.id ASC"
 	case "usefulness":
-		query += " ORDER BY " + usefulnessExpr + " IS NULL," + usefulnessExpr + " " + direction + ",i.id ASC"
-	case "rating":
-		query += " ORDER BY " + scoreExpr + " IS NULL," + scoreExpr + " " + direction + ",i.id ASC"
+		query += " ORDER BY i.rating IS NULL,i.rating " + direction + ",i.id ASC"
 	case "relevance":
 		if f.Query == "" {
 			return nil, errors.New("релевантність потребує запиту")

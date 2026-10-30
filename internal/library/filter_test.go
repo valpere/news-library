@@ -106,7 +106,7 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	enableDigests(t, s)
 	configureRules(t, s, .8, []FilterRule{{ID: "promotion", Reason: "promotion", Field: "text", Contains: "advertisement", Probability: .9}})
 	id := add(t, s, "https://example.com/source")
-	if e := s.Rate(id, 3, nil, nil, "already familiar"); e != nil {
+	if e := s.Rate(id, 3, nil); e != nil {
 		t.Fatal(e)
 	}
 	s.SetRead(id, true)
@@ -119,7 +119,7 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	if worked, e := worker.Step(context.Background()); worked || e != nil || calls != 0 {
 		t.Fatal("rejected source invoked model")
 	}
-	got, e := s.Search(Filters{Query: "Searchable", Filter: "rejected", Rating: "3", Read: "1"})
+	got, e := s.Search(Filters{Query: "Searchable", Filter: "rejected", Usefulness: "3", Read: "1"})
 	if e != nil || len(got) != 1 {
 		t.Fatal("filtered text not searchable", e)
 	}

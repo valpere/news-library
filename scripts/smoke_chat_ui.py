@@ -128,7 +128,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             page.locator('.turn').last.get_by_text('Яка особиста корисність',exact=False).wait_for()
             send('Помірна')
             with sqlite3.connect(Path(data)/'library.sqlite') as db:
-                assert db.execute('SELECT item_id,score,scale FROM rating_events').fetchall()==[(7,3,'estimative_usefulness_v1')]
+                assert db.execute('SELECT id,rating FROM items WHERE rating IS NOT NULL').fetchall()==[(7,3)]
             assert Gateway.calls==2
             send('перезапусти')
             assert 'чи продовжити' in page.locator('.turn').last.inner_text()

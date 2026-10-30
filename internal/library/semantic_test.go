@@ -63,14 +63,14 @@ func TestSemanticSynonymFiltersHybridAndOfflineFTS(t *testing.T) {
 	s.SetTags(id, []string{"systems"})
 	other := add(t, s, "https://example.com/weather")
 	s.Manual(other, "weather forecast")
-	s.Rate(other, 0, nil, nil, "")
+	s.Rate(other, 0, nil)
 	drainIndex(t, semantic)
-	zero, e := semantic.Search(context.Background(), Filters{Query: "weather", Rating: "0"}, "vector")
+	zero, e := semantic.Search(context.Background(), Filters{Query: "weather", Usefulness: "0"}, "vector")
 	if e != nil || len(zero.Items) != 1 || zero.Items[0].ID != other || !zero.Items[0].Score.Valid || zero.Items[0].Score.Int64 != 0 {
 		t.Fatal("zero rating filter", zero, e)
 	}
 	before := f.calls
-	got, err := semantic.Search(context.Background(), Filters{Query: "persistent storage", Tags: []string{"systems"}, Rating: "unrated"}, "vector")
+	got, err := semantic.Search(context.Background(), Filters{Query: "persistent storage", Tags: []string{"systems"}, Usefulness: "unrated"}, "vector")
 	if err != nil || len(got.Items) != 1 || got.Items[0].ID != id || got.Items[0].MatchSnapshot == 0 || !strings.Contains(got.Items[0].MatchSnippet, "database") {
 		t.Fatal(got, err)
 	}
@@ -174,9 +174,7 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	w.ReadToken = token
 	id := add(t, s, "https://example.com/read")
 	s.Manual(id, strings.Repeat("Український текст. ", 400))
-	item, _ := s.Item(id)
-	sid := item.Selected.Int64
-	s.Rate(id, 3, &sid, nil, "historical")
+	s.Rate(id, 3, nil)
 	auth := map[string]string{"Authorization": "Bearer " + token}
 	for _, headers := range []map[string]string{nil, {"Authorization": "Bearer wrong"}} {
 		rw := webRequest(w, "GET", "/api/read/items/1/context", nil, headers)
@@ -193,8 +191,7 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	if got["truncated"] != true || got["context_kind"] != "source_excerpt" || got["rating"] != float64(3) {
 		t.Fatal(got)
 	}
-	history := got["rating_history"].([]any)[0].(map[string]any)
-	if history["assessed_at"] != nil {
+	if got["rated_at"] != nil {
 		t.Fatal("invented historical date")
 	}
 	rw = webRequest(w, "GET", "/api/read/items/1/fragment?start=1&end=7", nil, auth)
@@ -226,7 +223,7 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	if rw.Code != 200 {
 		t.Fatal(rw.Code)
 	}
-	item, _ = s.Item(id)
+	item, _ := s.Item(id)
 	ratings, _ := s.Ratings(id)
 	if item.Read || item.Score.Int64 != 3 || len(ratings) != 1 {
 		t.Fatal("read mutated history")
@@ -293,7 +290,7 @@ func TestExplicitRebuildPreservesHumanHistoryAndMigratedFilterGuard(t *testing.T
 	manual(t, s, id, "database source")
 	item, _ := s.Item(id)
 	sid := item.Selected.Int64
-	if err := s.Rate(id, 4, &sid, nil, "unknown historical date"); err != nil {
+	if err := s.Rate(id, 4, nil); err != nil {
 		t.Fatal(err)
 	}
 	drainIndex(t, semantic)
@@ -303,7 +300,7 @@ func TestExplicitRebuildPreservesHumanHistoryAndMigratedFilterGuard(t *testing.T
 	drainIndex(t, semantic)
 	ratings, _ := s.Ratings(id)
 	after, _ := s.Item(id)
-	if len(ratings) != 1 || ratings[0].AssessedAt.Valid || ratings[0].SourceVersionID.Int64 != sid || after.Selected.Int64 != sid || after.Score.Int64 != 4 {
+	if len(ratings) != 1 || ratings[0].AssessedAt.Valid || after.Selected.Int64 != sid || after.Score.Int64 != 4 {
 		t.Fatal("rebuild changed primary context")
 	}
 }

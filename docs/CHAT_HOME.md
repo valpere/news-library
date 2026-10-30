@@ -2,7 +2,7 @@
 
 Актуальне уточнення: усі додані матеріали вже в бібліотеці, save/defer
 прибрано з основного UI. Корисність —
-сім словесних рівнів estimative_usefulness_v1, legacy числа не переосмислюються.
+сім словесних рівнів з однією поточною оцінкою.
 usefulness=0..6/unrated/legacy та sort=usefulness окремі від старого rating.
 Нижче збережені технічні деталі попереднього діалогу для сумісності.
 
@@ -114,7 +114,7 @@ references; completed/active work і checkpoint policy збережені. Яв�
    відповідь продовжує попередню дію. Відновлення чату після restart.
 5. Перезапуск/дообробка з чату показує фактичні результати й не починає
    completed work заново. Queue status і index actions доступні в діалозі.
-6. Item actions прив’язані до показаних джерел; людська rating history
+6. Item actions прив’язані до показаних джерел; людська оцінка
    зберігається; GET/модель без явної оцінки її не змінює.
 7. Local POST без CSRF, denied nonlocal origins/CSRF/agent writes, unknown model actions/параметри,
    malicious retrieved text, stale/concurrent/replayed turns — без зайвих
