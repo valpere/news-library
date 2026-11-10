@@ -11,14 +11,11 @@ const (
 // Telegram once it is processed. An existing material (also one in the trash) is
 // only reported: it was not asked for through the bot, so nothing is sent for it.
 func (s *Store) AddFromTelegram(raw string) (int64, string, error) {
-	id, created, err := s.addURL(raw)
+	id, created, err := s.addURLFlag(raw, "pending")
 	if err != nil {
 		return 0, "", err
 	}
 	if created {
-		if err = s.update(`UPDATE items SET telegram='pending' WHERE id=?`, id); err != nil {
-			return 0, "", err
-		}
 		return id, TelegramAdded, nil
 	}
 	var trashed bool
@@ -34,7 +31,7 @@ func (s *Store) AddFromTelegram(raw string) (int64, string, error) {
 // TelegramPending lists the materials added through the bot whose processing has
 // finished (successfully or not) and that were not sent yet, oldest first.
 func (s *Store) TelegramPending() ([]int64, error) {
-	rows, err := s.DB.Query(`SELECT id FROM active_items WHERE telegram='pending' AND state IN ('ready','needs_input','failed','filtered') ORDER BY id`)
+	rows, err := s.DB.Query(`SELECT id FROM active_items WHERE telegram='pending' AND state IN ('ready','needs_input','failed','digest_failed','filtered') ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}

@@ -42,19 +42,20 @@ func TestTelegramPendingWaitsForProcessingAndSendsOnce(t *testing.T) {
 	b, _, _ := s.AddFromTelegram("https://a.example/2")
 	c, _, _ := s.AddFromTelegram("https://a.example/3")
 	web := add(t, s, "https://a.example/web")
-	for id, state := range map[int64]string{a: "ready", b: "queued", c: "needs_input", web: "ready"} {
+	d, _, _ := s.AddFromTelegram("https://a.example/4")
+	for id, state := range map[int64]string{a: "ready", b: "queued", c: "needs_input", web: "ready", d: "digest_failed"} {
 		if _, err := s.DB.Exec(`UPDATE items SET state=? WHERE id=?`, state, id); err != nil {
 			t.Fatal(err)
 		}
 	}
 	got, err := s.TelegramPending()
-	if err != nil || !reflect.DeepEqual(got, []int64{a, c}) {
+	if err != nil || !reflect.DeepEqual(got, []int64{a, c, d}) {
 		t.Fatalf("pending %v %v", got, err)
 	}
 	if err = s.MarkTelegramSent(a); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ = s.TelegramPending(); !reflect.DeepEqual(got, []int64{c}) {
+	if got, _ = s.TelegramPending(); !reflect.DeepEqual(got, []int64{c, d}) {
 		t.Fatalf("pending after send %v", got)
 	}
 	// A replaced text recalculates the digest but never makes the item pending again.

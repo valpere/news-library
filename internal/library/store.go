@@ -144,7 +144,10 @@ func (s *Store) AddURL(raw string) (int64, error) {
 	id, _, err := s.addURL(raw)
 	return id, err
 }
-func (s *Store) addURL(raw string) (int64, bool, error) {
+func (s *Store) addURL(raw string) (int64, bool, error) { return s.addURLFlag(raw, "") }
+
+// addURLFlag adds a material; telegram is the initial items.telegram value of a new one.
+func (s *Store) addURLFlag(raw, telegram string) (int64, bool, error) {
 	canonical, err := CanonicalURL(raw)
 	if err != nil {
 		return 0, false, err
@@ -154,7 +157,7 @@ func (s *Store) addURL(raw string) (int64, bool, error) {
 		return 0, false, err
 	}
 	defer tx.Rollback()
-	res, err := tx.Exec("INSERT INTO items(original_url,canonical_url,added_at) VALUES(?,?,?) ON CONFLICT(canonical_url) DO NOTHING", strings.TrimSpace(raw), canonical, nowUTC())
+	res, err := tx.Exec("INSERT INTO items(original_url,canonical_url,added_at,telegram) VALUES(?,?,?,?) ON CONFLICT(canonical_url) DO NOTHING", strings.TrimSpace(raw), canonical, nowUTC(), telegram)
 	if err != nil {
 		return 0, false, err
 	}

@@ -13,8 +13,12 @@ import (
 	"time"
 )
 
-// ErrTelegramBadMarkup means Telegram refused the message's MarkdownV2.
-var ErrTelegramBadMarkup = errors.New("telegram rejected the message markup")
+// ErrTelegramBadMarkup means Telegram refused the message's MarkdownV2;
+// ErrTelegramBadButton, a URL of an inline button.
+var (
+	ErrTelegramBadMarkup = errors.New("telegram rejected the message markup")
+	ErrTelegramBadButton = errors.New("telegram rejected a button URL")
+)
 
 type TGChat struct {
 	ID int64 `json:"id"`
@@ -91,6 +95,9 @@ func (c *TelegramClient) call(ctx context.Context, method string, payload, resul
 	if !envelope.OK {
 		if strings.Contains(envelope.Description, "can't parse entities") {
 			return ErrTelegramBadMarkup
+		}
+		if strings.Contains(envelope.Description, "BUTTON_URL_INVALID") {
+			return ErrTelegramBadButton
 		}
 		return fmt.Errorf("telegram %s: %s", method, envelope.Description)
 	}

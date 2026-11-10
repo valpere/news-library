@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 type tgSent struct {
@@ -24,6 +25,8 @@ type fakeTelegram struct {
 	sent        []tgSent
 	answers     []string
 	rejectMarkV bool
+	failText    string
+	rejectURL   bool
 	done        chan struct{}
 }
 
@@ -48,6 +51,16 @@ func (f *fakeTelegram) Send(ctx context.Context, chatID int64, text, parseMode s
 	defer f.mu.Unlock()
 	if f.rejectMarkV && parseMode != "" {
 		return ErrTelegramBadMarkup
+	}
+	if f.failText != "" && strings.Contains(text, f.failText) {
+		return errors.New("telegram sendMessage: Bad Request")
+	}
+	for _, row := range keyboard {
+		for _, button := range row {
+			if f.rejectURL && button.URL != "" {
+				return ErrTelegramBadButton
+			}
+		}
 	}
 	f.sent = append(f.sent, tgSent{chatID, text, parseMode, keyboard})
 	return nil
@@ -252,3 +265,68 @@ func (errorsTelegram) Send(context.Context, int64, string, string, [][]TGButton)
 func (errorsTelegram) Answer(context.Context, string, string) error { return nil }
 
 func itoa(id int64) string { return strconv.FormatInt(id, 10) }
+
+func TestBotOneFailingMaterialDoesNotBlockTheRest(t *testing.T) {
+	b, api, s := newBot(t)
+	api.failText = "ЗБІЙНИЙ"
+	first, _, _ := s.AddFromTelegram("https://a.example/1")
+	second, _, _ := s.AddFromTelegram("https://a.example/2")
+	s.DB.Exec(`UPDATE items SET state='needs_input',error='ЗБІЙНИЙ' WHERE id=?`, first)
+	s.DB.Exec(`UPDATE items SET state='needs_input',error='ok' WHERE id=?`, second)
+	for i := 0; i < 8; i++ {
+		b.DeliverPending(context.Background())
+	}
+	if scalar[string](t, s, `SELECT telegram FROM items WHERE id=?`, second) != "sent" {
+		t.Fatal("the next material is delivered")
+	}
+	if scalar[string](t, s, `SELECT telegram FROM items WHERE id=?`, first) != "pending" {
+		t.Fatal("an undelivered material stays pending, it is not marked sent")
+	}
+	if n := len(api.sent); n != 1 {
+		t.Fatalf("after repeated failures the bot stops retrying until restart: %d sends", n)
+	}
+}
+
+func TestBotKeepsBalancedParenthesesInLinks(t *testing.T) {
+	b, _, s := newBot(t)
+	b.HandleUpdate(context.Background(), textMessage(botChat, "див. https://en.wikipedia.org/wiki/Go_(programming_language). А ще (https://a.example/2), ок"))
+	var urls []string
+	rows, _ := s.DB.Query(`SELECT original_url FROM items ORDER BY id`)
+	for rows.Next() {
+		var u string
+		rows.Scan(&u)
+		urls = append(urls, u)
+	}
+	rows.Close()
+	if len(urls) != 2 || urls[0] != "https://en.wikipedia.org/wiki/Go_(programming_language)" || urls[1] != "https://a.example/2" {
+		t.Fatalf("%q", urls)
+	}
+}
+
+func TestBotBoundsMessageLengthAndDropsRejectedURLButton(t *testing.T) {
+	b, api, s := newBot(t)
+	b.Origin = "https://library.example.org"
+	api.rejectURL = true
+	id, _, _ := s.AddFromTelegram("https://a.example/1")
+	s.DB.Exec(`UPDATE items SET state='failed',title=?,error=? WHERE id=?`, strings.Repeat("Т", 5000), strings.Repeat("п", 9000), id)
+	if err := b.DeliverPending(context.Background()); err != nil || len(api.sent) != 1 {
+		t.Fatalf("%v %d", err, len(api.sent))
+	}
+	m := api.sent[0]
+	if utf8.RuneCountInString(m.Text) > 4096 {
+		t.Fatalf("message of %d characters exceeds Telegram's limit", utf8.RuneCountInString(m.Text))
+	}
+	for _, row := range m.Keyboard {
+		for _, button := range row {
+			if button.URL != "" {
+				t.Fatal("the URL button is dropped when Telegram refuses it")
+			}
+		}
+	}
+	for origin, want := range map[string]bool{"http://192.168.1.5:8790": false, "http://10.0.0.2": false, "http://myhost.local:8790": false, "http://localhost:8790": false, "https://library.example.org": true, "http://8.8.8.8": true} {
+		b.Origin = origin
+		if b.publicOrigin() != want {
+			t.Errorf("%s public=%v", origin, !want)
+		}
+	}
+}

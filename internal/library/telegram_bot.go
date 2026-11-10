@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 var telegramURL = regexp.MustCompile(`https?://[^\s<>"]+`)
@@ -30,7 +31,13 @@ type TelegramBot struct {
 	PollSeconds  int
 	DeliverEvery time.Duration
 	ErrorPause   time.Duration
+
+	failures map[int64]int
 }
+
+// maxDeliveryFailures is how many times a material is tried before the bot leaves
+// it pending until the next restart (it is never marked sent unsent).
+const maxDeliveryFailures = 5
 
 // Run polls for updates and delivers finished materials until ctx ends.
 func (b *TelegramBot) Run(ctx context.Context) {
@@ -97,7 +104,7 @@ func (b *TelegramBot) handleMessage(ctx context.Context, text string) {
 	seen := map[string]bool{}
 	var lines []string
 	for _, raw := range telegramURL.FindAllString(text, -1) {
-		raw = strings.TrimRight(raw, ".,;:!?)]}»\"'")
+		raw = trimLinkEnd(raw)
 		if seen[raw] {
 			continue
 		}
@@ -159,15 +166,71 @@ func (b *TelegramBot) DeliverPending(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if b.failures == nil {
+		b.failures = map[int64]int{}
+	}
+	var failed []error
 	for _, id := range ids {
-		if err = b.deliver(ctx, id); err != nil {
-			return fmt.Errorf("material %d: %w", id, err)
+		if b.failures[id] >= maxDeliveryFailures {
+			continue
 		}
-		if err = b.Store.MarkTelegramSent(id); err != nil {
-			return err
+		if err = b.deliver(ctx, id); err == nil {
+			err = b.Store.MarkTelegramSent(id)
+		}
+		if err != nil {
+			b.failures[id]++
+			failed = append(failed, fmt.Errorf("material %d: %w", id, err))
 		}
 	}
-	return nil
+	return errors.Join(failed...)
+}
+
+// trimLinkEnd removes sentence punctuation after a link and closing brackets that
+// have no opening one inside it, so "(https://a.example/x)" and
+// ".../Go_(language)." both keep the right address.
+func trimLinkEnd(raw string) string {
+	for raw != "" {
+		last := raw[len(raw)-1]
+		switch {
+		case strings.IndexByte(".,;:!?\"'", last) >= 0:
+		case last == ')' && strings.Count(raw, ")") > strings.Count(raw, "("):
+		case last == ']' && strings.Count(raw, "]") > strings.Count(raw, "["):
+		case last == '}' && strings.Count(raw, "}") > strings.Count(raw, "{"):
+		default:
+			return raw
+		}
+		raw = raw[:len(raw)-1]
+	}
+	return raw
+}
+
+func clip(s string, runes int) string {
+	if utf8.RuneCountInString(s) <= runes {
+		return s
+	}
+	return string([]rune(s)[:runes]) + "…"
+}
+
+// send delivers a message; a button URL Telegram refuses is dropped, because the
+// card address is in the text anyway.
+func (b *TelegramBot) send(ctx context.Context, text, parseMode string, keyboard [][]TGButton) error {
+	err := b.API.Send(ctx, b.ChatID, text, parseMode, keyboard)
+	if errors.Is(err, ErrTelegramBadButton) {
+		var kept [][]TGButton
+		for _, row := range keyboard {
+			var r []TGButton
+			for _, button := range row {
+				if button.URL == "" {
+					r = append(r, button)
+				}
+			}
+			if len(r) > 0 {
+				kept = append(kept, r)
+			}
+		}
+		err = b.API.Send(ctx, b.ChatID, text, parseMode, kept)
+	}
+	return err
 }
 
 func (b *TelegramBot) cardURL(id int64) string {
@@ -179,8 +242,16 @@ func (b *TelegramBot) publicOrigin() bool {
 	if err != nil || u.Hostname() == "" || u.Hostname() == "localhost" {
 		return false
 	}
-	ip := net.ParseIP(u.Hostname())
-	return ip == nil || !ip.IsLoopback()
+	if ip := net.ParseIP(u.Hostname()); ip != nil {
+		return ip.IsGlobalUnicast() && !ip.IsPrivate()
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, local := range []string{".local", ".lan", ".internal", ".home.arpa"} {
+		if strings.HasSuffix(host, local) {
+			return false
+		}
+	}
+	return strings.Contains(host, ".")
 }
 
 func (b *TelegramBot) keyboard(id int64, withRating bool) [][]TGButton {
@@ -209,6 +280,7 @@ func (b *TelegramBot) deliver(ctx context.Context, id int64) error {
 	if title == "" {
 		title = item.URL
 	}
+	title = clip(title, 200)
 	digest, err := b.Store.DigestOf(id)
 	if err != nil {
 		return err
@@ -229,7 +301,7 @@ func (b *TelegramBot) deliver(ctx context.Context, id int64) error {
 	case item.State == "filtered":
 		plain = fmt.Sprintf("№%d відсіяно правилами: %s", id, title)
 	default:
-		reason := item.Error
+		reason := clip(item.Error, 500)
 		if reason == "" {
 			reason = "потрібен ручний текст або повторна спроба"
 		}
@@ -238,10 +310,10 @@ func (b *TelegramBot) deliver(ctx context.Context, id int64) error {
 	card := "\n\n" + b.cardURL(id)
 	keyboard := b.keyboard(id, rated)
 	if markdown != "" {
-		err = b.API.Send(ctx, b.ChatID, markdown+"\n\n"+tgEscape(b.cardURL(id)), "MarkdownV2", keyboard)
+		err = b.send(ctx, markdown+"\n\n"+tgEscape(b.cardURL(id)), "MarkdownV2", keyboard)
 		if err == nil || !errors.Is(err, ErrTelegramBadMarkup) {
 			return err
 		}
 	}
-	return b.API.Send(ctx, b.ChatID, plain+card, "", keyboard)
+	return b.send(ctx, plain+card, "", keyboard)
 }
