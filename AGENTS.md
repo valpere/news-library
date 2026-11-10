@@ -25,7 +25,7 @@ validation and optional browser smoke live in `scripts/`; private evaluation
 scripts and pilot artifacts remain local. The upstream license is preserved.
 
 M4 backup/restore is implemented. Telegram digests on a schedule are dropped (the daily
-schedule is off); the planned replacement is a bot that accepts new links and sends the
+schedule is off); the replacement is a bot (`NEWS_LIBRARY_TELEGRAM_TOKEN`/`_CHAT_ID`, off by default) that accepts new links and sends the
 digest once, as Markdown with buttons (see `docs/REQUIREMENTS.md` and `docs/HLD.md`). Restored workers
 stay paused. Do not send live messages during routine tests.
 See remaining optional M2 integration work in `docs/BACKLOG.md`.

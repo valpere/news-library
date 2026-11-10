@@ -271,3 +271,25 @@ func TestSourceAdaptersConfig(t *testing.T) {
 		t.Fatalf("an unknown adapter must be a config error: %v", e)
 	}
 }
+
+func TestTelegramConfigNeedsTokenAndChatTogether(t *testing.T) {
+	dir := t.TempDir()
+	write := func(body string) string {
+		path := filepath.Join(dir, ".env")
+		os.WriteFile(path, []byte(body), 0600)
+		return path
+	}
+	if c, e := readConfig([]string{"-env-file", write("")}); e != nil || c.TelegramToken != "" || c.TelegramChatID != 0 {
+		t.Fatal("the bot is off by default", e)
+	}
+	c, e := readConfig([]string{"-env-file", write("NEWS_LIBRARY_TELEGRAM_TOKEN=123:abc\nNEWS_LIBRARY_TELEGRAM_CHAT_ID=-100123\n")})
+	if e != nil || c.TelegramToken != "123:abc" || c.TelegramChatID != -100123 {
+		t.Fatal("token and chat", e)
+	}
+	for _, body := range []string{"NEWS_LIBRARY_TELEGRAM_TOKEN=123:abc\n", "NEWS_LIBRARY_TELEGRAM_CHAT_ID=5\n", "NEWS_LIBRARY_TELEGRAM_TOKEN=123:abc\nNEWS_LIBRARY_TELEGRAM_CHAT_ID=abc\n"} {
+		_, e = readConfig([]string{"-env-file", write(body)})
+		if e == nil || strings.Contains(e.Error(), "123:abc") {
+			t.Fatalf("%q: must be refused without echoing the token: %v", body, e)
+		}
+	}
+}

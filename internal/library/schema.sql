@@ -7,7 +7,8 @@ CREATE TABLE items (
  state TEXT NOT NULL DEFAULT 'queued', error TEXT NOT NULL DEFAULT '',
  rating INTEGER CHECK(rating BETWEEN 0 AND 6), rated_at TEXT CHECK(rated_at IS NULL OR rating IS NOT NULL),
  filter_state TEXT NOT NULL DEFAULT 'not_checked' CHECK(filter_state IN ('not_checked','passed','rejected','overridden')),
- filter_reason TEXT NOT NULL DEFAULT '');
+ filter_reason TEXT NOT NULL DEFAULT '',
+ telegram TEXT NOT NULL DEFAULT '' CHECK(telegram IN ('','pending','sent')));
 CREATE TABLE source_aliases (
  url TEXT PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id)
 );

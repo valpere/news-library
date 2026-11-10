@@ -149,6 +149,13 @@ func run() error {
 	} else {
 		close(embeddingDone)
 	}
+	telegramDone := make(chan struct{})
+	if c.TelegramToken != "" && !c.NoWorker {
+		bot := &library.TelegramBot{Store: s, API: library.NewTelegramClient(c.TelegramToken), ChatID: c.TelegramChatID, Origin: origin, PollSeconds: 30}
+		go func() { defer close(telegramDone); bot.Run(ctx) }()
+	} else {
+		close(telegramDone)
+	}
 	cleanupDone := make(chan struct{})
 	go func() { defer close(cleanupDone); cache.RunCleanup(ctx, c.CacheCleanupInterval) }()
 	done := make(chan struct{})
@@ -175,6 +182,7 @@ func run() error {
 	<-cleanupDone
 	<-embeddingDone
 	<-knowledgeDone
+	<-telegramDone
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
