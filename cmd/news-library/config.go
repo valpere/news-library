@@ -26,6 +26,8 @@ type config struct {
 	Knowledge                bool
 	YTDLP, YouTubeLanguages  string
 	FetchUserAgent           string
+	TelegramToken            string
+	TelegramChatID           int64
 
 	Embeddings                                            bool
 	ResumeRestored                                        bool
@@ -322,6 +324,16 @@ func readConfig(args []string) (config, error) {
 	}
 	if _, e = library.NewRuleSet(c.FilterThreshold, c.FilterRules); e != nil {
 		return c, e
+	}
+	c.TelegramToken = strings.TrimSpace(get("NEWS_LIBRARY_TELEGRAM_TOKEN", ""))
+	chat := strings.TrimSpace(get("NEWS_LIBRARY_TELEGRAM_CHAT_ID", ""))
+	if (c.TelegramToken == "") != (chat == "") {
+		return c, errors.New("NEWS_LIBRARY_TELEGRAM_TOKEN і NEWS_LIBRARY_TELEGRAM_CHAT_ID задаються разом")
+	}
+	if chat != "" {
+		if c.TelegramChatID, e = strconv.ParseInt(chat, 10, 64); e != nil || c.TelegramChatID == 0 {
+			return c, errors.New("некоректний NEWS_LIBRARY_TELEGRAM_CHAT_ID")
+		}
 	}
 	return c, nil
 }
