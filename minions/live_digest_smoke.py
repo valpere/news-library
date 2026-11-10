@@ -68,9 +68,9 @@ def main():
             if not line.startswith("news-library: http://127.0.0.1:"):
                 raise ValueError("fixture service startup failed; inspect its local service.log")
             origin = line.removeprefix("news-library: ")
-            with urllib.request.urlopen(origin, timeout=15) as response:
+            with urllib.request.urlopen(origin + "/browse", timeout=15) as response:
                 html = response.read().decode()
-            token = re.search(r'name="csrf" value="([^"]+)"', html)
+            token = re.search(r'name="csrf" value="([^"]*)"', html)
             if not token:
                 raise ValueError("fixture UI lacks CSRF token")
             payload = urllib.parse.urlencode({"csrf": token.group(1), "url": args.url}).encode()

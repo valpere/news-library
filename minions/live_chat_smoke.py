@@ -133,7 +133,7 @@ def main():
         report['cloud_calls'] = recorder.calls
         (data/'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
     command = [str(ROOT/'build/news-library'), '-data', str(data), '-bind', '127.0.0.1:0',
-               '-no-worker', '-no-digests=false', '-knowledge=true', '-embeddings=false'
+               '-no-worker', '-no-digests=false', '-knowledge=true', '-embeddings=false',
                '-filter-rules', '[]', '-interests', '', '-chat=true', '-chat-model', args.model,
                '-chat-timeout', str(args.timeout)+'s', '-ollama-url', f'http://127.0.0.1:{gateway.server_port}/api/chat']
     print('Fixture: '+str(data), flush=True)
