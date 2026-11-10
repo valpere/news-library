@@ -11,7 +11,7 @@ import (
 
 func main() {
 	if len(os.Args) != 3 {
-		fmt.Fprintln(os.Stderr, "usage: import-v18 <old-data-dir> <new-data-dir>\nThe old directory is only read; the new one must not exist or be empty.")
+		fmt.Fprintln(os.Stderr, "usage: import-v18 <old-data-dir> <new-data-dir>\nThe old directory is only read (stop the service or pass a copy: a live WAL database may lag); the new one must not exist or be empty.")
 		os.Exit(2)
 	}
 	r, err := library.ImportV18(os.Args[1], os.Args[2])

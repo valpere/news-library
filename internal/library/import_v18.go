@@ -60,7 +60,12 @@ func ImportV18(oldRoot, newRoot string) (ImportReport, error) {
 	if err = os.MkdirAll(work, 0o700); err != nil {
 		return report, err
 	}
-	defer os.RemoveAll(work) // after a successful rename there is nothing left to remove
+	keep := false
+	defer func() {
+		if !keep {
+			os.RemoveAll(work)
+		}
+	}()
 	store, err := Open(filepath.Join(work, "library.sqlite"))
 	if err != nil {
 		return report, err
@@ -84,7 +89,11 @@ func ImportV18(oldRoot, newRoot string) (ImportReport, error) {
 	if err = os.Remove(newRoot); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return ImportReport{}, err
 	}
-	return report, os.Rename(work, newRoot)
+	if err = os.Rename(work, newRoot); err != nil {
+		keep = true // the finished import is the only copy: do not delete it
+		return ImportReport{}, fmt.Errorf("import finished in %s but could not be moved: %w", work, err)
+	}
+	return report, nil
 }
 
 func openV18(root string) (*sql.DB, error) {
@@ -204,8 +213,15 @@ func importV18Item(tx *sql.Tx, old *sql.DB, from, to Files, it v18Item, r *Impor
 	if rating.Valid {
 		r.Ratings++
 	}
+	// Only an unfinished fetch of a live item is queued again; terminal states
+	// (needs_input, failed, ...) and trashed items stay as they were.
 	state := it.state
-	if !it.snapshot.Valid && state != "needs_input" {
+	var trashed int
+	if err = old.QueryRow(`SELECT count(*) FROM trash_entries WHERE item_id=?`, it.id).Scan(&trashed); err != nil {
+		return err
+	}
+	refetch := !it.snapshot.Valid && trashed == 0 && (state == "queued" || state == "running" || state == "enriching")
+	if refetch {
 		state = "queued"
 	}
 	if _, err = tx.Exec(`INSERT INTO items(id,original_url,canonical_url,title,added_at,is_read,state,error,rating,rated_at,filter_state,filter_reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -227,7 +243,7 @@ func importV18Item(tx *sql.Tx, old *sql.DB, from, to Files, it v18Item, r *Impor
 		} else {
 			r.WithoutDigest++
 		}
-	} else if state == "queued" {
+	} else if refetch {
 		if _, err = tx.Exec(`INSERT INTO jobs(item_id) VALUES(?)`, it.id); err != nil {
 			return err
 		}

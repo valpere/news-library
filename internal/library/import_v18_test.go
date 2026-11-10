@@ -186,6 +186,9 @@ func TestImportV18TrashItemWithoutTextAndLegacyRating(t *testing.T) {
 	f.exec(`INSERT INTO rating_events(item_id,score,recorded_at,reason,scale) VALUES(1,9,'2026-04-01T00:00:00Z','','legacy_numeric')`)
 	f.item(2, "https://a.example/2", "needs_input", nil)
 	f.item(3, "https://a.example/3", "queued", nil)
+	f.item(4, "https://a.example/4", "queued", nil)
+	f.exec(`INSERT INTO trash_entries VALUES(4,'unavailable','2026-07-02T00:00:00Z')`)
+	f.item(5, "https://a.example/5", "failed", nil)
 
 	s, report := importFixture(t, f)
 
@@ -206,6 +209,9 @@ func TestImportV18TrashItemWithoutTextAndLegacyRating(t *testing.T) {
 	}
 	if scalar[string](t, s, `SELECT state FROM items WHERE id=3`) != "queued" || scalar[int](t, s, `SELECT count(*) FROM jobs WHERE item_id=3 AND stage='fetch' AND state='queued'`) != 1 {
 		t.Fatal("an item with no text is queued for fetching")
+	}
+	if scalar[int](t, s, `SELECT count(*) FROM jobs WHERE item_id IN (4,5)`) != 0 || scalar[string](t, s, `SELECT state FROM items WHERE id=5`) != "failed" {
+		t.Fatal("trashed and failed items are not fetched again")
 	}
 }
 
