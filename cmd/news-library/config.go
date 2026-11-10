@@ -325,10 +325,19 @@ func readConfig(args []string) (config, error) {
 	if _, e = library.NewRuleSet(c.FilterThreshold, c.FilterRules); e != nil {
 		return c, e
 	}
-	c.TelegramToken = strings.TrimSpace(get("NEWS_LIBRARY_TELEGRAM_TOKEN", ""))
+	telegramOn, e := boolean("NEWS_LIBRARY_TELEGRAM_ENABLED", "true")
+	if e != nil {
+		return c, e
+	}
+	if telegramOn {
+		c.TelegramToken = strings.TrimSpace(get("NEWS_LIBRARY_TELEGRAM_BOT_TOKEN", ""))
+	}
 	chat := strings.TrimSpace(get("NEWS_LIBRARY_TELEGRAM_CHAT_ID", ""))
+	if !telegramOn {
+		chat = ""
+	}
 	if (c.TelegramToken == "") != (chat == "") {
-		return c, errors.New("NEWS_LIBRARY_TELEGRAM_TOKEN і NEWS_LIBRARY_TELEGRAM_CHAT_ID задаються разом")
+		return c, errors.New("NEWS_LIBRARY_TELEGRAM_BOT_TOKEN і NEWS_LIBRARY_TELEGRAM_CHAT_ID задаються разом")
 	}
 	if chat != "" {
 		if c.TelegramChatID, e = strconv.ParseInt(chat, 10, 64); e != nil || c.TelegramChatID == 0 {
