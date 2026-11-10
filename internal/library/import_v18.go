@@ -13,7 +13,7 @@ import (
 
 // One-off importer of a schema-18 database (versions and history) into the
 // current model. Remove it, together with cmd/import-v18, once the live data
-// has been moved (see docs/REDESIGN_DECISIONS.md, decision 18).
+// has been moved (no backward compatibility: one clean schema, data moved once).
 
 const importV18Schema = 18
 

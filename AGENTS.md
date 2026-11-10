@@ -7,7 +7,7 @@ on personal usefulness at the time of assessment. Model ratings are predictions;
 they must not overwrite human judgments. A human rating is one current value with the date it was given; a new
 rating replaces it. When a material's text changes its ratings and links are erased and the
 material is queued for post-processing. There are no text or digest versions and no history
-tables: only the current state is stored (see `docs/REDESIGN_DECISIONS.md`).
+tables: only the current state is stored (see `docs/REQUIREMENTS.md` and `docs/HLD.md`).
 
 Read `START_HERE.md`, then `docs/REQUIREMENTS.md`, `docs/HLD.md`, and
 `docs/BACKLOG.md`. These documents describe the current implementation contract.
@@ -26,7 +26,7 @@ scripts and pilot artifacts remain local. The upstream license is preserved.
 
 M4 backup/restore is implemented. Telegram digests on a schedule are dropped (the daily
 schedule is off); the planned replacement is a bot that accepts new links and sends the
-digest once, as Markdown with buttons (see `docs/REDESIGN_DECISIONS.md`). Restored workers
+digest once, as Markdown with buttons (see `docs/REQUIREMENTS.md` and `docs/HLD.md`). Restored workers
 stay paused. Do not send live messages during routine tests.
 See remaining optional M2 integration work in `docs/BACKLOG.md`.
 M3 uses local bge-m3 with versioned persistent derived indexes and read-only

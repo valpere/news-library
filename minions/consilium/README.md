@@ -11,7 +11,7 @@ news-library та відповідність реалізації. Codex вик�
 python3 minions/consilium/run.py --dry-run
 python3 minions/consilium/run.py --run-agents
 python3 minions/consilium/run.py --run-agents --agents agy,opencode --timeout 600
-python3 minions/consilium/run.py --run-agents --document docs/HLD.md --context minions/consilium/context-redesign.md
+python3 minions/consilium/run.py --run-agents --document docs/HLD.md  --context <закомічений-файл.md>
 ```
 
 `--context` — закомічений Markdown із додатковими вказівками замовника (наприклад, що
