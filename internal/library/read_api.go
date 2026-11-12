@@ -11,16 +11,6 @@ import (
 	"unicode/utf8"
 )
 
-// removedReadFilter refuses the old read=0/1 parameter instead of silently
-// returning everything: there is no separate "read" state any more (rated = read),
-// so an agent asking for unread items would otherwise get the whole library.
-func removedReadFilter(rw http.ResponseWriter, r *http.Request) bool {
-	if !r.URL.Query().Has("read") {
-		return false
-	}
-	http.Error(rw, "параметра read більше немає: прочитано = оцінено; для неоцінених використайте usefulness=unrated", http.StatusBadRequest)
-	return true
-}
 func requestFilters(r *http.Request) Filters {
 	q := r.URL.Query()
 	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
@@ -44,9 +34,6 @@ func (w *Web) readAPI(rw http.ResponseWriter, r *http.Request) {
 	}
 	if origin := r.Header.Get("Origin"); origin != "" {
 		http.Error(rw, "read API is for authenticated tools", http.StatusForbidden)
-		return
-	}
-	if removedReadFilter(rw, r) {
 		return
 	}
 	jsonResponse := func(v any) {
