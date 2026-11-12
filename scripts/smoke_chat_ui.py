@@ -117,9 +117,6 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             send('тільки непрочитане', keyboard=False)
             assert 'Тема: SQLite' in page.locator('.turn').last.inner_text()
             assert Gateway.calls==2
-            page.locator('.current-actions summary').click()
-            page.locator('.current-actions button[value="read:1"]').click()
-            page.locator('.turn').last.get_by_text('Дію з матеріалом виконано.',exact=False).wait_for()
             send('далі')
             assert page.locator('.turn').last.locator('.card').count()==3
             assert '/items/6' in page.locator('.turn').last.inner_html()

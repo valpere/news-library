@@ -72,7 +72,7 @@ func validateChatCommand(c ChatCommand) error {
 	}
 	if c.Action == "item" {
 		switch c.ItemAction {
-		case "read", "unread", "rate", "tags":
+		case "rate", "tags":
 		default:
 			return errors.New("невідома дія з матеріалом")
 		}

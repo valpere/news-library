@@ -323,6 +323,9 @@ func (w *Web) renderStatus(rw http.ResponseWriter, name string, data pageData, s
 	rw.Write([]byte(b.String()))
 }
 func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
+	if removedReadFilter(rw, r) {
+		return
+	}
 	q := r.URL.Query()
 	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
 	for _, tag := range strings.Split(q.Get("tags"), ",") {

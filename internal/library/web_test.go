@@ -328,3 +328,20 @@ func TestThereIsNoSeparateReadFlag(t *testing.T) {
 		t.Fatalf("a rated material is no longer in the unrated inbox: %v %v", got, err)
 	}
 }
+
+func TestRemovedReadParameterIsRefusedNotIgnored(t *testing.T) {
+	s, w := testWeb(t)
+	add(t, s, "https://example.com/a")
+	if rw := webRequest(w, "GET", "/browse?read=0", nil, nil); rw.Code != 400 || !strings.Contains(rw.Body.String(), "usefulness=unrated") {
+		t.Fatalf("an old bookmark must not silently list everything: %d %s", rw.Code, rw.Body.String())
+	}
+	if rw := webRequest(w, "GET", "/?read=0", nil, nil); rw.Code != 400 {
+		t.Fatalf("%d", rw.Code)
+	}
+	if rw := webRequest(w, "GET", "/browse?usefulness=unrated", nil, nil); rw.Code != 200 {
+		t.Fatalf("the replacement filter works: %d", rw.Code)
+	}
+	if err := validateChatCommand(ChatCommand{Action: "item", ItemAction: "read", Index: 1}); err == nil {
+		t.Fatal("a stale read/unread item action must be refused, not reported as done")
+	}
+}
