@@ -97,7 +97,7 @@
 {{template "bottom" .}}
 {{end}}
 
-{{define "export"}}<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="{{.ExportCSP}}"><title>{{.Item.Title}}</title><style>body{font:18px system-ui;max-width:900px;margin:2rem auto;padding:1rem;line-height:1.6}pre{white-space:pre-wrap}a{color:#145b7e}.row{display:flex;gap:.5rem;flex-wrap:wrap}button{font:inherit;padding:.5rem;cursor:pointer}[role=tab][aria-selected=true]{background:#145b7e;color:white}textarea{width:100%;min-height:20rem}</style></head><body><h1>{{.Item.Title}}</h1><p><a href="{{.Item.URL}}" rel="noreferrer">Джерело</a></p>{{template "digestContent" .}}<script>{{.ExportScript}}</script></body></html>{{end}}
+{{define "export"}}<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="{{.ExportCSP}}"><title>{{.Item.Title}}</title><style>body{font:18px system-ui;max-width:900px;margin:2rem auto;padding:1rem;line-height:1.6}pre{white-space:pre-wrap}a{color:#145b7e}.row{display:flex;gap:.5rem;flex-wrap:wrap}button{font:inherit;padding:.5rem;cursor:pointer}[role=tab][aria-selected=true]{background:#145b7e;color:white}textarea{width:100%;min-height:20rem}.muted{color:#5b6670;font-size:.9em}</style></head><body><h1>{{.Item.Title}}</h1><p><a href="{{.Item.URL}}" rel="noreferrer">Джерело</a></p>{{template "digestContent" .}}<script>{{.ExportScript}}</script></body></html>{{end}}
 
 {{define "translationContent"}}<article id="translation"><h2>Переклад українською</h2>
 <p class="muted">{{.Digest.ActualModel}} · джерело коротше за поріг дайджесту, тому подано переклад</p>
@@ -107,7 +107,7 @@
 <div class="row" role="tablist" aria-label="Секції дайджесту">{{range $k,$section := .Sections}}<button type="button" role="tab" id="tab-{{$k}}" aria-controls="section-{{$k}}" aria-selected="false" data-section="section-{{$k}}">{{.Title}}</button>{{end}}</div>
 {{range $k,$section := .Sections}}<section id="section-{{$k}}" role="tabpanel" aria-labelledby="tab-{{$k}}"><h3>{{.Title}}</h3>{{.HTML}}</section>{{end}}
 <p><button id="copy-digest" type="button">Копіювати Markdown</button> <span id="copy-status" role="status"></span>{{if not .ExportScript}} · <a href="/items/{{.Item.ID}}/digest/markdown">Markdown</a> · <a href="/items/{{.Item.ID}}/digest/html">HTML</a>{{end}}</p>
-<p class="muted tech">{{.Digest.ActualModel}}{{with .ItemText.Note}} · {{.}}{{end}}{{if gt .Digest.ChunkCount 1}} · Оброблено частинами: {{.Digest.ChunkCount}}{{end}}</p>
+<p class="muted">{{.Digest.ActualModel}}{{with .ItemText.Note}} · {{.}}{{end}}{{if gt .Digest.ChunkCount 1}} · Оброблено частинами: {{.Digest.ChunkCount}}{{end}}</p>
 <textarea id="digest-markdown" hidden>{{.Digest.Markdown}}</textarea>
 </article>{{end}}
 

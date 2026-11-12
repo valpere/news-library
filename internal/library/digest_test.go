@@ -263,7 +263,7 @@ func TestDigestHeaderIsQuiet(t *testing.T) {
 	if err != nil || d == nil || d.ActualModel == "" {
 		t.Fatal(d, err)
 	}
-	html := webRequest(w, "GET", "/items/1", nil, nil).Body.String()
+	html := webRequest(w, "GET", fmt.Sprintf("/items/%d", id), nil, nil).Body.String()
 	start := strings.Index(html, `id="digest"`)
 	if start < 0 {
 		t.Fatal("no digest")
