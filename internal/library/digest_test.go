@@ -252,3 +252,31 @@ func TestDigestWorkerRestartAndFailurePreservesSource(t *testing.T) {
 		t.Fatal("generation mutated human decision")
 	}
 }
+
+func TestDigestHeaderIsQuiet(t *testing.T) {
+	s, w := testWeb(t)
+	enableDigests(t, s)
+	id := add(t, s, "https://example.com/quiet")
+	manual(t, s, id, "Full source text")
+	completeFixtureDigest(t, s)
+	d, err := s.DigestOf(id)
+	if err != nil || d == nil || d.ActualModel == "" {
+		t.Fatal(d, err)
+	}
+	html := webRequest(w, "GET", fmt.Sprintf("/items/%d", id), nil, nil).Body.String()
+	start := strings.Index(html, `id="digest"`)
+	if start < 0 {
+		t.Fatal("no digest")
+	}
+	block := html[start:]
+	if strings.Contains(block, "<h2>Дайджест</h2>") {
+		t.Error("the redundant 'Дайджест' heading is noise")
+	}
+	tabs := strings.Index(block, `role="tablist"`)
+	if tabs < 0 || strings.Contains(block[:tabs], d.ActualModel) || strings.Contains(block[:tabs], "Виділений текст HTML") {
+		t.Errorf("model and extractor note must not precede the tabs")
+	}
+	if !strings.Contains(block[tabs:], d.ActualModel) {
+		t.Errorf("the model name belongs below the digest as technical info")
+	}
+}
