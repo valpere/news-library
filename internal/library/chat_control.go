@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -310,6 +311,10 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 	state.Offset = 0
 	return nil
 }
+
+// chatPageSize is how many collapsed cards one chat page lists.
+const chatPageSize = 10
+
 func (w *Web) chatCards(refs []ChatReference) ([]ChatCard, error) {
 	cards := []ChatCard{}
 	for _, ref := range refs {
@@ -362,6 +367,8 @@ func (w *Web) chatSearch(r *http.Request, state *ChatState) (ChatReply, error) {
 	state.Offset = 0
 	state.Total = len(result.Items)
 	state.Results = []ChatReference{}
+	// What still needs the user's rating comes first; relevance order is kept within each group.
+	sort.SliceStable(result.Items, func(i, j int) bool { return !result.Items[i].Score.Valid && result.Items[j].Score.Valid })
 	for i, item := range result.Items {
 		if i == 1000 {
 			break
@@ -379,7 +386,7 @@ func (w *Web) chatSearch(r *http.Request, state *ChatState) (ChatReply, error) {
 }
 func (w *Web) chatPageResults(state *ChatState) (ChatReply, error) {
 	start := min(state.Offset, len(state.Results))
-	end := min(start+5, len(state.Results))
+	end := min(start+chatPageSize, len(state.Results))
 	cards, err := w.chatCards(state.Results[start:end])
 	if err != nil {
 		return ChatReply{}, err
@@ -395,7 +402,7 @@ func (w *Web) chatPageResults(state *ChatState) (ChatReply, error) {
 		}
 	}
 	if reply.HasNext {
-		reply.Actions = append(reply.Actions, ChatSuggestion{"Наступні 5", "next", ""})
+		reply.Actions = append(reply.Actions, ChatSuggestion{fmt.Sprintf("Наступні %d", chatPageSize), "next", ""})
 	}
 	reply.Actions = append(reply.Actions, ChatSuggestion{"Скинути пошук", "clear", ""})
 	return reply, nil
@@ -512,7 +519,7 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 		if !state.HasSearch {
 			return ChatReply{Kind: "question", Message: "Спершу задайте тему пошуку або відкрийте неоцінені вхідні.", Actions: []ChatSuggestion{{"Неоцінені вхідні", "inbox", ""}}}, nil
 		}
-		state.Offset = min(state.Offset+5, len(state.Results))
+		state.Offset = min(state.Offset+chatPageSize, len(state.Results))
 		return w.chatPageResults(state)
 	case "reset_search":
 		state.Filters = Filters{}
