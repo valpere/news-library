@@ -103,12 +103,11 @@
 <p class="muted">{{.Digest.ActualModel}} · джерело коротше за поріг дайджесту, тому подано переклад</p>
 <div>{{translationHTML .Digest.Markdown}}</div></article>{{end}}
 {{define "completenessAction"}}{{if .ItemText}}{{if .ItemText.UserConfirmed}}<small>Повноту підтвердили ви.</small>{{else if .CanConfirmCompleteness}}<form method="post" action="/items/{{.Item.ID}}/completeness"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="action" value="confirm"><button title="Натисніть, лише якщо звірили з оригіналом і збережений текст справді повний">Підтвердити повноту</button></form>{{end}}{{end}}{{end}}
-{{define "digestContent"}}<article id="digest"><h2>Дайджест</h2>
-<p class="muted">{{.Digest.ActualModel}}</p>
-{{with .ItemText.Note}}<p class="muted">{{.}}</p>{{end}}{{if gt .Digest.ChunkCount 1}}<p class="muted">Оброблено частинами: {{.Digest.ChunkCount}}</p>{{end}}
+{{define "digestContent"}}<article id="digest">
 <div class="row" role="tablist" aria-label="Секції дайджесту">{{range $k,$section := .Sections}}<button type="button" role="tab" id="tab-{{$k}}" aria-controls="section-{{$k}}" aria-selected="false" data-section="section-{{$k}}">{{.Title}}</button>{{end}}</div>
 {{range $k,$section := .Sections}}<section id="section-{{$k}}" role="tabpanel" aria-labelledby="tab-{{$k}}"><h3>{{.Title}}</h3>{{.HTML}}</section>{{end}}
 <p><button id="copy-digest" type="button">Копіювати Markdown</button> <span id="copy-status" role="status"></span>{{if not .ExportScript}} · <a href="/items/{{.Item.ID}}/digest/markdown">Markdown</a> · <a href="/items/{{.Item.ID}}/digest/html">HTML</a>{{end}}</p>
+<p class="muted tech">{{.Digest.ActualModel}}{{with .ItemText.Note}} · {{.}}{{end}}{{if gt .Digest.ChunkCount 1}} · Оброблено частинами: {{.Digest.ChunkCount}}{{end}}</p>
 <textarea id="digest-markdown" hidden>{{.Digest.Markdown}}</textarea>
 </article>{{end}}
 
