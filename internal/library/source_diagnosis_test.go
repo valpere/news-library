@@ -89,7 +89,7 @@ func TestSoftDiagnosisDoesNotClaimTheDigestIsUntrustworthy(t *testing.T) {
 	id := add(t, s, "https://example.com/series")
 	manual(t, s, id, strings.Repeat("Вступ до серії статей. ", 12)+"\n\nExplore more articles")
 	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
-	if !strings.Contains(body, `id="source-diagnosis"`) || strings.Contains(body, "не варто довіряти") {
-		t.Fatalf("soft diagnosis must be shown without the hard-failure warning")
+	if strings.Contains(body, `id="source-diagnosis"`) || strings.Contains(body, "не варто довіряти") {
+		t.Fatalf("soft diagnosis must not raise the hard-failure block")
 	}
 }

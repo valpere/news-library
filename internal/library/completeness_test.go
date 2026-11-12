@@ -85,12 +85,12 @@ func TestWebConfirmCompletenessFlow(t *testing.T) {
 	snap := itemText(t, s, id)
 	page := "/items/" + strconv.FormatInt(id, 10)
 	body := webRequest(w, "GET", page, nil, nil).Body.String()
-	if !strings.Contains(body, "Підтвердити повноту") || !strings.Contains(body, "Текст, схоже, неповний") {
+	if !strings.Contains(body, "Підтвердити повноту") || !strings.Contains(body, "Можливо, текст неповний") {
 		t.Fatalf("button/diagnosis missing:\n%s", body)
 	}
 	post(t, w, page+"/completeness", url.Values{"source": {strconv.FormatInt(snap.ItemID, 10)}, "action": {"confirm"}})
 	body = webRequest(w, "GET", page, nil, nil).Body.String()
-	if strings.Contains(body, "Текст, схоже, неповний") {
+	if strings.Contains(body, "Можливо, текст неповний") {
 		t.Fatal("a user-confirmed text must not be flagged as probably incomplete")
 	}
 	if strings.Contains(body, "Зняти підтвердження") || !strings.Contains(body, "підтвердили ви") {
@@ -111,25 +111,23 @@ func TestNoConfirmButtonForAFooterOnlyText(t *testing.T) {
 	}
 }
 
-func TestWebCutoffOffersRecoveryStubsNotJunk(t *testing.T) {
+func TestWebSoftSignsStayQuietInsideSavedText(t *testing.T) {
 	s, w := testWeb(t)
 	cut := strings.Repeat("Вступ до статті. ", 12) + "\n\nАвтор пояснює, що результати експерименту залежать від багатьох чинників, серед яких і"
-	id := add(t, s, "https://example.com/cut")
-	manual(t, s, id, cut)
-	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
-	for _, want := range []string{"Текст, схоже, обривається", "Підтвердити повноту", `Дотягнути решту тексту`, `Спробувати інший спосіб отримання`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("missing %q", want)
+	teaser := strings.Repeat("Вступ до серії. ", 12) + "\n\nExplore more articles"
+	for name, text := range map[string]string{"cut": cut, "teaser": teaser} {
+		id := add(t, s, "https://example.com/"+name)
+		manual(t, s, id, text)
+		body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
+		for _, bad := range []string{`id="source-diagnosis"`, "заглушка", "Дотягнути решту тексту", "· unknown ·"} {
+			if strings.Contains(body, bad) {
+				t.Errorf("%s: soft sign must stay quiet, found %q", name, bad)
+			}
 		}
-	}
-	if !strings.Contains(body, "disabled") || strings.Contains(body, `href="#junk-action"`) {
-		t.Errorf("stubs must be disabled and junk not offered for a cutoff")
-	}
-	tid := add(t, s, "https://example.com/teaser")
-	manual(t, s, tid, strings.Repeat("Вступ до серії. ", 12)+"\n\nExplore more articles")
-	body = webRequest(w, "GET", "/items/"+strconv.FormatInt(tid, 10), nil, nil).Body.String()
-	if strings.Contains(body, "Дотягнути решту тексту") || !strings.Contains(body, `href="#junk-action"`) {
-		t.Errorf("a teaser offers junk and no recovery stubs")
+		i := strings.Index(body, "Повний збережений текст")
+		if i < 0 || !strings.Contains(body[i:], "Можливо, текст неповний") || !strings.Contains(body[i:], "Підтвердити повноту") {
+			t.Errorf("%s: the quiet note and confirm button belong inside the saved-text details", name)
+		}
 	}
 }
 
@@ -154,5 +152,17 @@ func TestSameTextRefetchKeepsConfirmationChangedTextClearsIt(t *testing.T) {
 	manual(t, s, id, "Changed text")
 	if got := itemText(t, s, id); got.UserConfirmed {
 		t.Fatal("changed text kept the confirmation")
+	}
+}
+
+func TestPageNeverPrintsRawUnknownCompleteness(t *testing.T) {
+	s, w := testWeb(t)
+	id := add(t, s, "https://example.com/plain")
+	manual(t, s, id, strings.Repeat("Звичайний завершений абзац. ", 20)+"Кінець.")
+	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
+	for _, bad := range []string{"· unknown", "unknown ·", ">unknown<"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("raw completeness value leaked: %q", bad)
+		}
 	}
 }
