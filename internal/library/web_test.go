@@ -334,3 +334,29 @@ func TestStaleReadItemActionIsRefused(t *testing.T) {
 		t.Fatal("a read/unread item action no longer exists and must be refused, not reported as done")
 	}
 }
+
+func TestRatingSelectShowsTheCurrentLevel(t *testing.T) {
+	s, w := testWeb(t)
+	id := add(t, s, "https://example.com/a")
+	manual(t, s, id, "text of the article")
+	body := webRequest(w, "GET", "/items/1", nil, nil).Body.String()
+	if !strings.Contains(body, `<option value="" selected disabled>Оберіть рівень</option>`) || strings.Contains(body, `" selected>`) {
+		t.Fatal("an unrated material offers the placeholder and no preselected level")
+	}
+	if err := s.Rate(id, 3, nil); err != nil {
+		t.Fatal(err)
+	}
+	body = webRequest(w, "GET", "/items/1", nil, nil).Body.String()
+	if !strings.Contains(body, `<option value="3" selected>`) || strings.Contains(body, `selected disabled`) {
+		t.Fatalf("a rated material shows its level, not the placeholder")
+	}
+	if strings.Count(body, `" selected>`) != 1 {
+		t.Fatal("exactly one level is preselected")
+	}
+	if err := s.Rate(id, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if body = webRequest(w, "GET", "/items/1", nil, nil).Body.String(); !strings.Contains(body, `<option value="0" selected>`) {
+		t.Fatal("level 0 is a rating too, not the placeholder")
+	}
+}
