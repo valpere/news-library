@@ -86,7 +86,7 @@ func TestChatHomeReadOnlyAndURLBatchReplay(t *testing.T) {
 }
 func TestChatPagingRefinementAndHumanRating(t *testing.T) {
 	s, w := testWeb(t)
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 13; i++ {
 		id := add(t, s, fmt.Sprintf("https://example.com/sqlite/%d", i))
 		manual(t, s, id, "SQLite backup and persistent queue")
 		s.SetTags(id, []string{"sqlite"})
@@ -104,20 +104,20 @@ func TestChatPagingRefinementAndHumanRating(t *testing.T) {
 		return ChatCommand{Action: "search", Criteria: ChatCriteria{Query: &q, Mode: &mode, Sort: &sort, Direction: &dir}}, nil
 	})
 	session, reply := chatTurn(t, w, ChatSession{}, "знайди про резервні копії", "", "")
-	if len(reply.Cards) != 5 || reply.Total != 8 {
+	if len(reply.Cards) != 10 || reply.Total != 13 {
 		t.Fatal(reply)
 	}
 	session, reply = chatTurn(t, w, session, "тільки непрочитане", "", "")
-	if reply.Total != 8 || session.State.Filters.Query != q || session.State.Filters.Usefulness != "unrated" {
+	if reply.Total != 13 || session.State.Filters.Query != q || session.State.Filters.Usefulness != "unrated" {
 		t.Fatal(session.State, reply)
 	}
 	session, reply = chatTurn(t, w, session, "", "tag", "sqlite")
-	if reply.Total != 8 || session.State.Filters.Query != q {
+	if reply.Total != 13 || session.State.Filters.Query != q {
 		t.Fatal(reply)
 	}
 	session, _ = chatTurn(t, w, session, "", "item", "read:1")
 	session, reply = chatTurn(t, w, session, "далі", "", "")
-	if len(reply.Cards) != 3 || reply.Cards[0].Item.ID != 6 || calls != 2 {
+	if len(reply.Cards) != 3 || reply.Cards[0].Item.ID != 11 || calls != 2 {
 		t.Fatal(reply, calls)
 	}
 	session, reply = chatTurn(t, w, session, "", "item", "rate:2")
@@ -128,7 +128,7 @@ func TestChatPagingRefinementAndHumanRating(t *testing.T) {
 	if reply.Kind == "error" {
 		t.Fatal(reply)
 	}
-	ratings, e := s.Ratings(7)
+	ratings, e := s.Ratings(12)
 	if e != nil || len(ratings) != 1 || ratings[0].Score != 3 {
 		t.Fatal(ratings, e)
 	}
@@ -136,9 +136,9 @@ func TestChatPagingRefinementAndHumanRating(t *testing.T) {
 		t.Fatal("short score reply called model")
 	}
 	// A new rating replaces the previous one.
-	manual(t, s, 7, "Changed article version")
+	manual(t, s, 12, "Changed article version")
 	session, _ = chatTurn(t, w, session, "", "item", "rate:2:0")
-	ratings, _ = s.Ratings(7)
+	ratings, _ = s.Ratings(12)
 	if len(ratings) != 1 || ratings[0].Score != 0 {
 		t.Fatal(ratings)
 	}
@@ -496,11 +496,11 @@ func TestChatMissingPrimaryFileDoesNotOfferRating(t *testing.T) {
 
 func TestChatNextShowsNewlyFetchedQueuedSource(t *testing.T) {
 	s, w := testWeb(t)
-	for i := 0; i < 6; i++ {
+	for i := 0; i < chatPageSize+1; i++ {
 		add(t, s, fmt.Sprintf("https://example.com/queued/%d", i))
 	}
 	session, _ := chatTurn(t, w, ChatSession{}, "", "inbox", "")
-	manual(t, s, 6, "Source became available between pages")
+	manual(t, s, chatPageSize+1, "Source became available between pages")
 	_, reply := chatTurn(t, w, session, "далі", "", "")
 	if len(reply.Cards) != 1 || !reply.Cards[0].CanRate || !strings.Contains(reply.Cards[0].Summary, "became available") {
 		t.Fatal(reply)
@@ -659,5 +659,52 @@ func TestChatAppliesAndShowsFiltersTheModelDropped(t *testing.T) {
 	_, all := chatTurn(t, w, ChatSession{}, "покажи матеріали", "", "")
 	if len(all.Criteria) != 0 || !strings.Contains(all.Message, "Фільтрів немає") {
 		t.Fatalf("no filters must be said explicitly: %+v", all)
+	}
+}
+
+func TestChatSearchShowsUnratedFirstAndTenPerPage(t *testing.T) {
+	s, w := testWeb(t)
+	var ids []int64
+	for i := 0; i < 12; i++ {
+		id := add(t, s, fmt.Sprintf("https://example.com/order/%d", i))
+		manual(t, s, id, "Order test article")
+		ids = append(ids, id)
+	}
+	if err := s.Rate(ids[0], 4, nil); err != nil {
+		t.Fatal(err)
+	}
+	mode, q := "fts", "Order"
+	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
+		return ChatCommand{Action: "search", Criteria: ChatCriteria{Query: &q, Mode: &mode}}, nil
+	})
+	session, reply := chatTurn(t, w, ChatSession{}, "знайди order", "", "")
+	if len(reply.Cards) != 10 || reply.Total != 12 || !reply.HasNext {
+		t.Fatalf("a page holds ten cards: %d of %d", len(reply.Cards), reply.Total)
+	}
+	if reply.Cards[0].Item.Score.Valid {
+		t.Fatalf("an unrated material must lead, got %d", reply.Cards[0].Item.ID)
+	}
+	_, reply = chatTurn(t, w, session, "далі", "", "")
+	if len(reply.Cards) != 2 || reply.Cards[1].Item.ID != ids[0] {
+		t.Fatalf("the rated material goes last: %+v", reply.Cards)
+	}
+}
+
+func TestChatExplicitSortIsNotOverriddenByUnratedFirst(t *testing.T) {
+	s, w := testWeb(t)
+	first := add(t, s, "https://example.com/sorted/0")
+	manual(t, s, first, "Sorted test article")
+	second := add(t, s, "https://example.com/sorted/1")
+	manual(t, s, second, "Sorted test article")
+	if err := s.Rate(first, 4, nil); err != nil {
+		t.Fatal(err)
+	}
+	mode, sortBy, dir, q := "fts", "added", "asc", "Sorted"
+	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
+		return ChatCommand{Action: "search", Criteria: ChatCriteria{Query: &q, Mode: &mode, Sort: &sortBy, Direction: &dir}}, nil
+	})
+	_, reply := chatTurn(t, w, ChatSession{}, "знайди sorted", "", "")
+	if len(reply.Cards) != 2 || reply.Cards[0].Item.ID != first {
+		t.Fatalf("an explicit sort keeps its order: %+v", reply.Cards)
 	}
 }
