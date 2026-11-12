@@ -143,6 +143,7 @@ func (s *Store) CompleteDigest(j Job, d Digest) error {
 	if j.Stage != "digest" {
 		return errors.New("not a digest job")
 	}
+	d.Markdown = cleanLatex(d.Markdown)
 	translation := isTranslationPrompt(j.PromptVersion)
 	if translation {
 		if err := validateTranslation(d.Markdown); err != nil {

@@ -659,6 +659,11 @@ NEWS_LIBRARY_YT_DLP (типово yt-dlp, empty disables) та NEWS_LIBRARY_YOUT
 
 ## Валідація дайджестів та історія відмов (schema v10)
 
+Перед валідацією `CompleteDigest` прибирає з Markdown інлайнове LaTeX, яке модель
+подекуди видає (`$\rightarrow$`, `\approx`, `\text{…}`, грецькі літери): `cleanLatex`
+(latex_clean.go) замінює їх на Unicode і не чіпає блоки та інлайн-код. Уже збережені
+дайджести не переписуються.
+
 `SplitDigest` має обмежену карту рівнозначних українських заголовків,
 canonical UI names і чіткий `DigestValidationError` (format/limit). Він
 зберігає body Markdown, не приймає довільних назв і не вигадує відсутніх
