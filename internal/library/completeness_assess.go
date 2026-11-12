@@ -91,6 +91,19 @@ func (s SourceText) ShownWarning() string {
 	return strings.TrimSuffix(s.Warning, "; повноту оригіналу не підтверджено")
 }
 
+// Note is the quiet completeness remark for pages: the verdict label and the
+// extractor warning, or "" when there is nothing to say (never a raw "unknown").
+func (s SourceText) Note() string {
+	var parts []string
+	if label := Assess(s).Label(); label != "" {
+		parts = append(parts, label)
+	}
+	if w := s.ShownWarning(); w != "" {
+		parts = append(parts, w)
+	}
+	return strings.Join(parts, " · ")
+}
+
 // completenessSuffix is " · <label>" for summaries, or "" when there is nothing to say.
 func completenessSuffix(snapshot SourceText) string {
 	if label := Assess(snapshot).Label(); label != "" {
