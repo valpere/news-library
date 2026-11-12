@@ -12,10 +12,18 @@ func impliedChatCriteria(text string, command *ChatCommand) {
 		return
 	}
 	lower := strings.ToLower(text)
-	for _, removal := range []string{"прибер", "скин", "зніми", "знімі", "без обмежен", "забудь"} {
-		if strings.Contains(lower, removal) {
+	lower = strings.TrimSpace(lower)
+	for _, removal := range []string{"прибер", "скин", "зніми", "знімі", "забудь"} {
+		if strings.HasPrefix(lower, removal) {
 			return
 		}
+	}
+	if strings.Contains(lower, "без обмежен") {
+		return
+	}
+	// "необроблені", "не готові" mean the opposite of ready: add no state filter.
+	for _, negated := range []string{"необроблен", "не оброблен", "неготов", "не готов"} {
+		lower = strings.ReplaceAll(lower, negated, "")
 	}
 	has := func(words ...string) bool {
 		for _, w := range words {
