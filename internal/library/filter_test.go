@@ -66,7 +66,7 @@ func TestURLRejectZeroModelCallsAndExplicitOverride(t *testing.T) {
 		t.Fatal("filtered URL processed", worked, e)
 	}
 	i, _ := s.Item(id)
-	if i.FilterState != "rejected" || i.State != "filtered" || i.Score.Valid || i.Read {
+	if i.FilterState != "rejected" || i.State != "filtered" || i.Score.Valid {
 		t.Fatal("rejection changed human decision", i)
 	}
 	if e := s.Retry(id); e == nil {
@@ -106,7 +106,6 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	if e := s.Rate(id, 3, nil); e != nil {
 		t.Fatal(e)
 	}
-	s.SetRead(id, true)
 	j := claim(t, s)
 	if e := s.Complete(j, SourceText{Text: "Searchable advertisement", Title: "Source"}); e != nil {
 		t.Fatal(e)
@@ -116,7 +115,7 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	if worked, e := worker.Step(context.Background()); worked || e != nil || calls != 0 {
 		t.Fatal("rejected source invoked model")
 	}
-	got, e := s.Search(Filters{Query: "Searchable", Filter: "rejected", Usefulness: "3", Read: "1"})
+	got, e := s.Search(Filters{Query: "Searchable", Filter: "rejected", Usefulness: "3"})
 	if e != nil || len(got) != 1 {
 		t.Fatal("filtered text not searchable", e)
 	}
@@ -134,7 +133,7 @@ func TestSourceRejectKeepsTextSearchAndHumanHistory(t *testing.T) {
 	configureRules(t, s, .8, nil)
 	after, _ := s.FilterReason(id)
 	i, _ := s.Item(id)
-	if i.FilterState != "rejected" || !i.Read || i.Score.Int64 != 3 || before == "" || before != after {
+	if i.FilterState != "rejected" || i.Score.Int64 != 3 || before == "" || before != after {
 		t.Fatal("config change reprocessed judgments")
 	}
 	if e = s.OverrideFilter(id); e != nil {

@@ -52,9 +52,6 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	if err = s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.SetRead(id, true); err != nil {
-		t.Fatal(err)
-	}
 	if err = s.SetTags(id, []string{"human-tag"}); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +89,7 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 		t.Fatal(worked, err)
 	}
 	item, err = s.Item(id)
-	if err != nil || item.State != "ready" || !item.Read || item.Tags != "human-tag" || item.ID != sourceID || fetchCalls != 1 || generationCalls != 2 {
+	if err != nil || item.State != "ready" || item.Tags != "human-tag" || item.ID != sourceID || fetchCalls != 1 || generationCalls != 2 {
 		t.Fatal("recovery changed human state or repeated source", item, err, fetchCalls, generationCalls)
 	}
 	d, err := s.DigestOf(sourceID)
@@ -110,7 +107,7 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 		t.Fatal("old text kept", cur.Text, err)
 	}
 	item, err = s.Item(id)
-	if err != nil || !item.Read || item.Tags != "human-tag" {
+	if err != nil || item.Tags != "human-tag" {
 		t.Fatal("text change touched human state", item, err)
 	}
 }

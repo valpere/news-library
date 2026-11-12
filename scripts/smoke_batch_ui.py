@@ -41,14 +41,14 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='batch-smoke-') as direct
             page.get_by_role('button',name='Додати пачку',exact=True).click()
             assert 'Нових: 180 · Уже були: 1 · Не додано: 0' in page.locator('body').inner_text()
             page.screenshot(path=str(root/'tmp/smoke-batch.png'),full_page=False)
-            page.get_by_role('link',name='Переглянути непрочитані вхідні',exact=True).click()
-            assert 'read=0' in page.url
+            page.get_by_role('link',name='Переглянути неоцінені вхідні',exact=True).click()
+            assert 'usefulness=unrated' in page.url
             page.goto(origin+'/items/1')
-            assert 'непрочитано' in page.locator('body').inner_text()
+            assert 'корисність:' in page.locator('body').inner_text()
             stop(process)
             process,origin=start(data)
             page.goto(origin+'/items/1')
-            assert 'непрочитано' in page.locator('body').inner_text()
+            assert 'корисність:' in page.locator('body').inner_text()
             page.goto(origin+'/browse')
             assert page.locator('article').count()>0
             browser.close()
@@ -56,5 +56,5 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='batch-smoke-') as direct
     with sqlite3.connect(data/'library.sqlite') as db:
         assert db.execute('select count(*) from items').fetchone()[0]==183
         assert db.execute("select count(*) from jobs where stage='fetch' and state='queued'").fetchone()[0]==183
-        assert db.execute('select sum(is_read) from items').fetchone()[0]==0
-print('PASS batch browser: mixed input, canonical duplicate, correction, 180-URL batch, unread inbox and restart-persistent queue. No external network/model calls.')
+        assert db.execute('select count(*) from items where rating is not null').fetchone()[0]==0
+print('PASS batch browser: mixed input, canonical duplicate, correction, 180-URL batch, unrated inbox and restart-persistent queue. No external network/model calls.')

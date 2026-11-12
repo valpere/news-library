@@ -248,7 +248,7 @@ func TestDigestWorkerRestartAndFailurePreservesSource(t *testing.T) {
 		t.Fatal("worker retry", worked, e, calls)
 	}
 	i, _ = restarted.Item(id)
-	if i.State != "ready" || i.Read || i.Score.Valid {
+	if i.State != "ready" || i.Score.Valid {
 		t.Fatal("generation mutated human decision")
 	}
 }

@@ -57,7 +57,7 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 		t.Fatal("detail", rw.Code, rw.Body.String())
 	}
 	i, _ := s.Item(id)
-	if i.Read || i.Score.Valid {
+	if i.Score.Valid {
 		t.Fatal("GET mutated item")
 	}
 	post(t, w, base+"manual", url.Values{"text": {"offline useful knowledge <script>alert(1)</script>"}})
@@ -65,7 +65,7 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 	sid := strconv.FormatInt(vs[0].ItemID, 10)
 	post(t, w, base+"rating", url.Values{"score": {"3"}, "source": {sid}, "reason": {"useful"}})
 	post(t, w, base+"tags", url.Values{"tags": {"go, reading"}})
-	rw = webRequest(w, "GET", "/?q=knowledge&usefulness=3&tags=go&read=0&sort=relevance", nil, nil)
+	rw = webRequest(w, "GET", "/?q=knowledge&usefulness=3&tags=go&sort=relevance", nil, nil)
 	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "/items/1") {
 		t.Fatal("UI search", rw.Code, rw.Body.String())
 	}
@@ -79,19 +79,14 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 	if rw.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("missing CSP")
 	}
-	i, _ = s.Item(id)
-	if i.Read {
-		t.Fatal("GET marks read")
-	}
 	manual(t, s, id, "updated manual text")
 	post(t, w, base+"rating", url.Values{"score": {"0"}, "unknown_date": {"1"}})
 	ratings, _ := s.Ratings(id)
 	if len(ratings) != 1 || ratings[0].Score != 0 || ratings[0].AssessedAt.Valid {
 		t.Fatal("UI rating provenance")
 	}
-	post(t, w, base+"read", url.Values{"read": {"1"}})
 	i, _ = s.Item(id)
-	if !i.Read || i.Score.Int64 != 0 {
+	if i.Score.Int64 != 0 {
 		t.Fatal("UI independent actions")
 	}
 	post(t, w, base+"retry", url.Values{})
@@ -135,30 +130,30 @@ func TestWebMutationBoundaries(t *testing.T) {
 		values  url.Values
 		headers map[string]string
 	}{
-		{"missing token", url.Values{"read": {"1"}}, nil},
-		{"wrong token", url.Values{"read": {"1"}, "csrf": {"wrong"}}, nil},
-		{"foreign origin", url.Values{"read": {"1"}, "csrf": {w.CSRF}}, map[string]string{"Origin": "https://evil.example"}},
-		{"cross site", url.Values{"read": {"1"}, "csrf": {w.CSRF}}, map[string]string{"Sec-Fetch-Site": "cross-site"}},
-		{"rebound host", url.Values{"read": {"1"}, "csrf": {w.CSRF}}, map[string]string{"Host": "evil.example:8787"}},
-		{"agent credentials", url.Values{"read": {"1"}, "csrf": {w.CSRF}}, map[string]string{"Authorization": "Bearer agent-token"}},
+		{"missing token", url.Values{"tags": {"mutated"}}, nil},
+		{"wrong token", url.Values{"tags": {"mutated"}, "csrf": {"wrong"}}, nil},
+		{"foreign origin", url.Values{"tags": {"mutated"}, "csrf": {w.CSRF}}, map[string]string{"Origin": "https://evil.example"}},
+		{"cross site", url.Values{"tags": {"mutated"}, "csrf": {w.CSRF}}, map[string]string{"Sec-Fetch-Site": "cross-site"}},
+		{"rebound host", url.Values{"tags": {"mutated"}, "csrf": {w.CSRF}}, map[string]string{"Host": "evil.example:8787"}},
+		{"agent credentials", url.Values{"tags": {"mutated"}, "csrf": {w.CSRF}}, map[string]string{"Authorization": "Bearer agent-token"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			rw := webRequest(w, "POST", "/items/1/read", tc.values, tc.headers)
+			rw := webRequest(w, "POST", "/items/1/tags", tc.values, tc.headers)
 			if rw.Code != 403 {
 				t.Fatal("mutation allowed", rw.Code)
 			}
 			i, _ := s.Item(id)
-			if i.Read {
+			if i.Tags != "" {
 				t.Fatal("unauthorized write")
 			}
 		})
 	}
-	rw := webRequest(w, "GET", "/items/1/read?read=1&csrf="+w.CSRF, nil, nil)
+	rw := webRequest(w, "GET", "/items/1/tags?tags=mutated&csrf="+w.CSRF, nil, nil)
 	if rw.Code != 405 {
 		t.Fatal("GET mutation allowed", rw.Code)
 	}
-	rw = webRequest(w, "POST", "/items/1/read?csrf="+w.CSRF, url.Values{"read": {"1"}}, nil)
+	rw = webRequest(w, "POST", "/items/1/tags?csrf="+w.CSRF, url.Values{"tags": {"mutated"}}, nil)
 	if rw.Code != 403 {
 		t.Fatal("query CSRF accepted")
 	}
@@ -166,7 +161,7 @@ func TestWebMutationBoundaries(t *testing.T) {
 	if rw.Code != 400 {
 		t.Fatal("oversize manual accepted")
 	}
-	post(t, w, "/items/1/read", url.Values{"read": {"1"}})
+	post(t, w, "/items/1/tags", url.Values{"tags": {"mutated"}})
 }
 
 func TestWebLocalhostWithoutCSRF(t *testing.T) {
@@ -188,16 +183,16 @@ func TestWebLocalhostWithoutCSRF(t *testing.T) {
 		{"Host": "localhost:8787", "Origin": "http://localhost:9999"},
 	} {
 		for _, token := range []string{"", "previous-process-token"} {
-			form := url.Values{"read": {"1"}}
+			form := url.Values{"tags": {"mutated"}}
 			if token != "" {
 				form.Set("csrf", token)
 			}
-			rw := webRequest(w, "POST", "/items/1/read", form, headers)
+			rw := webRequest(w, "POST", "/items/1/tags", form, headers)
 			if rw.Code != 303 {
 				t.Fatal(headers, token, rw.Code, rw.Body.String())
 			}
 			item, _ := s.Item(id)
-			if !item.Read {
+			if item.Tags != "mutated" {
 				t.Fatal("POST did not persist")
 			}
 		}
@@ -207,12 +202,12 @@ func TestWebLocalhostWithoutCSRF(t *testing.T) {
 		{"Host": "evil.localhost:8787"},
 		{"Authorization": "Bearer agent-token"},
 	} {
-		rw := webRequest(w, "POST", "/items/1/read", url.Values{"read": {"0"}}, headers)
+		rw := webRequest(w, "POST", "/items/1/tags", url.Values{"tags": {"other"}}, headers)
 		if rw.Code != 403 {
 			t.Fatal(headers, rw.Code)
 		}
 		item, _ := s.Item(id)
-		if !item.Read {
+		if item.Tags != "mutated" {
 			t.Fatal("rejected request changed state")
 		}
 	}
@@ -268,7 +263,7 @@ func TestWebShowsContentBeforeRating(t *testing.T) {
 	}
 	i, _ := s.Item(id)
 	events, _ := s.Ratings(id)
-	if i.Read || i.Score.Valid || len(events) != 0 {
+	if i.Score.Valid || len(events) != 0 {
 		t.Fatal("opening assessment path made a judgment")
 	}
 	post(t, w, "/items/1/rating", url.Values{"score": {"3"}})
@@ -298,11 +293,44 @@ func TestProgressPageReadsDoNotChangeState(t *testing.T) {
 	jobs, _ := s.Jobs(id)
 	snapshots, _ := s.Texts(id)
 	ratings, _ := s.Ratings(id)
-	if i.Read || i.Score.Valid || i.State != "queued" || len(jobs) != 1 || jobs[0].Attempts != 0 || len(snapshots) != 0 || len(ratings) != 0 {
+	if i.Score.Valid || i.State != "queued" || len(jobs) != 1 || jobs[0].Attempts != 0 || len(snapshots) != 0 || len(ratings) != 0 {
 		t.Fatal("progress polling mutates library state")
 	}
 	rw := webRequest(w, "GET", "/static/progress.js", nil, nil)
 	if rw.Code != 200 || !strings.HasPrefix(rw.Header().Get("Content-Type"), "text/javascript") || !strings.Contains(rw.Header().Get("Content-Security-Policy"), "connect-src 'self'") {
 		t.Fatal("progress script unavailable under CSP")
+	}
+}
+
+func TestThereIsNoSeparateReadFlag(t *testing.T) {
+	s, w := testWeb(t)
+	id := add(t, s, "https://example.com/a")
+	manual(t, s, id, "text of the article")
+	if rw := webRequest(w, "POST", "/items/1/read", url.Values{"read": {"1"}}, nil); rw.Code != 404 {
+		t.Fatalf("the read action no longer exists: %d", rw.Code)
+	}
+	for _, path := range []string{"/items/1", "/browse", "/"} {
+		body := webRequest(w, "GET", path, nil, nil).Body.String()
+		for _, gone := range []string{"Позначити прочитаним", "Позначити непрочитаним", "name=\"read\"", "Читання"} {
+			if strings.Contains(body, gone) {
+				t.Fatalf("%s still offers %q", path, gone)
+			}
+		}
+	}
+	if scalar[int](t, s, `SELECT count(*) FROM pragma_table_info('items') WHERE name='is_read'`) != 0 {
+		t.Fatal("the column is gone from the schema")
+	}
+	if err := s.Rate(id, 3, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Search(Filters{Usefulness: "unrated"})
+	if err != nil || len(got) != 0 {
+		t.Fatalf("a rated material is no longer in the unrated inbox: %v %v", got, err)
+	}
+}
+
+func TestStaleReadItemActionIsRefused(t *testing.T) {
+	if err := validateChatCommand(ChatCommand{Action: "item", ItemAction: "read", Index: 1}); err == nil {
+		t.Fatal("a read/unread item action no longer exists and must be refused, not reported as done")
 	}
 }

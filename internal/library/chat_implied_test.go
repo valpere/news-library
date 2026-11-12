@@ -13,7 +13,7 @@ func TestChatImpliedCriteriaFillsWhatThePlannerDropped(t *testing.T) {
 	}
 	command = ChatCommand{Action: "refine"}
 	impliedChatCriteria("тільки непрочитані та неоцінені", &command)
-	if c = command.Criteria; c.Read == nil || *c.Read != "0" || c.Usefulness == nil || *c.Usefulness != "unrated" {
+	if c = command.Criteria; c.Usefulness == nil || *c.Usefulness != "unrated" {
 		t.Fatalf("%+v", c)
 	}
 	command = ChatCommand{Action: "search"}
@@ -26,7 +26,7 @@ func TestChatImpliedCriteriaFillsWhatThePlannerDropped(t *testing.T) {
 func TestChatImpliedCriteriaRemovalOnlyMattersAtTheStart(t *testing.T) {
 	command := ChatCommand{Action: "search"}
 	impliedChatCriteria("останні непрочитані, скинь дублікати з уваги", &command)
-	if c := command.Criteria; c.Read == nil || c.Sort == nil {
+	if c := command.Criteria; c.Usefulness == nil || c.Sort == nil {
 		t.Fatalf("a removal word in the middle of a request must not drop its other conditions: %+v", c)
 	}
 	for _, text := range []string{"прибери фільтр без оцінки", "Скинь фільтри, без оцінки", "знімі обмеження неоцінені"} {
@@ -62,7 +62,7 @@ func TestChatImpliedCriteriaLeavesPlannerChoicesAndOtherActionsAlone(t *testing.
 	}
 	command = ChatCommand{Action: "search"}
 	impliedChatCriteria("прочитані статті про Go", &command)
-	if command.Criteria.Read != nil || command.Criteria.State != nil {
+	if command.Criteria.State != nil {
 		t.Fatalf("an ambiguous word adds nothing: %+v", command.Criteria)
 	}
 }

@@ -25,13 +25,12 @@ func TestChangedTextErasesEarlierTextAndItsDerivedData(t *testing.T) {
 	if err := s.ConfirmCompleteness(old.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	s.SetRead(id, true)
 	s.SetTags(id, []string{"mine"})
 
 	manual(t, s, id, "A different second text.")
 
 	item, _ := s.Item(id)
-	if item.Score.Valid || !item.Read || item.Tags != "mine" || item.State != "enriching" {
+	if item.Score.Valid || item.Tags != "mine" || item.State != "enriching" {
 		t.Fatal("rating must be erased, read and tags kept, post-processing queued", item)
 	}
 	if n := count(t, s, "SELECT count(*) FROM texts WHERE item_id=?", id); n != 1 {

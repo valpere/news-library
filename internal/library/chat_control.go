@@ -66,7 +66,7 @@ func readonlyChatPrefix(text string) bool {
 	return false
 }
 func chatEventLabel(event, value string) string {
-	labels := map[string]string{"inbox": "Покажи непрочитані вхідні", "find": "Знайти матеріал", "next": "Покажи наступні п’ять", "queue": "Покажи стан обробки", "retry_digests": "Повтори невдалі дайджести", "complete": "Дооброби статті", "help": "Що таке пошук за змістом?", "index": "Перебудуй пошук за змістом", "clear": "Скинь пошук", "category": "Категорія", "tag": "Тег пошуку", "item": "Дія з матеріалом"}
+	labels := map[string]string{"inbox": "Покажи неоцінені вхідні", "find": "Знайти матеріал", "next": "Покажи наступні п’ять", "queue": "Покажи стан обробки", "retry_digests": "Повтори невдалі дайджести", "complete": "Дооброби статті", "help": "Що таке пошук за змістом?", "index": "Перебудуй пошук за змістом", "clear": "Скинь пошук", "category": "Категорія", "tag": "Тег пошуку", "item": "Дія з матеріалом"}
 	text := labels[event]
 	if text == "" {
 		return ""
@@ -74,7 +74,7 @@ func chatEventLabel(event, value string) string {
 	if event == "item" {
 		parts := strings.Split(value, ":")
 		if len(parts) >= 2 {
-			text = map[string]string{"read": "Познач прочитаним", "unread": "Познач непрочитаним", "rate": "Оціни", "tags": "Додай теги"}[parts[0]] + " матеріал №" + parts[1]
+			text = map[string]string{"rate": "Оціни", "tags": "Додай теги"}[parts[0]] + " матеріал №" + parts[1]
 			if len(parts) == 3 {
 				text += " на " + parts[2]
 			}
@@ -92,7 +92,7 @@ func chatLocalCommand(input ChatInput, state ChatState) (ChatCommand, bool, erro
 		switch input.Event {
 		case "inbox", "next", "queue", "retry_digests", "help", "index":
 		case "find":
-			c = ChatCommand{Action: "clarify", Question: "Про що знайти матеріали? Можна вказати тему, категорію, теги, прочитане чи рівень особистої корисності.", Pending: "search"}
+			c = ChatCommand{Action: "clarify", Question: "Про що знайти матеріали? Можна вказати тему, категорію, теги чи рівень особистої корисності.", Pending: "search"}
 		case "clear":
 			c.Action = "reset_search"
 		case "complete":
@@ -205,7 +205,7 @@ func chatLocalCommand(input ChatInput, state ChatState) (ChatCommand, bool, erro
 	switch lower {
 	case "шкала корисності", "поясни шкалу корисності", "що означають рівні корисності":
 		return ChatCommand{Action: "answer", Answer: usefulnessGuide()}, true, nil
-	case "непрочитані", "непрочитані вхідні", "покажи непрочитані", "покажи непрочитані вхідні", "непрочитані матеріали", "покажи непрочитані матеріали":
+	case "непрочитані", "непрочитані вхідні", "покажи непрочитані", "покажи непрочитані вхідні", "непрочитані матеріали", "покажи непрочитані матеріали", "неоцінені", "неоцінені вхідні", "покажи неоцінені", "покажи неоцінені вхідні", "неоцінені матеріали", "покажи неоцінені матеріали":
 		return ChatCommand{Action: "inbox"}, true, nil
 	case "далі", "наступні", "наступні 5", "покажи наступні", "покажи наступні 5":
 		return ChatCommand{Action: "next"}, true, nil
@@ -257,7 +257,7 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 		from *string
 		to   *string
 		max  int
-	}{{p.Query, &f.Query, 4096}, {p.Category, &f.Category, 600}, {p.Read, &f.Read, 8}, {p.Usefulness, &f.Usefulness, 64}, {p.State, &f.State, 32}, {p.Filter, &f.Filter, 32}, {p.ConfidenceMin, &f.ConfidenceMin, 16}, {p.ConfidenceMax, &f.ConfidenceMax, 16}, {p.Sort, &f.Sort, 32}, {p.Direction, &f.Direction, 8}, {p.Mode, &state.Mode, 16}} {
+	}{{p.Query, &f.Query, 4096}, {p.Category, &f.Category, 600}, {p.Usefulness, &f.Usefulness, 64}, {p.State, &f.State, 32}, {p.Filter, &f.Filter, 32}, {p.ConfidenceMin, &f.ConfidenceMin, 16}, {p.ConfidenceMax, &f.ConfidenceMax, 16}, {p.Sort, &f.Sort, 32}, {p.Direction, &f.Direction, 8}, {p.Mode, &state.Mode, 16}} {
 		if pair.from != nil {
 			if len(*pair.from) > pair.max || !utf8.ValidString(*pair.from) {
 				return errors.New("критерій пошуку завеликий")
@@ -284,7 +284,7 @@ func applyChatCriteria(state *ChatState, c ChatCommand) error {
 	for _, pair := range []struct {
 		value   string
 		allowed []string
-	}{{f.Read, []string{"", "0", "1"}}, {f.Filter, []string{"", "passed", "rejected", "overridden", "not_checked"}}, {f.State, []string{"", "queued", "fetching", "ready", "enriching", "needs_input", "retry_wait", "digest_failed", "digest_retry_wait", "filtered", "failed"}}, {f.Sort, []string{"", "added", "usefulness", "confidence", "relevance"}}, {f.Direction, []string{"", "asc", "desc"}}} {
+	}{{f.Filter, []string{"", "passed", "rejected", "overridden", "not_checked"}}, {f.State, []string{"", "queued", "fetching", "ready", "enriching", "needs_input", "retry_wait", "digest_failed", "digest_retry_wait", "filtered", "failed"}}, {f.Sort, []string{"", "added", "usefulness", "confidence", "relevance"}}, {f.Direction, []string{"", "asc", "desc"}}} {
 		valid := false
 		for _, v := range pair.allowed {
 			if v == pair.value {
@@ -446,7 +446,7 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 		state.PendingText = strings.TrimSpace(pendingText + " " + input.Text)
 		q := strings.TrimSpace(command.Question)
 		if q == "" {
-			q = "Що зробити: додати посилання, знайти матеріал, показати непрочитане чи стан обробки?"
+			q = "Що зробити: додати посилання, знайти матеріал, показати неоцінене чи стан обробки?"
 		}
 		return ChatReply{Kind: "question", Message: q}, nil
 	case "add":
@@ -497,9 +497,9 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 				return "\n" + strings.Join(issues, "\n")
 			}
 			return ""
-		}(), Cards: cards, Actions: []ChatSuggestion{{"Переглянути непрочитане", "inbox", ""}, {"Стан обробки", "queue", ""}}}, nil
+		}(), Cards: cards, Actions: []ChatSuggestion{{"Переглянути неоцінене", "inbox", ""}, {"Стан обробки", "queue", ""}}}, nil
 	case "inbox":
-		state.Filters = Filters{Read: "0", Sort: "added", Direction: "asc"}
+		state.Filters = Filters{Usefulness: "unrated", Sort: "added", Direction: "asc"}
 		state.Mode = "fts"
 		state.HasSearch = true
 		return w.chatSearch(r, state)
@@ -510,7 +510,7 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 		return w.chatSearch(r, state)
 	case "next":
 		if !state.HasSearch {
-			return ChatReply{Kind: "question", Message: "Спершу задайте тему пошуку або відкрийте непрочитані вхідні.", Actions: []ChatSuggestion{{"Непрочитані вхідні", "inbox", ""}}}, nil
+			return ChatReply{Kind: "question", Message: "Спершу задайте тему пошуку або відкрийте неоцінені вхідні.", Actions: []ChatSuggestion{{"Неоцінені вхідні", "inbox", ""}}}, nil
 		}
 		state.Offset = min(state.Offset+5, len(state.Results))
 		return w.chatPageResults(state)
@@ -621,10 +621,6 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 			}
 		} else {
 			switch command.ItemAction {
-			case "read", "unread":
-				if err := w.Store.SetRead(id, command.ItemAction == "read"); err != nil {
-					return ChatReply{}, err
-				}
 			case "tags":
 				if len(command.Tags) == 0 {
 					state.Pending = "item"
@@ -786,7 +782,7 @@ func chatCommandLabel(c ChatCommand) string {
 	case "index":
 		return "перебудувати індекс пошуку"
 	case "item":
-		return fmt.Sprintf("%s для матеріалу №%d", map[string]string{"read": "позначити прочитаним", "unread": "позначити непрочитаним", "rate": "дати власну оцінку", "tags": "додати теги"}[c.ItemAction], c.Index)
+		return fmt.Sprintf("%s для матеріалу №%d", map[string]string{"rate": "дати власну оцінку", "tags": "додати теги"}[c.ItemAction], c.Index)
 	}
 	return c.Action
 }
