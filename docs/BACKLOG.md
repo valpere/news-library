@@ -102,7 +102,7 @@ Read API: пошук, повний запис, фрагмент, коротки�
 
 Статус: код і offline приймання реалізовано. Є backup/verify/restore із primary
 files, checkpoints, history/queue та paused restore. Telegram-добірки й розклад
-прибрано; заміна — бот (реалізовано, див. REQUIREMENTS; жива інтеграція ще не перевірена).
+прибрано; заміна — бот (код є, але відкладено до VPS і вимкнено; див. REQUIREMENTS).
 
 Backup/restore, контроль черги та зрозумілі помилки.
 FR-13 (бот), FR-14.
