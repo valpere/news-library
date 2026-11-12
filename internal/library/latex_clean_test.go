@@ -15,6 +15,9 @@ func TestCleanLatex(t *testing.T) {
 		"`$HOME/bin` і $\\pi$":                    "`$HOME/bin` і π",
 		"```\necho $HOME $\\to$\n```\n$\\to$ вне": "```\necho $HOME $\\to$\n```\n→ вне",
 		`\total і \tox`:                           `\total і \tox`,
+		`Ціна $5-$10 і $HOME/$PATH`:               `Ціна $5-$10 і $HOME/$PATH`,
+		`$\frac{a}{b}$ лишається`:                 `$\frac{a}{b}$ лишається`,
+		"~~~\n$\\to$\n~~~":                        "~~~\n$\\to$\n~~~",
 		"без формул":                              "без формул",
 	}
 	for in, want := range cases {

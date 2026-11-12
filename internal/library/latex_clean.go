@@ -45,7 +45,7 @@ func cleanLatex(md string) string {
 	lines := strings.Split(md, "\n")
 	fenced := false
 	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
 			fenced = !fenced
 			continue
 		}
@@ -65,9 +65,25 @@ func cleanLatexText(s string) string {
 	if !strings.ContainsAny(s, `\$`) {
 		return s
 	}
+	// Only a $...$ group that holds LaTeX commands is unwrapped, and only when every
+	// command in it is understood; prices ("$5-$10") and shell variables stay intact.
+	s = latexDollar.ReplaceAllStringFunc(s, func(m string) string {
+		if !strings.Contains(m, `\`) {
+			return m
+		}
+		inner := latexSymbolsText(m[1 : len(m)-1])
+		if strings.Contains(inner, `\`) {
+			return m
+		}
+		return inner
+	})
+	return latexSymbolsText(s)
+}
+
+func latexSymbolsText(s string) string {
 	s = latexWrapped.ReplaceAllString(s, "$1")
 	for _, sym := range latexSymbols {
 		s = sym.re.ReplaceAllLiteralString(s, sym.out)
 	}
-	return latexDollar.ReplaceAllString(s, "$1")
+	return s
 }
