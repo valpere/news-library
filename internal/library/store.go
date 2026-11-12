@@ -121,23 +121,12 @@ func CanonicalURL(raw string) (string, error) {
 	if u.Path == "" {
 		u.Path = "/"
 	}
-	// Preserve query order and encoding; only remove known tracking keys.
-	var parts []string
-	for _, part := range strings.Split(u.RawQuery, "&") {
-		if part == "" {
-			continue
-		}
-		key, err := url.QueryUnescape(strings.SplitN(part, "=", 2)[0])
-		if err != nil {
-			return "", err
-		}
-		switch strings.ToLower(key) {
-		case "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id", "fbclid", "gclid":
-			continue
-		}
-		parts = append(parts, part)
+	// Preserve query order and encoding; only remove tracking keys.
+	query, err := dropTracking(u.Hostname(), u.RawQuery)
+	if err != nil {
+		return "", err
 	}
-	u.RawQuery = strings.Join(parts, "&")
+	u.RawQuery = query
 	return u.String(), nil
 }
 func (s *Store) AddURL(raw string) (int64, error) {
@@ -157,7 +146,7 @@ func (s *Store) addURLFlag(raw, telegram string) (int64, bool, error) {
 		return 0, false, err
 	}
 	defer tx.Rollback()
-	res, err := tx.Exec("INSERT INTO items(original_url,canonical_url,added_at,telegram) VALUES(?,?,?,?) ON CONFLICT(canonical_url) DO NOTHING", strings.TrimSpace(raw), canonical, nowUTC(), telegram)
+	res, err := tx.Exec("INSERT INTO items(original_url,canonical_url,added_at,telegram) VALUES(?,?,?,?) ON CONFLICT(canonical_url) DO NOTHING", cleanAddress(strings.TrimSpace(raw)), canonical, nowUTC(), telegram)
 	if err != nil {
 		return 0, false, err
 	}
@@ -169,7 +158,7 @@ func (s *Store) addURLFlag(raw, telegram string) (int64, bool, error) {
 	if err = tx.QueryRow("SELECT id FROM items WHERE canonical_url=?", canonical).Scan(&id); err != nil {
 		return 0, false, err
 	}
-	if _, err = tx.Exec("INSERT INTO source_aliases(url,item_id) VALUES(?,?) ON CONFLICT(url) DO NOTHING", strings.TrimSpace(raw), id); err != nil {
+	if _, err = tx.Exec("INSERT INTO source_aliases(url,item_id) VALUES(?,?) ON CONFLICT(url) DO NOTHING", cleanAddress(strings.TrimSpace(raw)), id); err != nil {
 		return 0, false, err
 	}
 	if count == 1 {
