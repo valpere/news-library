@@ -166,3 +166,15 @@ func TestPageNeverPrintsRawUnknownCompleteness(t *testing.T) {
 		}
 	}
 }
+
+func TestHardDiagnosisKeepsRecoveryActions(t *testing.T) {
+	s, w := testWeb(t)
+	id := add(t, s, "https://example.com/hardfooter")
+	manual(t, s, id, "Copyright © 2014-2026 The Cucumber Open Source Project")
+	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
+	for _, want := range []string{`id="source-diagnosis"`, "Отримати текст повторно", `href="#manual-text"`, `href="#junk-action"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("hard diagnosis lost %q", want)
+		}
+	}
+}

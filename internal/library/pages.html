@@ -57,7 +57,7 @@
 {{end}}
 {{if .ItemText}}
 <details><summary>Повний збережений текст</summary>
-<p id="saved-text">{{.ItemText.Origin}} · {{.ItemText.Extractor}}{{with .ItemText.Note}} · {{.}}{{end}} · {{date .ItemText.RetrievedAt}}</p>
+<p id="saved-text">{{.ItemText.Origin}} · {{.ItemText.Extractor}}{{with .ItemText.ShownWarning}} · {{.}}{{end}} · {{date .ItemText.RetrievedAt}}</p>
 {{with .SourceDiagnosis}}{{if .Soft}}<p class="muted">Можливо, текст неповний: {{.Details}}</p>{{end}}{{end}}{{template "completenessAction" .}}<pre>{{.ItemText.Text}}</pre></details>
 {{end}}
 </section>
