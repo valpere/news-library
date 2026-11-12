@@ -90,7 +90,7 @@ func Open(path string) (*Store, error) {
 	}
 	if version != 0 && version != CurrentSchema {
 		db.Close()
-		return nil, fmt.Errorf("database schema %d is not supported by this build (expects %d); use the import tool to bring data over", version, CurrentSchema)
+		return nil, fmt.Errorf("database schema %d is not supported by this build (expects %d); restore it from a backup made by the matching build", version, CurrentSchema)
 	}
 	if version == 0 {
 		tx, e := db.Begin()

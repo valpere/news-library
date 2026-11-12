@@ -1,6 +1,9 @@
 package library
 
-import "database/sql"
+import (
+	"database/sql"
+	"testing"
+)
 
 // ratingRow is the item's single current rating in the shape older tests inspect.
 type ratingRow struct {
@@ -43,4 +46,14 @@ func (s *Store) Texts(id int64) ([]SourceText, error) {
 		result = append(result, v)
 	}
 	return result, rows.Err()
+}
+
+// scalar reads one value of a single-row query.
+func scalar[T any](t *testing.T, s *Store, q string, args ...any) T {
+	t.Helper()
+	var v T
+	if err := s.DB.QueryRow(q, args...).Scan(&v); err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+	return v
 }
