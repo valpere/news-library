@@ -1,5 +1,8 @@
 # Reusable project helpers
 
+One-line index of the agent-only helpers (including `ci-wait.sh`, `merge-deploy.sh`,
+`page-text.sh`): [TOOLS.md](TOOLS.md).
+
 ## Operational helpers
 
 `python3 minions/library_doctor.py --output tmp/doctor-01` reads private `.env`
