@@ -627,3 +627,37 @@ func TestChatLocalHTTPDoesNotRequireCSRF(t *testing.T) {
 		t.Fatal(items)
 	}
 }
+
+func TestChatAppliesAndShowsFiltersTheModelDropped(t *testing.T) {
+	s, w := testWeb(t)
+	ready := add(t, s, "https://example.com/ready")
+	rated := add(t, s, "https://example.com/rated")
+	queued := add(t, s, "https://example.com/queued")
+	for _, id := range []int64{ready, rated} {
+		manual(t, s, id, "text of the article")
+		s.DB.Exec(`UPDATE items SET state='ready' WHERE id=?`, id)
+	}
+	if err := s.Rate(rated, 4, nil); err != nil {
+		t.Fatal(err)
+	}
+	sort, dir := "added", "desc"
+	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
+		// The model keeps only the sort and forgets the other two conditions.
+		return ChatCommand{Action: "search", Criteria: ChatCriteria{Sort: &sort, Direction: &dir}}, nil
+	})
+	_, reply := chatTurn(t, w, ChatSession{}, "Знайти останні оброблені без оцінки", "", "")
+	if reply.Total != 1 || len(reply.Cards) != 1 || reply.Cards[0].Item.ID != ready {
+		t.Fatalf("only the processed unrated material matches (not rated %d, not queued %d): %+v", rated, queued, reply)
+	}
+	shown := strings.Join(reply.Criteria, " | ")
+	if !strings.Contains(shown, "Стан") || !strings.Contains(shown, "Корисність") || !strings.Contains(shown, "Сортування") {
+		t.Fatalf("every applied filter is listed: %q", shown)
+	}
+	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
+		return ChatCommand{Action: "search"}, nil
+	})
+	_, all := chatTurn(t, w, ChatSession{}, "покажи матеріали", "", "")
+	if len(all.Criteria) != 0 || !strings.Contains(all.Message, "Фільтрів немає") {
+		t.Fatalf("no filters must be said explicitly: %+v", all)
+	}
+}
