@@ -390,6 +390,9 @@ func (w *Web) chatPageResults(state *ChatState) (ChatReply, error) {
 		reply.Message = "Матеріалів за цими умовами немає. Спробуйте іншу тему або приберіть частину критеріїв."
 	} else {
 		reply.Message = fmt.Sprintf("Знайдено %d. Показую %d–%d.", state.Total, start+1, end)
+		if len(reply.Criteria) == 0 {
+			reply.Message += " Фільтрів немає — показано всі матеріали."
+		}
 	}
 	if reply.HasNext {
 		reply.Actions = append(reply.Actions, ChatSuggestion{"Наступні 5", "next", ""})
@@ -733,6 +736,9 @@ func (w *Web) handleChatTurn(r *http.Request, id string, input ChatInput) (ChatS
 		}
 	}
 	reply := ChatReply{}
+	if err == nil && input.Event == "" {
+		impliedChatCriteria(input.Text, &command)
+	}
 	if err == nil {
 		err = validateChatCommand(command)
 	}
