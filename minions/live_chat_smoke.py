@@ -164,7 +164,6 @@ def main():
                 post('/items', {'csrf': csrf, 'url': f'https://example.invalid/chat-fixture/{i}'})
                 post(f'/items/{i+1}/manual', {'csrf': csrf, 'text': f'{topic}: резервні копії backup, відновлення бази даних і надійність черги. Синтетичний тестовий матеріал {i}.'})
                 post(f'/items/{i+1}/tags', {'csrf': csrf, 'tags': 'backup, sqlite' if i < 6 else 'rust'})
-            post('/items/1/read', {'csrf': csrf, 'read': '1'})
             with sqlite3.connect(f'file:{data}/library.sqlite?mode=ro', uri=True) as db:
                 def send(text):
                     html = get()
@@ -186,19 +185,17 @@ def main():
                 state, reply = send('Підбери мені матеріали про SQLite')
                 check(state['HasSearch'] and state['Filters']['Query'] and len(state['Cards']) > 1, 'topic search was not executed')
                 query = state['Filters']['Query']
-                state, _ = send('Залиши з цього тільки те, що я ще не прочитав')
-                check(state['Filters']['Read'] == '0' and state['Filters']['Query'] == query, 'unread refinement lost the topic')
+                state, _ = send('Залиши з цього тільки те, що я ще не оцінив')
+                check(state['Filters']['Usefulness'] == 'unrated' and state['Filters']['Query'] == query, 'unrated refinement lost the topic')
                 state, _ = send('Додай до цього пошуку тег backup')
                 check('backup' in state['Filters']['Tags'] and state['Filters']['Query'] == query, 'tag was not added to the active search')
-                state, _ = send('Прибери обмеження за тегом, тему і непрочитане залиш')
-                check(not state['Filters']['Tags'] and state['Filters']['Read'] == '0' and state['Filters']['Query'] == query, 'removing a tag lost other criteria')
+                state, _ = send('Прибери обмеження за тегом, тему і неоцінене залиш')
+                check(not state['Filters']['Tags'] and state['Filters']['Usefulness'] == 'unrated' and state['Filters']['Query'] == query, 'removing a tag lost other criteria')
                 first = state['Cards'][0]['Item']['ID']
                 state, reply = send('Оціни перший матеріал')
                 check(reply['Kind'] == 'question' and db.execute('SELECT count(*) FROM items WHERE rating IS NOT NULL').fetchone()[0] == 0, 'missing score was invented')
                 state, _ = send('3')
                 check(db.execute('SELECT id,rating FROM items WHERE rating IS NOT NULL').fetchall() == [(first, 3)], 'short score reply did not complete the previous question')
-                state, _ = send('Перший уже прочитав, познач це')
-                check(db.execute('SELECT is_read FROM items WHERE id=?', (first,)).fetchone()[0] == 1, 'shown card was not marked read')
                 state, reply = send('Повтори обробку')
                 check(reply['Kind'] == 'question', 'ambiguous processing retry did not ask a question')
                 state, reply = send('дайджести')

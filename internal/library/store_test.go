@@ -223,21 +223,18 @@ func TestRatingReplacementAndIndependentActions(t *testing.T) {
 	if e != nil || len(history) != 1 || history[0].Score != 0 || history[0].AssessedAt.Valid {
 		t.Fatal("new rating did not replace the old one", e)
 	}
-	if e = s.SetRead(id, true); e != nil {
-		t.Fatal(e)
-	}
 	if e = s.SetTags(id, []string{"go", "news", "go"}); e != nil {
 		t.Fatal(e)
 	}
 	i, e := s.Item(id)
-	if e != nil || !i.Read || !i.Score.Valid || i.Score.Int64 != 0 {
+	if e != nil || !i.Score.Valid || i.Score.Int64 != 0 {
 		t.Fatal("independence", e)
 	}
 	unrated, e := s.Item(other)
 	if e != nil || unrated.Score.Valid {
 		t.Fatal("unrated became zero")
 	}
-	if e = s.SetRead(999, true); e != sql.ErrNoRows {
+	if e = s.SetTags(999, []string{"x"}); e != sql.ErrNoRows {
 		t.Fatal("missing item", e)
 	}
 }
@@ -253,14 +250,14 @@ func TestFTSFiltersAndStableOrder(t *testing.T) {
 	s.Rate(b, 0, nil)
 	s.SetTags(a, []string{"one"})
 	s.SetTags(b, []string{"two"})
-	s.SetRead(b, true)
+	s.DB.Exec(`UPDATE items SET state='queued' WHERE id=?`, b)
 	for _, dir := range []string{"asc", "desc"} {
 		got, e := s.Search(Filters{Sort: "usefulness", Direction: dir})
 		if e != nil || len(got) != 3 || got[0].ID != a || got[1].ID != b || got[2].ID != c {
 			t.Fatal("stable null order", e)
 		}
 	}
-	got, e := s.Search(Filters{Query: "knowledge", Tags: []string{"one", "two"}, Read: "0", Usefulness: "0", State: "ready"})
+	got, e := s.Search(Filters{Query: "knowledge", Tags: []string{"one", "two"}, Usefulness: "0", State: "ready"})
 	if e != nil || len(got) != 1 || got[0].ID != a {
 		t.Fatal("AND/OR filters", e)
 	}

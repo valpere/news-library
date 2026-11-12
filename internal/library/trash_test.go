@@ -43,7 +43,7 @@ func TestTrashMissingPageIsSeparateAndDeduplicated(t *testing.T) {
 	if err = s.Manual(id, "manual source"); err == nil {
 		t.Fatal("trash accepted normal manual input")
 	}
-	if err = s.SetRead(id, true); err == nil {
+	if err = s.SetTags(id, []string{"x"}); err == nil {
 		t.Fatal("trash accepts normal mutation")
 	}
 	if err = s.Rate(id, 3, nil); err == nil {

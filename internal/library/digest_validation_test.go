@@ -113,7 +113,7 @@ func TestGenerationFailureKindsHistoryAndBackup(t *testing.T) {
 		t.Fatal("diagnostic error hid metadata", events, err)
 	}
 	item, _ := s.Item(id)
-	if !item.HasText || item.Score.Valid || item.Read {
+	if !item.HasText || item.Score.Valid {
 		t.Fatal(item)
 	}
 }

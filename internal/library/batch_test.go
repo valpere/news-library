@@ -11,9 +11,6 @@ import (
 func TestBatchURLsPartialDuplicatesAndRestart(t *testing.T) {
 	s := backupStore(t)
 	existing := add(t, s, "https://example.com/old")
-	if err := s.SetRead(existing, true); err != nil {
-		t.Fatal(err)
-	}
 	results, err := s.AddURLs("\n https://example.com/new?utm_source=mail \r\nnot a URL\nhttps://example.com/new\nhttps://example.com/old\nhttps://example.com/second\n")
 	if err != nil || len(results) != 5 {
 		t.Fatal(results, err)
@@ -42,7 +39,7 @@ func TestBatchURLsPartialDuplicatesAndRestart(t *testing.T) {
 	}
 	old, _ := reopened.Item(existing)
 	fresh, _ := reopened.Item(results[0].ItemID)
-	if !old.Read || fresh.Read || fresh.Score.Valid {
+	if fresh.Score.Valid {
 		t.Fatal(old, fresh)
 	}
 	if _, err = reopened.AddURLs("https://example.com/new\nhttps://example.com/second"); err != nil {

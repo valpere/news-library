@@ -33,7 +33,6 @@ type Item struct {
 	MatchStart, MatchEnd                           int
 	ID                                             int64
 	OriginalURL, URL, Title, AddedAt, State, Error string
-	Read                                           bool
 	HasText                                        bool
 	Score                                          sql.NullInt64
 	RatedAt                                        sql.NullString
@@ -63,7 +62,7 @@ type Job struct {
 type Filters struct {
 	Usefulness                           string
 	Category                             string
-	Query, Read, State, Sort, Direction  string
+	Query, State, Sort, Direction        string
 	Filter, ConfidenceMin, ConfidenceMax string
 	Tags                                 []string
 }
@@ -497,9 +496,6 @@ func (s *Store) Rate(id, score int64, assessed *time.Time) error {
 	}
 	return s.update("UPDATE items SET rating=?,rated_at=? WHERE id=? AND id IN (SELECT id FROM active_items)", score, at, id)
 }
-func (s *Store) SetRead(id int64, value bool) error {
-	return s.update("UPDATE items SET is_read=? WHERE id=? AND id IN (SELECT id FROM active_items)", value, id)
-}
 func (s *Store) update(query string, args ...any) error {
 	r, e := s.DB.Exec(query, args...)
 	if e != nil {
@@ -543,12 +539,12 @@ func (s *Store) SetTags(id int64, tags []string) error {
 }
 
 const confidenceExpr = `(SELECT probability FROM interest_predictions WHERE item_id=i.id)`
-const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.state,i.error,i.is_read,EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id),i.rating,i.rated_at,(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
+const itemSelect = `SELECT i.id,i.original_url,i.canonical_url,i.title,i.added_at,i.state,i.error,EXISTS(SELECT 1 FROM texts WHERE texts.item_id=i.id),i.rating,i.rated_at,(SELECT group_concat(tag,', ') FROM (SELECT tag FROM item_tags WHERE item_id=i.id ORDER BY tag)),i.filter_state,` + confidenceExpr + ` FROM active_items i`
 
 func scanItem(row interface{ Scan(...any) error }) (Item, error) {
 	var i Item
 	var tags sql.NullString
-	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.State, &i.Error, &i.Read, &i.HasText, &i.Score, &i.RatedAt, &tags, &i.FilterState, &i.Confidence)
+	err := row.Scan(&i.ID, &i.OriginalURL, &i.URL, &i.Title, &i.AddedAt, &i.State, &i.Error, &i.HasText, &i.Score, &i.RatedAt, &tags, &i.FilterState, &i.Confidence)
 	i.Tags = tags.String
 	return i, err
 }
@@ -601,13 +597,6 @@ func (s *Store) Search(f Filters) ([]Item, error) {
 	}
 	if minimum != nil && maximum != nil && *minimum > *maximum {
 		return nil, errors.New("мінімальний Confidence перевищує максимальний")
-	}
-	if f.Read != "" {
-		if f.Read != "0" && f.Read != "1" {
-			return nil, errors.New("invalid read filter")
-		}
-		query += " AND i.is_read=?"
-		args = append(args, f.Read)
 	}
 	if f.Usefulness == "unrated" {
 		query += " AND i.rating IS NULL"

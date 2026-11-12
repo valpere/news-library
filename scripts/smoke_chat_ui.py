@@ -36,7 +36,7 @@ class Gateway(BaseHTTPRequestHandler):
         if message == 'очікування':
             assert Gateway.release.wait(timeout=15), 'browser did not release pending request'
         if message=='тільки непрочитане':
-            command={'action':'refine','criteria':{'read':'0'}}
+            command={'action':'refine','criteria':{'usefulness':'unrated'}}
         elif message=='поясни різницю між тегом і категорією':
             command={'action':'answer','answer':'Категорія описує широку тему, а тег — окреме поняття.'}
         elif message=='дивний запит':

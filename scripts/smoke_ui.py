@@ -53,17 +53,14 @@ try:
         assert page.locator('article').count()==1
         page.screenshot(path=str(root/'tmp/smoke-search.png'),full_page=True)
         page.locator('article h2 a').click()
-        assert 'непрочитано' in page.locator('body').inner_text()
         page.locator('select[name=score]').select_option('0')
         page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
-        page.get_by_role('button',name='Позначити прочитаним',exact=True).click()
         assert 'корисність: Нульова' in page.locator('body').inner_text()
         page.screenshot(path=str(root/'tmp/smoke-detail.png'),full_page=True)
         stop(p)
         p,origin=start()
         page.goto(origin+'/items/1')
         assert 'корисність: Нульова' in page.locator('body').inner_text()
-        assert page.get_by_role('button',name='Позначити непрочитаним',exact=True).count()==1
         assert 'durable queue' in page.locator('pre').text_content()
         page.goto(origin+'/browse')
         page.get_by_label('Додати статтю або YouTube').fill('http://127.0.0.1/private-smoke')

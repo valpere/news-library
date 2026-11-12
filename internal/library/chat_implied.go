@@ -39,14 +39,11 @@ func impliedChatCriteria(text string, command *ChatCommand) {
 			*field = &value
 		}
 	}
-	if has("без оцінки", "неоцінен", "не оцінен", "без моєї оцінки") {
+	if has("без оцінки", "неоцінен", "не оцінен", "без моєї оцінки", "непрочитан", "не прочитан") {
 		set(&c.Usefulness, "unrated")
 	}
 	if has("оброблен", "готов") {
 		set(&c.State, "ready")
-	}
-	if has("непрочитан", "не прочитан") {
-		set(&c.Read, "0")
 	}
 	if has("останні", "найновіш", "найсвіжіш", "свіжі", "нещодавн") {
 		set(&c.Sort, "added")

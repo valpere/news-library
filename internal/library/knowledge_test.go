@@ -93,7 +93,7 @@ func TestAutomaticKnowledgePipelineBacklinksAndHumanHistory(t *testing.T) {
 		}
 	}
 	after, _ := s.Item(first)
-	if after.Tags != "human-only" || after.Score.Int64 != 3 || after.Read {
+	if after.Tags != "human-only" || after.Score.Int64 != 3 {
 		t.Fatal(after)
 	}
 	again, _ := s.SourceText(source.ItemID)
@@ -289,7 +289,7 @@ func TestKnowledgeUIExportAndReadOnlyGuards(t *testing.T) {
 		t.Fatal(page.Code, page.Body.String())
 	}
 	item, _ := s.Item(id)
-	if item.Read || item.Score.Valid {
+	if item.Score.Valid {
 		t.Fatal(item)
 	}
 }

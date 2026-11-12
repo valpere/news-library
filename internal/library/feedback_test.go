@@ -23,7 +23,7 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 		t.Fatal("feedback flag not stored", got.Feedback)
 	}
 	i, _ := s.Item(id)
-	if i.Score.Int64 != 3 || i.Read {
+	if i.Score.Int64 != 3 {
 		t.Fatal("feedback changed usefulness")
 	}
 	jobs, _ := s.Jobs(id)

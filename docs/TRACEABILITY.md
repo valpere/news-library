@@ -102,7 +102,7 @@ partial acceptance, canonical duplicates/repeated submit, перезапуск �
 стійкими jobs, незмінність read, bounds-before-write, ізольований
 DB failure, CSRF/Origin/agent guards і escaped correction form.
 Browser fixture: `scripts/smoke_batch_ui.py` — пачка, виправлення рядка,
-повтор, непрочитані вхідні та збереження черги після restart.
+повтор, неоцінені вхідні та збереження черги після restart.
 
 
 YouTube failover FR-03/04/16: `youtube_metadata_test.go` — мовний перебір,
@@ -191,7 +191,7 @@ upstream failure. Live output зберігається локально в tmp, 
 Додаткове приймання estimative usefulness: TestUsefulnessFilterAndSort,
 TestChatUsefulnessExplicitLabelsAndAllUnread та TestWebUsefulnessAndReadAPIScale
 перевіряють рівні шкали, unknown dates, explicit provenance,
-словесні фільтри й незалежність прочитання. Приймання FR-10/15/16 звірено окремо у
+словесні фільтри. Приймання FR-10/15/16 звірено окремо у
 [ACCEPTANCE_AUDIT.md](ACCEPTANCE_AUDIT.md); ці тести шкали самі по собі
 не підміняють перевірку всього recovery workflow.
 

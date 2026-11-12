@@ -77,7 +77,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if item.Read || item.Score.Valid {
+	if item.Score.Valid {
 		return fmt.Errorf("human state changed")
 	}
 	revision, err := bge.Revision(ctx)

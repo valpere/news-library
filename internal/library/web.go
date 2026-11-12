@@ -324,7 +324,7 @@ func (w *Web) renderStatus(rw http.ResponseWriter, name string, data pageData, s
 }
 func (w *Web) list(rw http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), Read: q.Get("read"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
+	f := Filters{Usefulness: q.Get("usefulness"), Category: q.Get("category"), Query: q.Get("q"), State: q.Get("state"), Sort: q.Get("sort"), Direction: q.Get("direction"), Filter: q.Get("filter"), ConfidenceMin: q.Get("confidence_min"), ConfidenceMax: q.Get("confidence_max")}
 	for _, tag := range strings.Split(q.Get("tags"), ",") {
 		if tag = strings.TrimSpace(tag); tag != "" {
 			f.Tags = append(f.Tags, tag)
@@ -502,13 +502,6 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 	}
 	form := r.PostForm
 	switch r.PathValue("action") {
-	case "read":
-		value := form.Get("read")
-		if value != "0" && value != "1" {
-			err = errors.New("потрібно 0 або 1")
-		} else {
-			err = w.Store.SetRead(id, value == "1")
-		}
 	case "tags":
 		err = w.Store.SetTags(id, strings.Split(form.Get("tags"), ","))
 	case "manual":

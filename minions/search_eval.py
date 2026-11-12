@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 from urllib.error import HTTPError
 import ops_common as ops
 
-FILTERS = {'category', 'tags', 'read', 'state', 'usefulness', 'filter', 'sort'}
+FILTERS = {'category', 'tags', 'state', 'usefulness', 'filter', 'sort'}
 
 
 def cases(path):

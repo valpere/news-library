@@ -92,7 +92,7 @@ func TestSemanticSynonymFiltersHybridAndOfflineFTS(t *testing.T) {
 		t.Fatal("FTS calls embeddings", got, err)
 	}
 	item, _ := s.Item(id)
-	if item.Read || item.Score.Valid {
+	if item.Score.Valid {
 		t.Fatal("search mutated human state")
 	}
 	f.fail = false
@@ -206,8 +206,8 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	if rw.Code != 200 {
 		t.Fatal(rw.Code)
 	}
-	for _, path := range []string{"/api/read/items/1", "/items/1/read", "/reindex"} {
-		rw = webRequest(w, "POST", path, url.Values{"csrf": {w.CSRF}, "read": {"1"}}, auth)
+	for _, path := range []string{"/api/read/items/1", "/items/1/tags", "/reindex"} {
+		rw = webRequest(w, "POST", path, url.Values{"csrf": {w.CSRF}, "tags": {"x"}}, auth)
 		if rw.Code < 400 {
 			t.Fatal("agent mutation accepted", path, rw.Code)
 		}
@@ -218,7 +218,7 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	}
 	item, _ := s.Item(id)
 	ratings, _ := s.Ratings(id)
-	if item.Read || item.Score.Int64 != 3 || len(ratings) != 1 {
+	if item.Score.Int64 != 3 || len(ratings) != 1 {
 		t.Fatal("read mutated history")
 	}
 }

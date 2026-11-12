@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
             assert context.status==200
             assert context.json()['context_kind']=='source_excerpt'
             assert Gateway.calls==before_read
-            assert page.request.post(origin+'/items/1/read',headers=auth,data={'read':'1'}).status==403
+            assert page.request.post(origin+'/items/1/tags',headers=auth,data={'tags':'x'}).status==403
             search=page.request.get(origin+'/api/read/search?q=persistent+storage&mode=hybrid',headers=auth)
             assert search.status==200 and len(search.json()['items'])==1
             Gateway.fail=True
@@ -87,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
             assert 'Пошук за змістом недоступний' in page.locator('body').inner_text()
             assert page.locator('article').count()==1
             with sqlite3.connect(Path(data)/'library.sqlite') as db:
-                assert db.execute('SELECT is_read FROM items').fetchone()==(0,)
+                assert db.execute('SELECT rating FROM items').fetchone()==(None,)
                 assert db.execute('SELECT count(*) FROM items WHERE rating IS NOT NULL').fetchone()[0]==0
                 assert db.execute('SELECT count(*) FROM digests').fetchone()[0]==0
             browser.close()

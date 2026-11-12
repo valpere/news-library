@@ -94,12 +94,12 @@ func TestChatPagingRefinementAndHumanRating(t *testing.T) {
 	mode := "fts"
 	sort, dir := "added", "asc"
 	q := "SQLite"
-	read := "0"
+	unrated := "unrated"
 	calls := 0
 	w.ChatPlanner = chatPlannerFunc(func(_ context.Context, _ string, input ChatPlanInput) (ChatCommand, error) {
 		calls++
 		if input.Message == "тільки непрочитане" {
-			return ChatCommand{Action: "refine", Criteria: ChatCriteria{Read: &read}}, nil
+			return ChatCommand{Action: "refine", Criteria: ChatCriteria{Usefulness: &unrated}}, nil
 		}
 		return ChatCommand{Action: "search", Criteria: ChatCriteria{Query: &q, Mode: &mode, Sort: &sort, Direction: &dir}}, nil
 	})
@@ -108,7 +108,7 @@ func TestChatPagingRefinementAndHumanRating(t *testing.T) {
 		t.Fatal(reply)
 	}
 	session, reply = chatTurn(t, w, session, "тільки непрочитане", "", "")
-	if reply.Total != 8 || session.State.Filters.Query != q || session.State.Filters.Read != "0" {
+	if reply.Total != 8 || session.State.Filters.Query != q || session.State.Filters.Usefulness != "unrated" {
 		t.Fatal(session.State, reply)
 	}
 	session, reply = chatTurn(t, w, session, "", "tag", "sqlite")
