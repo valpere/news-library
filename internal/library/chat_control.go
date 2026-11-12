@@ -367,8 +367,11 @@ func (w *Web) chatSearch(r *http.Request, state *ChatState) (ChatReply, error) {
 	state.Offset = 0
 	state.Total = len(result.Items)
 	state.Results = []ChatReference{}
-	// What still needs the user's rating comes first; relevance order is kept within each group.
-	sort.SliceStable(result.Items, func(i, j int) bool { return !result.Items[i].Score.Valid && result.Items[j].Score.Valid })
+	// Under the default (relevance) order, what still needs the user's rating comes first;
+	// relevance is kept within each group. An explicit sort is never overridden.
+	if state.Filters.Sort == "" {
+		sort.SliceStable(result.Items, func(i, j int) bool { return !result.Items[i].Score.Valid && result.Items[j].Score.Valid })
+	}
 	for i, item := range result.Items {
 		if i == 1000 {
 			break

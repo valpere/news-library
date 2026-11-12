@@ -673,19 +673,38 @@ func TestChatSearchShowsUnratedFirstAndTenPerPage(t *testing.T) {
 	if err := s.Rate(ids[0], 4, nil); err != nil {
 		t.Fatal(err)
 	}
-	mode, sort, dir, q := "fts", "added", "asc", "Order"
+	mode, q := "fts", "Order"
 	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
-		return ChatCommand{Action: "search", Criteria: ChatCriteria{Query: &q, Mode: &mode, Sort: &sort, Direction: &dir}}, nil
+		return ChatCommand{Action: "search", Criteria: ChatCriteria{Query: &q, Mode: &mode}}, nil
 	})
 	session, reply := chatTurn(t, w, ChatSession{}, "знайди order", "", "")
 	if len(reply.Cards) != 10 || reply.Total != 12 || !reply.HasNext {
 		t.Fatalf("a page holds ten cards: %d of %d", len(reply.Cards), reply.Total)
 	}
-	if reply.Cards[0].Item.ID != ids[1] || reply.Cards[0].Item.Score.Valid {
+	if reply.Cards[0].Item.Score.Valid {
 		t.Fatalf("an unrated material must lead, got %d", reply.Cards[0].Item.ID)
 	}
 	_, reply = chatTurn(t, w, session, "далі", "", "")
 	if len(reply.Cards) != 2 || reply.Cards[1].Item.ID != ids[0] {
 		t.Fatalf("the rated material goes last: %+v", reply.Cards)
+	}
+}
+
+func TestChatExplicitSortIsNotOverriddenByUnratedFirst(t *testing.T) {
+	s, w := testWeb(t)
+	first := add(t, s, "https://example.com/sorted/0")
+	manual(t, s, first, "Sorted test article")
+	second := add(t, s, "https://example.com/sorted/1")
+	manual(t, s, second, "Sorted test article")
+	if err := s.Rate(first, 4, nil); err != nil {
+		t.Fatal(err)
+	}
+	mode, sortBy, dir, q := "fts", "added", "asc", "Sorted"
+	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
+		return ChatCommand{Action: "search", Criteria: ChatCriteria{Query: &q, Mode: &mode, Sort: &sortBy, Direction: &dir}}, nil
+	})
+	_, reply := chatTurn(t, w, ChatSession{}, "знайди sorted", "", "")
+	if len(reply.Cards) != 2 || reply.Cards[0].Item.ID != first {
+		t.Fatalf("an explicit sort keeps its order: %+v", reply.Cards)
 	}
 }
