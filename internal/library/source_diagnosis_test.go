@@ -40,7 +40,7 @@ func TestItemPageShowsSourceDiagnosisWithActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
-	for _, want := range []string{`id="source-diagnosis"`, "підвал сторінки", "/retry", `href="#manual-text"`, `id="manual-text"`, "/junk", "створено з цього самого тексту"} {
+	for _, want := range []string{`id="source-diagnosis"`, "підвал сторінки", "/retry", `href="#manual-text"`, `id="manual-text"`, `href="#saved-text"`, `id="saved-text"`, "/junk", "створено з цього самого тексту"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %q", want)
 		}
