@@ -6,24 +6,8 @@ import (
 	"errors"
 )
 
-// Feedback sets (or, with "", clears) the digest's quality flag (one current value; a new digest starts without it).
-func (s *Store) Feedback(itemID int64, quality string) error {
-	// An empty quality clears the flag.
-	if quality != "" && quality != "good" && quality != "inaccurate" && quality != "incomplete" && quality != "unclear" {
-		return errors.New("оберіть якість дайджесту")
-	}
-	r, err := s.DB.Exec("UPDATE digests SET feedback=? WHERE item_id=?", quality, itemID)
-	if err != nil {
-		return err
-	}
-	if n, _ := r.RowsAffected(); n != 1 {
-		return errors.New("дайджест не знайдено")
-	}
-	return nil
-}
-
 // Regeneration is an explicit action with a new job; the new digest replaces the
-// current one (and its feedback) when it completes.
+// current one when it completes.
 func (s *Store) RegenerateDigest(itemID int64) error {
 	if s.DigestConfig == nil {
 		return errors.New("генерацію не налаштовано")

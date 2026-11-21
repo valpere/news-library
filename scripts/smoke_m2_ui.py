@@ -70,17 +70,12 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
             assert 'Confidence 73%' in page.locator('#interest-prediction').inner_text()
             page.locator('select[name=score]').select_option('2')
             page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
-            page.get_by_text('Якість дайджесту',exact=True).click()
-            page.locator('select[name=quality]').select_option('inaccurate')
-            page.get_by_role('button',name='Зберегти відгук',exact=True).click()
             assert 'корисність: Низька' in page.locator('body').inner_text()
-            assert 'Поточний відгук: ' in page.locator('body').text_content()
             assert Gateway.calls == 1
             page.get_by_role('button',name='Перегенерувати дайджест',exact=True).click()
             page.get_by_text('Оновлюється дайджест.',exact=False).wait_for()
             page.locator('#processing[data-pending="false"]').wait_for(state='attached',timeout=15000)
             assert Gateway.calls == 2
-            assert 'Поточний відгук' not in page.locator('body').inner_text()
             page.screenshot(path=str(root/'tmp/smoke-m2.png'),full_page=True)
             page.goto(origin+'/browse')
             page.locator('input[name=confidence_min]').fill('70')
@@ -95,4 +90,4 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
             process.send_signal(signal.SIGTERM);process.wait(timeout=15)
         if process.returncode: raise RuntimeError(process.stderr.read())
 gateway.shutdown()
-print('PASS M2 browser smoke: explained zero-call rejection, retained FTS source, explicit override, Confidence, separate feedback, versioned regeneration, unchanged human rating context and confidence search. Fake cloud only.')
+print('PASS M2 browser smoke: explained zero-call rejection, retained FTS source, explicit override, Confidence, versioned regeneration, unchanged human rating context and confidence search. Fake cloud only.')

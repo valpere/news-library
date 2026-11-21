@@ -50,7 +50,7 @@ func (s *Store) installText(tx *sql.Tx, itemID int64, snap SourceText, refreshOn
 }
 
 // eraseDerived deletes everything produced from the item's current text: the
-// digest and its prediction and feedback, knowledge, embeddings and the digest jobs with their checkpoints and failures. The text row itself and the item stay.
+// digest and its prediction, knowledge, embeddings and the digest jobs with their checkpoints and failures. The text row itself and the item stay.
 func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) {
 	paths := map[string]bool{}
 	for _, q := range []string{
@@ -104,7 +104,7 @@ func (s *Store) eraseDerived(tx *sql.Tx, itemID int64) (map[string]bool, error) 
 }
 
 // eraseDigest deletes the item's current digest with what hangs on it (prediction,
-// feedback, knowledge, the digest job and its checkpoints and failures), except the
+// knowledge, the digest job and its checkpoints and failures), except the
 // job keepJob that is producing the replacement.
 func (s *Store) eraseDigest(tx *sql.Tx, itemID, keepJob int64) (map[string]bool, error) {
 	jobs, err := queryIDs(tx, `SELECT id FROM jobs WHERE item_id=? AND stage='digest' AND id<>?`, itemID, keepJob)

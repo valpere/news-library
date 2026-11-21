@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
+func TestRegenerationPreservesExactContext(t *testing.T) {
 	s, w := testWeb(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/feedback")
@@ -18,18 +18,6 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	if e := s.Rate(id, 3, nil); e != nil {
 		t.Fatal(e)
 	}
-	post(t, w, "/items/1/feedback", url.Values{"quality": {"inaccurate"}})
-	if got, _ := s.DigestOf(sid); got.Feedback != "inaccurate" {
-		t.Fatal("feedback flag not stored", got.Feedback)
-	}
-	i, _ := s.Item(id)
-	if i.Score.Int64 != 3 {
-		t.Fatal("feedback changed usefulness")
-	}
-	jobs, _ := s.Jobs(id)
-	if len(jobs) != 0 {
-		t.Fatal("feedback scheduled AI")
-	}
 	if e := s.RegenerateDigest(id); e != nil {
 		t.Fatal(e)
 	}
@@ -38,7 +26,7 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	}
 	j := claim(t, s)
 	rw := webRequest(w, "GET", "/items/1", nil, nil)
-	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "Оновлюється дайджест") || !strings.Contains(rw.Body.String(), `name="quality"`) {
+	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "Оновлюється дайджест") {
 		t.Fatal("previous result disappeared while regenerating")
 	}
 	if e := s.CompleteDigest(j, Digest{Markdown: strings.Replace(fixtureDigest, "Один сервіс.", "Нова версія.", 1), ActualModel: j.Model, Provider: "fixture"}); e != nil {
@@ -47,9 +35,6 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	next, _ := s.DigestOf(sid)
 	if next == nil || !strings.Contains(next.Markdown, "Нова версія.") {
 		t.Fatal("new digest missing")
-	}
-	if next.Feedback != "" {
-		t.Fatal("feedback of the replaced digest kept", next.Feedback)
 	}
 	if ratings, _ := s.Ratings(id); len(ratings) != 1 {
 		t.Fatal("regeneration erased the rating")
@@ -70,41 +55,30 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 		t.Fatal("failed regeneration invisible", rw.Code)
 	}
 	other := add(t, s, "https://example.com/foreign")
-	if e = s.Feedback(other, "good"); e == nil {
-		t.Fatal("foreign feedback accepted")
-	}
-	if e = s.Feedback(id, "unknown"); e == nil {
-		t.Fatal("invalid quality accepted")
-	}
 	if e = s.RegenerateDigest(other); e == nil {
 		t.Fatal("foreign source regeneration")
 	}
 }
 
-func TestFeedbackCanBeClearedAndDiesWithTheText(t *testing.T) {
+func TestDigestFeedbackIsGone(t *testing.T) {
 	s, w := testWeb(t)
 	enableDigests(t, s)
-	id := add(t, s, "https://example.com/flag")
+	id := add(t, s, "https://example.com/nofeedback")
 	seedText(t, s, id, "Source text")
 	completeFixtureDigest(t, s)
-	if e := s.Feedback(id, "unclear"); e != nil {
-		t.Fatal(e)
+	body := webRequest(w, "GET", "/items/1", nil, nil).Body.String()
+	for _, bad := range []string{"Якість дайджесту", "Зберегти відгук", "/feedback", `name="quality"`} {
+		if strings.Contains(body, bad) {
+			t.Errorf("page still offers digest feedback: %q", bad)
+		}
 	}
-	page := webRequest(w, "GET", "/items/1", nil, nil).Body.String()
-	if !strings.Contains(page, `value="unclear" selected`) {
-		t.Fatal("current flag not preselected")
+	rw := webRequest(w, "POST", "/items/1/feedback", url.Values{"csrf": {w.CSRF}, "quality": {"good"}}, nil)
+	if rw.Code == 303 {
+		t.Errorf("POST /feedback must not be accepted, got %d", rw.Code)
 	}
-	if e := s.Feedback(id, ""); e != nil {
-		t.Fatal(e)
-	}
-	if d, _ := s.DigestOf(id); d.Feedback != "" {
-		t.Fatal("flag not cleared", d.Feedback)
-	}
-	if e := s.Feedback(id, "good"); e != nil {
-		t.Fatal(e)
-	}
-	seedText(t, s, id, "A different source text")
-	if d, _ := s.DigestOf(id); d != nil {
-		t.Fatal("digest and its flag survived the text change", d.Feedback)
+	var n int
+	s.DB.QueryRow("SELECT count(*) FROM pragma_table_info('digests') WHERE name='feedback'").Scan(&n)
+	if n != 0 {
+		t.Error("digests.feedback column still exists")
 	}
 }

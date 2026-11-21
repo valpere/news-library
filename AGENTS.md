@@ -32,7 +32,7 @@ See remaining optional M2 integration work in `docs/BACKLOG.md`.
 M3 uses local bge-m3 with versioned persistent derived indexes and read-only
 agent API. FTS/context need no inference; semantic queries never generate text.
 Rules default to empty; predictions require an explicit current interest profile.
-Digest-quality feedback must not alter human usefulness ratings.
+There is no separate digest-quality feedback; only the human usefulness rating exists.
 Generation failures have typed reasons (only the last one is kept per material); rejected replies
 are diagnostics, never accepted digests. Format/configuration/limit/source
 failures must not retry automatically; diagnostic files belong in backups.
