@@ -289,7 +289,7 @@ def run_once(name, archive, prompt, documents, directory, timeout):
             raise ValueError('CLI unavailable')
         with (directory / 'stdout.log').open('w') as stdout, (directory / 'stderr.log').open('w') as stderr:
             process = subprocess.Popen(command, cwd=snapshot, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, start_new_session=True,
-                                       env={**os.environ, 'CLAUDE_NON_INTERACTIVE': '1', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY': '1', **AGENT_ENV.get(name, {})})
+                                       env={**os.environ, **AGENT_ENV.get(name, {})})
             try:
                 result['exit_code'] = process.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -328,8 +328,6 @@ def run_once(name, archive, prompt, documents, directory, timeout):
         result['transient'] = transient and result['error'] == 'reviewer exited unsuccessfully'
         if result['error'] == 'reviewer timeout':
             result['events'] = sum(1 for line in raw.splitlines() if line.strip())
-    finally:
-        shutil.rmtree(snapshot, ignore_errors=True)
     result['duration_seconds'] = round(time.monotonic() - start, 2)
     write_json(directory / 'result.json', result)
     return result
@@ -376,7 +374,6 @@ def main():
         manifest['documents'][file] = {'sha256': hashlib.sha256(content.encode()).hexdigest(), 'lines': len(content.splitlines())}
         prompt += '\nDOCUMENT: ' + file + '\n' + '\n'.join(f'{i}: {line}' for i, line in enumerate(content.splitlines(), 1)) + '\nEND DOCUMENT\n'
     (output / 'prompt.md').write_text(prompt)
-    shutil.rmtree(snapshot, ignore_errors=True)
     write_json(output / 'manifest.json', manifest)
     print('Council input:', output, flush=True)
     if args.dry_run:
