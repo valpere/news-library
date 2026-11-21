@@ -90,4 +90,4 @@ try:
 finally:
     if p.poll() is None: stop(p)
     smoke_tmp.cleanup()
-print('PASS browser smoke: needs_input, seeded text, estimative usefulness Помірна→Нульова, all items retained, tags/FTS, explicit read, escaped HTML, history, restart/duplicates, queued card without ratings, automatic result display and preserved unsent input. Screenshots: tmp/smoke-search.png, tmp/smoke-detail.png, tmp/smoke-pending.png')
+print('PASS browser smoke: needs_input, seeded text, estimative usefulness Помірна→Нульова, all items retained, tags/FTS, explicit read, escaped HTML, history, restart/duplicates, queued card without ratings, automatic result display. Screenshots: tmp/smoke-search.png, tmp/smoke-detail.png, tmp/smoke-pending.png')

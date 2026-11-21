@@ -262,7 +262,7 @@ Backup отримувати узгодженим способом для SQLite,
 Текст і походження зберігаються до генерації. Ручного вставлення тексту немає: текст завжди
 добувається з джерела. Новий текст (повторне отримання) замінює поточний; з іншим hash це стирає оцінку, зв'язки й
 підтвердження повноти і ставить матеріал у чергу постобробки. Відсутній текст дає needs_input. Повтор не створює
-паралельного fetch того самого item. 
+паралельного fetch того самого item.
 
 ### FUN-NL-RATING
 
@@ -466,7 +466,7 @@ item/job; source-рішення — після первинного файла �
 Відсів скасовує queued/retry jobs цього проходу, зберігаючи джерело й FTS.
 Override додає рішення з override_of, явно створює fetch job з прапором
 filter_override або digest job для вибраного тексту. Новий snapshot із
-наступного ручного введення/звичайного refresh перевіряється окремо.
+наступного звичайного refresh перевіряється окремо.
 Конфігурація застосовується до нової обробки, без автоматичного rescan.
 
 `prediction.go` перевіряє JSON wrapper: markdown та prediction із числом
@@ -651,7 +651,7 @@ Metadata helper теж використовує public-address guard: ephemeral 
 HTTP proxy із safeDial, CONNECT лише 80/443, HTTP лише GET/port 80; кожна нова
 адреса/redirect повторно проходить DNS/IP checks. Context/закриття завершує
 процесну групу, proxy та tunnels, output bounded. Резерв optional, відсутній
-executable дає діагностику й manual/retry без втрати URL/тексту. Конфігурація
+executable дає діагностику й retry без втрати URL/тексту. Конфігурація
 NEWS_LIBRARY_YT_DLP (типово yt-dlp, empty disables) та NEWS_LIBRARY_YOUTUBE_LANGUAGES
 (типово uk,en), flag/environment/.env precedence як в інших settings.
 Офіційні параметри: [yt-dlp](https://github.com/yt-dlp/yt-dlp#usage-and-options).
@@ -990,8 +990,7 @@ Footer-only guard розпізнає один copyright рядок із роко
 та власником, optional All rights reserved. Snapshot зберігається до
 перевірки в processSnapshot; правила відсіву мають пріоритет, після них guard
 ставить needs_input і не створює digest job. Complete fetch зберігає typed
-source failure для цього snapshot у тій самій fenced транзакції; manual
-snapshot також зберігається. HTML decode не губить footer як помилку fetch,
+source failure для цього snapshot у тій самій fenced транзакції. HTML decode не губить footer як помилку fetch,
 generation/chunking/knowledgeContext/embedding повторюють guard для старих
 snapshots. Повідомлення пояснює потребу тексту/fresh fetch, не нового дайджесту.
 Якщо selected snapshot уже існує, новий footer зберігається в історію без
