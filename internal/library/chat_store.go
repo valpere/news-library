@@ -57,10 +57,33 @@ func (s *Store) ChatSession(id string) (ChatSession, error) {
 		}
 		session.Messages = append(session.Messages, message)
 	}
+	if err = rows.Err(); err != nil {
+		return session, err
+	}
+	// Stored replies are snapshots: cards of materials moved to the trash since must not reappear.
+	for i := range session.Messages {
+		if session.Messages[i].Reply.Cards, err = s.activeCards(session.Messages[i].Reply.Cards); err != nil {
+			return session, err
+		}
+	}
 	for i, j := 0, len(session.Messages)-1; i < j; i, j = i+1, j-1 {
 		session.Messages[i], session.Messages[j] = session.Messages[j], session.Messages[i]
 	}
-	return session, rows.Err()
+	return session, nil
+}
+
+func (s *Store) activeCards(cards []ChatCard) ([]ChatCard, error) {
+	kept := cards[:0:0]
+	for _, card := range cards {
+		var n int
+		if err := s.DB.QueryRow("SELECT count(*) FROM active_items WHERE id=?", card.Item.ID).Scan(&n); err != nil {
+			return nil, err
+		}
+		if n == 1 {
+			kept = append(kept, card)
+		}
+	}
+	return kept, nil
 }
 func (s *Store) reserveChat(id string, input ChatInput, duration time.Duration) (ChatSession, int64, *ChatReply, error) {
 	session := ChatSession{ID: id}

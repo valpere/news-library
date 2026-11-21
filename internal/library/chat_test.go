@@ -708,3 +708,30 @@ func TestChatExplicitSortIsNotOverriddenByUnratedFirst(t *testing.T) {
 		t.Fatalf("an explicit sort keeps its order: %+v", reply.Cards)
 	}
 }
+
+func TestChatHistoryDropsCardsOfTrashedItems(t *testing.T) {
+	s, w := testWeb(t)
+	for i := 0; i < 2; i++ {
+		id := add(t, s, fmt.Sprintf("https://example.com/junk/%d", i))
+		seedText(t, s, id, "SQLite backup")
+	}
+	q, mode := "SQLite", "fts"
+	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
+		return ChatCommand{Action: "search", Criteria: ChatCriteria{Query: &q, Mode: &mode}}, nil
+	})
+	session, reply := chatTurn(t, w, ChatSession{}, "знайди", "", "")
+	if len(reply.Cards) != 2 {
+		t.Fatal(reply)
+	}
+	if err := s.MarkJunk(1, ""); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := s.ChatSession(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cards := loaded.Messages[len(loaded.Messages)-1].Reply.Cards
+	if len(cards) != 1 || cards[0].Item.ID != 2 {
+		t.Fatalf("trashed item still in history: %+v", cards)
+	}
+}
