@@ -159,19 +159,6 @@ func NewWeb(s *Store, origin string, maxText int64) (*Web, error) {
 			}
 			return "Не перевірено"
 		},
-		"quality": func(v string) string {
-			switch v {
-			case "good":
-				return "Вдалий"
-			case "inaccurate":
-				return "Є помилки"
-			case "incomplete":
-				return "Пропущено важливе"
-			case "unclear":
-				return "Незрозумілий"
-			}
-			return v
-		},
 		"state": func(s string) string {
 			labels := map[string]string{"filtered": "Обробку пропущено за правилами", "queued": "У черзі", "fetching": "Отримання тексту", "ready": "Готово", "enriching": "Створення дайджесту", "digest_retry_wait": "Очікує повтору дайджесту", "digest_failed": "Дайджест не створено", "needs_input": "Потрібен текст", "retry_wait": "Очікує повтору", "failed": "Не вдалося", "running": "Виконується", "done": "Завершено", "cancelled": "Скасовано"}
 			if label, ok := labels[s]; ok {
@@ -506,8 +493,6 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 		err = w.Store.SetTags(id, strings.Split(form.Get("tags"), ","))
 	case "filter-override":
 		err = w.Store.OverrideFilter(id)
-	case "feedback":
-		err = w.Store.Feedback(id, form.Get("quality"))
 	case "digest-regenerate":
 		err = w.Store.RegenerateDigest(id)
 	case "knowledge-retry":

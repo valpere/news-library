@@ -15,7 +15,6 @@
 | FR-05 | UC-06 | M2 | AT-05 | passed: [TestURLRejectZeroModelCallsAndExplicitOverride / TestSourceRejectKeepsTextSearchAndHumanHistory](../internal/library/filter_test.go) |
 | FR-06 | UC-05, UC-06 | M2 | AT-06 | passed: [TestSourceRejectKeepsTextSearchAndHumanHistory](../internal/library/filter_test.go), [M2 browser smoke](../scripts/smoke_m2_ui.py) |
 | FR-07 | UC-02, UC-03 | M1, M2 | AT-07 | passed M1/M2: [TestRatingReplacementAndIndependentActions](../internal/library/store_test.go), [TestPredictionsSeparateFromJudgmentsAndSearch](../internal/library/prediction_test.go) |
-| FR-08 | UC-07 | M2 | AT-08 | passed: [TestFeedbackAndRegenerationPreserveExactContext](../internal/library/feedback_test.go) |
 | FR-09 | UC-04 | M1 | AT-09 | passed: [TestWebWorkflowAndGETDoesNotRead](../internal/library/web_test.go) |
 | FR-10 | UC-01, UC-10 | M1, M2 | AT-10 | passed offline M1/M2: [lease/restart/idempotency](../internal/library/store_test.go), [digest restart/retry](../internal/library/digest_test.go), [chunk checkpoint reuse](../internal/library/chunk_digest_test.go), [human judgment across recovery](../internal/library/acceptance_test.go); [звірка AT-10](ACCEPTANCE_AUDIT.md) |
 | FR-11 | UC-05 | M1, M3 | AT-11 | passed M1 FTS: [TestFTSFiltersAndStableOrder](../internal/library/store_test.go); M3 passed: [semantic filters/FTS fallback](../internal/library/semantic_test.go) |
