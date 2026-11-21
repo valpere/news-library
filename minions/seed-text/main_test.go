@@ -9,7 +9,7 @@ import (
 
 func TestRunSeedsTextForTheNewItem(t *testing.T) {
 	dir := t.TempDir()
-	if err := run(dir, "https://example.invalid/seed", "Seeded text about backups", ""); err != nil {
+	if err := run(dir, "https://example.invalid/seed", "Seeded text about backups", "", 0.8); err != nil {
 		t.Fatal(err)
 	}
 	store, err := library.Open(filepath.Join(dir, "library.sqlite"))
@@ -22,7 +22,7 @@ func TestRunSeedsTextForTheNewItem(t *testing.T) {
 		t.Fatalf("item not seeded: %+v %v", item, err)
 	}
 	// A second seed works on an empty queue too.
-	if err = run(dir, "https://example.invalid/seed2", "Another text", ""); err != nil {
+	if err = run(dir, "https://example.invalid/seed2", "Another text", "", 0.8); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -30,7 +30,7 @@ func TestRunSeedsTextForTheNewItem(t *testing.T) {
 func TestRunAppliesFilterRules(t *testing.T) {
 	dir := t.TempDir()
 	rules := `[{"id":"ad","reason":"commercial","field":"text","contains":"advertisement","probability":0.95}]`
-	if err := run(dir, "https://example.invalid/ad", "An advertisement source", rules); err != nil {
+	if err := run(dir, "https://example.invalid/ad", "An advertisement source", rules, 0.8); err != nil {
 		t.Fatal(err)
 	}
 	store, err := library.Open(filepath.Join(dir, "library.sqlite"))
@@ -42,7 +42,23 @@ func TestRunAppliesFilterRules(t *testing.T) {
 	if err != nil || item.FilterState != "rejected" {
 		t.Fatalf("rules not applied: %+v %v", item, err)
 	}
-	if err = run(t.TempDir(), "https://example.invalid/bad", "text", "not json"); err == nil {
+	if err = run(t.TempDir(), "https://example.invalid/bad", "text", "not json", 0.8); err == nil {
 		t.Fatal("invalid rules accepted")
+	}
+}
+
+func TestRunUsesTheGivenThreshold(t *testing.T) {
+	dir := t.TempDir()
+	rules := `[{"id":"ad","reason":"commercial","field":"text","contains":"advertisement","probability":0.6}]`
+	if err := run(dir, "https://example.invalid/ad", "An advertisement source", rules, 0.5); err != nil {
+		t.Fatal(err)
+	}
+	store, err := library.Open(filepath.Join(dir, "library.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if item, err := store.Item(1); err != nil || item.FilterState != "rejected" {
+		t.Fatalf("threshold ignored: %+v %v", item, err)
 	}
 }
