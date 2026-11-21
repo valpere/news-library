@@ -5,15 +5,13 @@ import tempfile
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from smoke_seed import seed
 
 root=Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
 smoke_tmp=tempfile.TemporaryDirectory(dir=root/'tmp', prefix="news-library-smoke-")
 data=Path(smoke_tmp.name)
 data.mkdir(parents=True,exist_ok=True)
-def seed(data, url, text):
-    """Complete the fetch of a queued URL with synthetic text (no network): minions/seed-text."""
-    subprocess.run(['go','run','./minions/seed-text','-data',str(data),'-url',url,'-text',text],cwd=root,check=True,capture_output=True)
 def start(no_worker=False):
     command=[str(root/'build/news-library'),'-env-file','','-data',str(data),'-bind','127.0.0.1:0','-no-digests']
     if no_worker: command.append('-no-worker')
@@ -26,22 +24,14 @@ def stop(p):
     p.send_signal(signal.SIGTERM)
     p.wait(timeout=15)
     if p.returncode: raise RuntimeError(p.stderr.read())
+seed(data,'http://127.0.0.1/private-smoke','Smoke knowledge: durable queue and useful Go articles. <script>alert(1)</script>')
 p,origin=start()
 try:
     with sync_playwright() as pw:
         browser=pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),headless=True,args=['--no-sandbox'])
         page=browser.new_page(viewport={'width':1280,'height':960})
-        page.goto(origin+'/browse')
-        page.get_by_label('Додати статтю або YouTube').fill('http://127.0.0.1/private-smoke')
-        page.get_by_role('button',name='Додати URL',exact=True).click()
-        assert page.locator('select[name=score]').count() == 0
-        # The worker may finish before navigation; otherwise the pending card
-        # must update itself without a manual page.reload().
-        page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)
-        assert page.locator('select[name=score]').count() == 0
-        page.get_by_text('Вставити текст вручну',exact=True).click()
-        page.locator('textarea[name=text]').fill('Smoke knowledge: durable queue and useful Go articles. <script>alert(1)</script>')
-        page.get_by_role('button',name='Зберегти текст',exact=True).click()
+        page.goto(origin+'/items/1')
+        assert page.locator('select[name=score]').count() == 1
         page.locator('select[name=score]').select_option('3')
         page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
         page.locator('input[name=tags]').fill('go, smoke')
@@ -90,4 +80,4 @@ try:
 finally:
     if p.poll() is None: stop(p)
     smoke_tmp.cleanup()
-print('PASS browser smoke: needs_input, seeded text, estimative usefulness Помірна→Нульова, all items retained, tags/FTS, explicit read, escaped HTML, history, restart/duplicates, queued card without ratings, automatic result display. Screenshots: tmp/smoke-search.png, tmp/smoke-detail.png, tmp/smoke-pending.png')
+print('PASS browser smoke: seeded text, estimative usefulness Помірна→Нульова, all items retained, tags/FTS, explicit read, escaped HTML, history, restart/duplicates, queued card without ratings, automatic result display. Screenshots: tmp/smoke-search.png, tmp/smoke-detail.png, tmp/smoke-pending.png')

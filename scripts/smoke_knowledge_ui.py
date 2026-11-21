@@ -8,6 +8,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
+from smoke_seed import seed
 
 root = Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
@@ -49,7 +50,8 @@ class Gateway(BaseHTTPRequestHandler):
 gateway = ThreadingHTTPServer(('127.0.0.1',0),Gateway)
 threading.Thread(target=gateway.serve_forever,daemon=True).start()
 with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='news-library-knowledge-smoke-') as data:
-    process = subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,'-bind','127.0.0.1:0','-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    ids = [str(seed(data,f'http://127.0.0.1/knowledge-{index}',f'SQLite backup persistent source {index}')) for index in range(2)]
+    process = subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,'-bind','127.0.0.1:0','-digest-min-words','0','-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     try:
         line = process.stdout.readline().strip()
         assert line.startswith('news-library: http://'),line
@@ -57,16 +59,8 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='news-library-knowledge-s
         with sync_playwright() as pw:
             browser = pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),args=['--no-sandbox'])
             page = browser.new_page()
-            ids = []
-            for index in range(2):
-                page.goto(origin+'/browse')
-                page.locator('input[name=url]').fill(f'http://127.0.0.1/knowledge-{index}')
-                page.get_by_role('button',name='Додати URL',exact=True).click()
-                ids.append(page.url.rsplit('/',1)[1])
-                page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)
-                page.get_by_text('Вставити текст вручну',exact=True).click()
-                page.locator('textarea[name=text]').fill(f'SQLite backup persistent source {index}')
-                page.get_by_role('button',name='Зберегти текст',exact=True).click()
+            for index, item_id in enumerate(ids):
+                page.goto(f'{origin}/items/{item_id}')
                 page.locator('#knowledge').get_by_text('Аналіз завершено.',exact=False).wait_for(timeout=20000)
                 assert 'Теги моделі: sqlite' in page.locator('#knowledge').inner_text()
                 assert 'Як відновити чергу без втрат?' in page.locator('#knowledge').inner_text()

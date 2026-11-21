@@ -9,6 +9,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
+from smoke_seed import seed
 
 root = Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
@@ -38,8 +39,9 @@ gateway = ThreadingHTTPServer(('127.0.0.1', 0), Gateway)
 threading.Thread(target=gateway.serve_forever, daemon=True).start()
 Gateway.fail = True
 with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-batch-retry-') as data:
+    ids = [str(seed(data, f'http://127.0.0.1/batch-retry-{index}', f'Preserved source {index}')) for index in range(2)]
     process = subprocess.Popen([str(root/'build/news-library'), '-env-file', '', '-data', data,
-        '-bind', '127.0.0.1:0', '-knowledge=false', '-model', 'fixture:cloud', '-ollama-url',
+        '-bind', '127.0.0.1:0', '-knowledge=false', '-digest-min-words', '0', '-model', 'fixture:cloud', '-ollama-url',
         f'http://127.0.0.1:{gateway.server_port}/api/chat'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         line = process.stdout.readline().strip()
@@ -48,16 +50,8 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-batch-retr
         with sync_playwright() as pw:
             browser = pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'), args=['--no-sandbox'])
             page = browser.new_page()
-            ids = []
-            for index in range(2):
-                page.goto(origin+'/browse')
-                page.locator('input[name=url]').fill(f'http://127.0.0.1/batch-retry-{index}')
-                page.get_by_role('button',name='Додати URL',exact=True).click()
-                ids.append(page.url.rsplit('/', 1)[1])
-                page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)
-                page.get_by_text('Вставити текст вручну',exact=True).click()
-                page.locator('textarea[name=text]').fill(f'Preserved source {index}')
-                page.get_by_role('button',name='Зберегти текст',exact=True).click()
+            for item_id in ids:
+                page.goto(f'{origin}/items/{item_id}')
                 page.get_by_role('heading',name='Дайджест недоступний',exact=True).wait_for(timeout=15000)
             assert Gateway.calls == 2
             page.goto(origin+'/browse')

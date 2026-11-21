@@ -9,6 +9,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
+from smoke_seed import seed
 
 root=Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
@@ -30,7 +31,7 @@ gateway=ThreadingHTTPServer(('127.0.0.1',0),Gateway)
 threading.Thread(target=gateway.serve_forever,daemon=True).start()
 def start(data):
     process=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',str(data),
-        '-bind','127.0.0.1:0','-knowledge=false', '-model','fixture:cloud','-ollama-url',
+        '-bind','127.0.0.1:0','-knowledge=false','-digest-min-words','0','-model','fixture:cloud','-ollama-url',
         f'http://127.0.0.1:{gateway.server_port}/api/chat'],
         stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     line=process.stdout.readline().strip();assert line.startswith('news-library: http://'),line
@@ -40,18 +41,13 @@ def stop(process):
     assert process.returncode==0,process.stderr.read()
 with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='m4-smoke-') as directory:
     work=Path(directory);data=work/'source'
+    seed(data,'http://127.0.0.1/m4-fixture','Saved source for backup <script>unsafe()</script>.')
     process,origin=start(data)
     try:
         with sync_playwright() as pw:
             browser=pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),headless=True,args=['--no-sandbox'])
             page=browser.new_page(viewport={'width':1280,'height':960})
-            page.goto(origin+'/browse')
-            page.get_by_label('Додати статтю або YouTube').fill('http://127.0.0.1/m4-fixture')
-            page.get_by_role('button',name='Додати URL',exact=True).click()
-            page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)
-            page.get_by_text('Вставити текст вручну',exact=True).click()
-            page.locator('textarea[name=text]').fill('Saved source for backup <script>unsafe()</script>.')
-            page.get_by_role('button',name='Зберегти текст',exact=True).click()
+            page.goto(origin+'/items/1')
             page.locator('#digest').wait_for(timeout=15000)
             page.locator('select[name=score]').select_option('2')
             page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()

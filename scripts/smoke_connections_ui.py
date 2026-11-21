@@ -5,10 +5,13 @@ import signal
 import subprocess
 import tempfile
 from playwright.sync_api import sync_playwright
+from smoke_seed import seed
 
 root = Path(__file__).resolve().parents[1]
 (root / 'tmp').mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory(dir=root / 'tmp', prefix='connections-smoke-') as directory:
+    for name in ['wal', 'snapshot', 'limits']:
+        seed(directory, 'https://example.com/' + name, 'Saved source: ' + name)
     process = subprocess.Popen([
         str(root / 'build/news-library'), '-env-file', '', '-data', directory,
         '-bind', '127.0.0.1:0', '-no-worker', '-no-digests', '-embeddings=false',
@@ -23,13 +26,6 @@ with tempfile.TemporaryDirectory(dir=root / 'tmp', prefix='connections-smoke-') 
                 executable_path=os.environ.get('SMOKE_CHROME', '/usr/bin/google-chrome'),
                 headless=True, args=['--no-sandbox'])
             page = browser.new_page(viewport={'width':1280, 'height':960})
-            for name in ['wal', 'snapshot', 'limits']:
-                page.goto(origin+'/browse')
-                page.get_by_label('Додати статтю або YouTube').fill('https://example.com/' + name)
-                page.get_by_role('button', name='Додати URL', exact=True).click()
-                page.get_by_text('Вставити текст вручну', exact=True).click()
-                page.locator('textarea[name=text]').fill('Saved source: ' + name)
-                page.get_by_role('button', name='Зберегти текст', exact=True).click()
             page.goto(origin + '/connections/new')
             page.get_by_label('Назва', exact=True).fill('SQLite: узгодженість резервної копії')
             page.get_by_label('Category', exact=True).fill('Зберігання даних')

@@ -9,6 +9,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
+from smoke_seed import seed
 
 root = Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
@@ -46,9 +47,6 @@ class Gateway(BaseHTTPRequestHandler):
         self.respond({'done':True,'message':{'content':json.dumps(command)}})
 gateway=ThreadingHTTPServer(('127.0.0.1',0),Gateway)
 threading.Thread(target=gateway.serve_forever,daemon=True).start()
-def seed(data, url, text):
-    """Complete the fetch of a queued URL with synthetic text (no network): minions/seed-text."""
-    subprocess.run(['go','run','./minions/seed-text','-data',str(data),'-url',url,'-text',text],cwd=root,check=True,capture_output=True)
 def start(data):
     p=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',str(data),'-bind','127.0.0.1:0','-no-worker','-no-digests','-chat-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     line=p.stdout.readline().strip()
@@ -98,13 +96,13 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
                 assert page.locator('#chat-status').inner_text()==''
                 assert_chat_visible()
             page.screenshot(path=str(root/'tmp/smoke-chat-welcome.png'),full_page=True)
-            send(' '.join(f'https://example.com/chat/{i}' for i in range(8)))
-            assert 'Додано: 8' in page.locator('.turn').last.inner_text()
+            send(' '.join(f'https://example.com/chat/{i}' for i in range(13)))
+            assert 'Додано: 13' in page.locator('.turn').last.inner_text()
             assert Gateway.calls==0
             assert page.locator('button[value^="rate:"]').count()==0
             csrf=page.locator('#composer input[name=csrf]').input_value()
-            # Seed synthetic texts for the 8 queued URLs (in queue order), workers stay paused.
-            for i in range(1,9):
+            # Seed synthetic texts for the 13 queued URLs (in queue order), workers stay paused.
+            for i in range(1,14):
                 seed(data,f'https://example.com/chat/{i-1}',f'SQLite backup: immutable text and queue {i}. <script>alert(1)</script>')
             response=page.request.post(f'{origin}/items/1/tags',form={'csrf':csrf,'tags':'sqlite, backup'},headers={'Origin':origin},max_redirects=0)
             assert response.status==303
@@ -112,8 +110,8 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             assert page.get_by_role('button',name='sqlite',exact=False).count()==1
             send('знайди про резервні копії')
             latest=page.locator('.turn').last
-            assert latest.locator('.card').count()==5
-            assert 'Знайдено 8' in latest.inner_text()
+            assert latest.locator('.card').count()==10
+            assert 'Знайдено 13' in latest.inner_text()
             assert 'Пошук за змістом недоступний' in latest.inner_text()
             assert page.locator('.card script').count()==0
             send('тільки непрочитане', keyboard=False)
@@ -121,13 +119,13 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             assert Gateway.calls==2
             send('далі')
             assert page.locator('.turn').last.locator('.card').count()==3
-            assert '/items/6' in page.locator('.turn').last.inner_html()
+            assert '/items/11' in page.locator('.turn').last.inner_html()
             page.locator('.current-actions summary').click()
             page.locator('button[value="rate:2"]').click()
             page.locator('.turn').last.get_by_text('Яка особиста корисність',exact=False).wait_for()
             send('Помірна')
             with sqlite3.connect(Path(data)/'library.sqlite') as db:
-                assert db.execute('SELECT id,rating FROM items WHERE rating IS NOT NULL').fetchall()==[(7,3)]
+                assert db.execute('SELECT id,rating FROM items WHERE rating IS NOT NULL').fetchall()==[(12,3)]
             assert Gateway.calls==2
             send('перезапусти')
             assert 'чи продовжити' in page.locator('.turn').last.inner_text()
@@ -159,7 +157,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             page.set_viewport_size({'width':390,'height':844})
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             send('непрочитані вхідні')
-            assert page.locator('.turn').last.locator('.card').count()==5
+            assert page.locator('.turn').last.locator('.card').count()==10
             page.screenshot(path=str(root/'tmp/smoke-chat-mobile.png'),full_page=False)
             assert page.locator('#conversation').evaluate('(el)=>el.scrollHeight > el.clientHeight')
             page.locator('#conversation').evaluate('(el)=>{el.scrollTop=0}')

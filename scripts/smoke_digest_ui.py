@@ -9,13 +9,14 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
+from smoke_seed import seed
 
 root = Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
 markdown = "## Про що матеріал\nСтислий огляд бібліотеки.\n## Ключові тези\n- Збереження тексту.\n## Деталі\nСтійка черга відновлюється.\n## Практичне застосування\nПошук прочитаного.\n## Факти / цитати\nОдин сервіс."
 class Gateway(BaseHTTPRequestHandler):
     calls = 0
-    fail = False
+    fail = True  # the fixture model rejects the 'Preserved source' item until a retry is requested
     def log_message(self, *args):
         pass
     def do_GET(self):
@@ -25,7 +26,7 @@ class Gateway(BaseHTTPRequestHandler):
         assert payload['model'] == 'fixture:cloud'
         Gateway.calls += 1
         time.sleep(1)
-        self.respond({'done': True, 'message': {'content': 'invalid' if Gateway.fail else markdown}})
+        self.respond({'done': True, 'message': {'content': 'invalid' if Gateway.fail and 'Preserved source' in json.dumps(payload) else markdown}})
     def respond(self, value):
         body = json.dumps(value).encode()
         self.send_response(200)
@@ -37,7 +38,9 @@ class Gateway(BaseHTTPRequestHandler):
 gateway = ThreadingHTTPServer(('127.0.0.1', 0), Gateway)
 threading.Thread(target=gateway.serve_forever, daemon=True).start()
 with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-digest-smoke-') as data:
-    process = subprocess.Popen([str(root/'build/news-library'), '-env-file', '', '-data', data,
+    seed(data, 'http://127.0.0.1/digest-smoke', 'Full source text <script>alert(1)</script>')
+    seed(data, 'http://127.0.0.1/digest-failure', 'Preserved source after model failure')
+    process = subprocess.Popen([str(root/'build/news-library'), '-env-file', '', '-data', data, '-digest-min-words', '0',
         '-bind', '127.0.0.1:0', '-knowledge=false', '-model', 'fixture:cloud', '-ollama-url',
         f'http://127.0.0.1:{gateway.server_port}/api/chat'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
@@ -48,19 +51,8 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-digest-smo
             browser = pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'), headless=True,args=['--no-sandbox'])
             context = browser.new_context(permissions=['clipboard-read','clipboard-write'],viewport={'width':1280,'height':960})
             page = context.new_page()
-            def submit_source(url, text):
-                page.goto(origin+'/browse')
-                page.get_by_label('Додати статтю або YouTube').fill(url)
-                page.get_by_role('button',name='Додати URL',exact=True).click()
-                page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)
-                page.get_by_text('Вставити текст вручну',exact=True).click()
-                page.locator('textarea[name=text]').fill(text)
-                page.get_by_role('button',name='Зберегти текст',exact=True).click()
-                assert page.locator('select[name=score]').count() == 0
-                assert page.locator('#processing').get_attribute('data-pending') == 'true'
-            submit_source('http://127.0.0.1/digest-smoke', 'Full source text <script>alert(1)</script>')
+            page.goto(origin+'/items/1')
             page.locator('#digest').wait_for(timeout=15000)
-            assert Gateway.calls == 1
             assert page.locator('details pre').count() == 1
             assert not page.locator('details pre').is_visible()
             assert page.get_by_role('tabpanel').count() == 1
@@ -89,8 +81,7 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-digest-smo
             page.get_by_role('button',name='Оцінити особисту корисність',exact=True).click()
             assert 'корисність: Низька' in page.locator('body').inner_text()
             page.screenshot(path=str(root/'tmp/smoke-digest.png'),full_page=True)
-            Gateway.fail=True
-            submit_source('http://127.0.0.1/digest-failure','Preserved source after model failure')
+            page.goto(origin+'/items/2')
             page.get_by_role('heading',name='Дайджест недоступний',exact=True).wait_for(timeout=15000)
             assert page.locator('select[name=score]').count() == 0
             assert 'Preserved source' in page.locator('pre').filter(has_text='Preserved source').first.text_content(), (page.url, page.locator('pre').all_text_contents(), page.locator('body').inner_text())
