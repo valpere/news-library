@@ -73,7 +73,10 @@ func (s *Store) ChatSession(id string) (ChatSession, error) {
 }
 
 func (s *Store) activeCards(cards []ChatCard) ([]ChatCard, error) {
-	kept := cards[:0:0]
+	if len(cards) == 0 {
+		return cards, nil
+	}
+	kept := []ChatCard{}
 	for _, card := range cards {
 		var n int
 		if err := s.DB.QueryRow("SELECT count(*) FROM active_items WHERE id=?", card.Item.ID).Scan(&n); err != nil {

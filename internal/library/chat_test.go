@@ -735,3 +735,21 @@ func TestChatHistoryDropsCardsOfTrashedItems(t *testing.T) {
 		t.Fatalf("trashed item still in history: %+v", cards)
 	}
 }
+
+func TestChatActionOnTrashedCardIsRefused(t *testing.T) {
+	s, w := testWeb(t)
+	id := add(t, s, "https://example.com/junk/x")
+	seedText(t, s, id, "SQLite backup")
+	q, mode := "SQLite", "fts"
+	w.ChatPlanner = chatPlannerFunc(func(context.Context, string, ChatPlanInput) (ChatCommand, error) {
+		return ChatCommand{Action: "search", Criteria: ChatCriteria{Query: &q, Mode: &mode}}, nil
+	})
+	session, _ := chatTurn(t, w, ChatSession{}, "знайди", "", "")
+	if err := s.MarkJunk(id, ""); err != nil {
+		t.Fatal(err)
+	}
+	_, reply := chatTurn(t, w, session, "", "item", "rate:1")
+	if reply.Kind != "question" || !strings.Contains(reply.Message, "помийці") {
+		t.Fatal(reply)
+	}
+}

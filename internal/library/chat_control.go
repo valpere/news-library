@@ -600,6 +600,9 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 		}
 		card := state.Cards[command.Index-1]
 		id := card.Item.ID
+		if _, err := w.Store.Item(id); errors.Is(err, sql.ErrNoRows) {
+			return ChatReply{Kind: "question", Message: "Цей матеріал уже в помийці; повторіть пошук."}, nil
+		}
 		if command.ItemAction == "rate" {
 			usefulnessScore, validUsefulness := parseUsefulness(command.Usefulness)
 			explicitUsefulness := validUsefulness && (input.Event == "item" || chatExplicitUsefulness(input.Text, command.Usefulness) || chatExplicitUsefulness(pendingText, command.Usefulness))
@@ -671,6 +674,9 @@ func (w *Web) executeChat(r *http.Request, session *ChatSession, command ChatCom
 		refreshed, err := w.chatCards([]ChatReference{{id}})
 		if err != nil {
 			return ChatReply{}, err
+		}
+		if len(refreshed) == 0 {
+			return ChatReply{Kind: "question", Message: "Цей матеріал уже в помийці; повторіть пошук."}, nil
 		}
 		refreshed[0].Index = command.Index
 		state.Cards[command.Index-1] = refreshed[0]
