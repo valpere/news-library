@@ -73,8 +73,8 @@ func TestDigestFeedbackIsGone(t *testing.T) {
 		}
 	}
 	rw := webRequest(w, "POST", "/items/1/feedback", url.Values{"csrf": {w.CSRF}, "quality": {"good"}}, nil)
-	if rw.Code == 303 {
-		t.Errorf("POST /feedback must not be accepted, got %d", rw.Code)
+	if rw.Code != 404 {
+		t.Errorf("POST /feedback must be an unknown action (404), got %d", rw.Code)
 	}
 	var n int
 	s.DB.QueryRow("SELECT count(*) FROM pragma_table_info('digests') WHERE name='feedback'").Scan(&n)
