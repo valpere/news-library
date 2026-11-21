@@ -21,8 +21,7 @@ recovery використовуються лише в межах явно дор
   вручну». Їх треба переробити: засівати текст `go run ./minions/seed-text` до
   старту сервісу (fetch з loopback заборонено), а не вводити його в UI. Уже
   переведені `smoke_ui.py`, `smoke_chat_ui.py`, `live_chat_smoke.py` і
-  `live_semantic_smoke.go`; жоден з них після змін не запускався (крім smoke_ui і
-  smoke_chat_ui, які почали проходити далі за вставку тексту).
+  `live_semantic_smoke.go`; після переведення жоден з них не перезапускався.
 - Free-only OpenRouter пройшов один ізольований live digest test після
   simulated primary failure. Перевірити тривалу доступність free endpoints
   і quotas в реальній роботі; типові public defaults — disabled/models[].
