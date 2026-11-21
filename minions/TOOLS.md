@@ -8,7 +8,7 @@ called by the service, hooks, timers or CI. Anything the service needs is a util
 
 - `minions/ci-wait.sh PR [TIMEOUT_SECONDS]` — waits until CI has finished for the PR's current head commit, then prints `gh pr checks`; exit 1 on failure or timeout.
 - `minions/merge-deploy.sh PR` — refuses unless all checks are green, then squash-merges and deletes the branch, syncs `main`, runs `make build`, restarts the `news-library` user unit and checks that `/` returns 200.
-- `go run ./minions/seed-text -data DIR -url URL -text TEXT` — adds the URL to a synthetic store and completes its fetch with the given text (no network); for smokes only, the fetch queue must be empty; prints the item id.
+- `go run ./minions/seed-text -data DIR -url URL -text TEXT [-filter-rules JSON]` — adds the URL to a synthetic store and completes its fetch with the given text (no network); for smokes only (Python wrapper: `scripts/smoke_seed.py`), the fetch queue must be empty; prints the item id.
 - `minions/page-text.sh PATH [MAX_CHARS]` — prints the visible text of a page of the running local service (e.g. `/items/169`), scripts and tags stripped; read-only GET.
 
 ## Data and checks (see README.md for details)

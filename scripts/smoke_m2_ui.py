@@ -9,6 +9,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
+from smoke_seed import seed
 
 root = Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
@@ -35,8 +36,10 @@ threading.Thread(target=gateway.serve_forever,daemon=True).start()
 rules = json.dumps([{'id':'url-commercial','reason':'commercial','field':'url','contains':'/blocked-fixture','probability':.95},
     {'id':'text-commercial','reason':'commercial','field':'text','contains':'advertisement','probability':.95}])
 with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-') as data:
+    # Rejected by the text rule (a URL rule would reject it before any fetch), yet saved and indexed.
+    seed(data, 'https://example.com/ad-fixture', 'Searchable advertisement source', rules)
     process = subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,'-bind','127.0.0.1:0',
-        '-knowledge=false', '-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat',
+        '-knowledge=false','-digest-min-words','0','-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat',
         '-interests','Fixture interests: libraries and queues','-filter-rules',rules],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     try:
         line = process.stdout.readline().strip()
@@ -45,18 +48,12 @@ with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-m2-smoke-'
         with sync_playwright() as pw:
             browser = pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),headless=True,args=['--no-sandbox'])
             page = browser.new_page(viewport={'width':1280,'height':960})
-            page.goto(origin+'/browse')
-            page.get_by_label('Додати статтю або YouTube').fill('https://example.com/blocked-fixture')
-            page.get_by_role('button',name='Додати URL',exact=True).click()
+            page.goto(origin+'/items/1')
             page.get_by_role('heading',name='Відсіяно правилами',exact=True).wait_for()
             assert Gateway.calls == 0
             assert page.locator('select[name=score]').count() == 0
-            page.get_by_text('Рішення правил',exact=True).click()
+            page.locator('#filter-reason summary').click()
             assert 'commercial: 95%' in page.locator('body').inner_text()
-            # Manual input is saved and indexed even while rejected.
-            page.get_by_text('Вставити текст вручну',exact=True).click()
-            page.locator('textarea[name=text]').fill('Searchable advertisement source')
-            page.get_by_role('button',name='Зберегти текст',exact=True).click()
             assert Gateway.calls == 0
             page.goto(origin+'/browse')
             page.locator('input[name=q]').fill('Searchable')

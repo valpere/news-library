@@ -1,6 +1,7 @@
 // Seed a synthetic store with one material: add the URL, then complete its fetch with
 // the given text (no network). For smoke tests against throwaway data directories only.
-// usage: go run ./minions/seed-text -data DIR -url URL -text TEXT   (prints the item id)
+// usage: go run ./minions/seed-text -data DIR -url URL -text TEXT [-filter-rules JSON]   (prints the item id)
+// -filter-rules are the service's -filter-rules (default threshold): the item is judged by them like a fetched one.
 // The fetch queue of DIR must be empty beforehand: the next due job is the one completed.
 package main
 
@@ -19,23 +20,33 @@ func main() {
 	data := flag.String("data", "", "data directory of the synthetic store")
 	url := flag.String("url", "", "material URL")
 	text := flag.String("text", "", "source text")
+	rules := flag.String("filter-rules", "", "JSON array of filter rules, as for the service")
 	flag.Parse()
 	if *data == "" || *url == "" || *text == "" {
 		flag.Usage()
 		os.Exit(2)
 	}
-	if err := run(*data, *url, *text); err != nil {
+	if err := run(*data, *url, *text, *rules); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(data, url, text string) error {
+func run(data, url, text, rules string) error {
 	store, err := library.Open(filepath.Join(data, "library.sqlite"))
 	if err != nil {
 		return err
 	}
 	defer store.Close()
+	if rules != "" {
+		set, err := library.NewRuleSet(0.8, rules)
+		if err != nil {
+			return err
+		}
+		if err = store.ConfigureRules(set); err != nil {
+			return err
+		}
+	}
 	id, err := store.AddURL(url)
 	if err != nil {
 		return err

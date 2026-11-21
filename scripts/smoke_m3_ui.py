@@ -10,6 +10,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
+from smoke_seed import seed
 
 root = Path(__file__).resolve().parents[1]
 (root/'tmp').mkdir(exist_ok=True)
@@ -40,6 +41,7 @@ class Gateway(BaseHTTPRequestHandler):
 gateway=ThreadingHTTPServer(('127.0.0.1',0),Gateway)
 threading.Thread(target=gateway.serve_forever,daemon=True).start()
 with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp') as data:
+    seed(data,'http://127.0.0.1/m3-fixture','A database keeps information after a restart. <script>unsafe()</script>')
     process=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,
         '-bind','127.0.0.1:0','-no-digests','-embeddings','-embed-url',
         f'http://127.0.0.1:{gateway.server_port}/api/embed','-read-token',token],
@@ -50,13 +52,6 @@ with tempfile.TemporaryDirectory(prefix='news-library-m3-smoke-',dir=root/'tmp')
         with sync_playwright() as pw:
             browser=pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),headless=True,args=['--no-sandbox'])
             page=browser.new_page(viewport={'width':1280,'height':960})
-            page.goto(origin+'/browse')
-            page.get_by_label('Додати статтю або YouTube').fill('http://127.0.0.1/m3-fixture')
-            page.get_by_role('button',name='Додати URL',exact=True).click()
-            page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)
-            page.get_by_text('Вставити текст вручну',exact=True).click()
-            page.locator('textarea[name=text]').fill('A database keeps information after a restart. <script>unsafe()</script>')
-            page.get_by_role('button',name='Зберегти текст',exact=True).click()
             with sqlite3.connect(Path(data)/'library.sqlite') as db:
                 deadline=time.monotonic()+15
                 while time.monotonic()<deadline:

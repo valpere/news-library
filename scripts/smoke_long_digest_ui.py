@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+from smoke_seed import seed
 from playwright.sync_api import sync_playwright,expect
 
 root=Path(__file__).resolve().parents[1]
@@ -25,21 +26,16 @@ class Gateway(BaseHTTPRequestHandler):
         body=json.dumps(value).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
 gateway=ThreadingHTTPServer(('127.0.0.1',0),Gateway);threading.Thread(target=gateway.serve_forever,daemon=True).start()
 with tempfile.TemporaryDirectory(dir=root/'tmp', prefix='news-library-long-smoke-') as data:
-    process=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,'-bind','127.0.0.1:0','-knowledge=false', '-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat','-digest-max-bytes','1024','-cache-cleanup-interval','1s','-cache-max-bytes','1024'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    source='Довгий матеріал із фактами та прикладами.\n'*100
+    seed(data,'http://127.0.0.1/long-fixture',source)
+    process=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',data,'-bind','127.0.0.1:0','-knowledge=false','-digest-min-words','0','-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat','-digest-max-bytes','1024','-cache-cleanup-interval','1s','-cache-max-bytes','1024'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     try:
         line=process.stdout.readline().strip();assert line.startswith('news-library: http://'),line
         origin=line.removeprefix('news-library: ')
         with sync_playwright() as pw:
             browser=pw.chromium.launch(executable_path=os.environ.get('SMOKE_CHROME','/usr/bin/google-chrome'),headless=True,args=['--no-sandbox'])
             page=browser.new_page()
-            page.goto(origin+'/browse')
-            page.get_by_label('Додати статтю або YouTube').fill('http://127.0.0.1/long-fixture')
-            page.get_by_role('button',name='Додати URL',exact=True).click()
-            page.get_by_role('heading',name='Текст недоступний',exact=True).wait_for(timeout=15000)
-            source='Довгий матеріал із фактами та прикладами.\n'*100
-            page.get_by_text('Вставити текст вручну',exact=True).click()
-            page.locator('textarea[name=text]').fill(source)
-            page.get_by_role('button',name='Зберегти текст',exact=True).click()
+            page.goto(origin+'/items/1')
             page.locator('#digest').wait_for(timeout=15000)
             assert 'Оброблено частинами:' in page.locator('#digest').inner_text()
             expect(page.locator('details pre').first).to_have_text(source.strip())
