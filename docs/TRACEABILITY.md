@@ -146,7 +146,7 @@ metadata/thematic note → backlinks/author/MD/search, тільки loopback fak
 
 Copyright-only та content support FR-04/05/08/10/16: source_content_test.go
 перевіряє збереження notice/typed failure без digest job, short-content pass,
-manual replacement/history і zero generation/embedding calls. knowledge_support_test.go
+заміна тексту повторним отриманням і zero generation/embedding calls. knowledge_support_test.go
 перевіряє окремий запит, unsupported/uncertain/strict response rejection,
 покриття всіх item IDs, metadata checkpoint/ratings/diagnostics і no auto retry.
 Це offline перевірка протоколу з fake cloud; семантична точність живої моделі
