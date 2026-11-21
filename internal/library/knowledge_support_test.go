@@ -118,11 +118,11 @@ func TestKnowledgeVerificationFailurePreservesCheckpointAndHumanHistory(t *testi
 	enableDigests(t, s)
 	s.KnowledgeEnabled = true
 	seed := add(t, s, "https://example.com/seed")
-	manual(t, s, seed, supportOther)
+	seedText(t, s, seed, supportOther)
 	completeFixtureDigest(t, s)
 	knowledgeStep(t, &KnowledgeWorker{Store: s, Generator: &fixtureKnowledgeGenerator{}, Timeout: time.Second})
 	id := add(t, s, "https://example.com/current")
-	manual(t, s, id, supportCurrent)
+	seedText(t, s, id, supportCurrent)
 	completeFixtureDigest(t, s)
 	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
@@ -190,11 +190,11 @@ func TestRecoveryCloudChecksCapturedProposalOnly(t *testing.T) {
 	enableDigests(t, s)
 	s.KnowledgeEnabled = true
 	seed := add(t, s, "https://example.com/recovery-seed")
-	manual(t, s, seed, supportOther)
+	seedText(t, s, seed, supportOther)
 	completeFixtureDigest(t, s)
 	knowledgeStep(t, &KnowledgeWorker{Store: s, Generator: &fixtureKnowledgeGenerator{}, Timeout: time.Second})
 	id := add(t, s, "https://example.com/recovery-current")
-	manual(t, s, id, supportCurrent)
+	seedText(t, s, id, supportCurrent)
 	completeFixtureDigest(t, s)
 	w := &KnowledgeWorker{Store: s, Generator: &supportProposalFixture{}, Timeout: time.Second}
 	knowledgeStep(t, w)
@@ -231,7 +231,7 @@ func TestHistoricalFooterCandidateDoesNotBlockValidArticle(t *testing.T) {
 	if err := s.SetTags(seed, []string{"sqlite"}); err != nil {
 		t.Fatal(err)
 	}
-	manual(t, s, seed, "Copyright © 2026 Example Project")
+	seedText(t, s, seed, "Copyright © 2026 Example Project")
 	current := knowledgeArticle(t, s, "new-valid-current")
 	generator := &fixtureKnowledgeGenerator{}
 	knowledgeStep(t, &KnowledgeWorker{Store: s, Generator: generator, Timeout: time.Second})

@@ -158,11 +158,11 @@ def main():
                 with opener.open(urllib.request.Request(origin+path, data=urllib.parse.urlencode(values).encode(), headers=headers), timeout=args.timeout+15) as r:
                     return r.read()
             csrf = field(get(), 'csrf')
-            # Seed only synthetic primary texts and human tags via supported application routes.
+            # Seed only synthetic primary texts (minions/seed-text, workers paused) and human tags via application routes.
             for i in range(10):
                 topic = 'SQLite' if i < 6 else 'Rust'
                 post('/items', {'csrf': csrf, 'url': f'https://example.invalid/chat-fixture/{i}'})
-                post(f'/items/{i+1}/manual', {'csrf': csrf, 'text': f'{topic}: резервні копії backup, відновлення бази даних і надійність черги. Синтетичний тестовий матеріал {i}.'})
+                subprocess.run(['go', 'run', './minions/seed-text', '-data', str(data), '-url', f'https://example.invalid/chat-fixture/{i}', '-text', f'{topic}: резервні копії backup, відновлення бази даних і надійність черги. Синтетичний тестовий матеріал {i}.'], cwd=ROOT, check=True, capture_output=True)
                 post(f'/items/{i+1}/tags', {'csrf': csrf, 'tags': 'backup, sqlite' if i < 6 else 'rust'})
             with sqlite3.connect(f'file:{data}/library.sqlite?mode=ro', uri=True) as db:
                 def send(text):

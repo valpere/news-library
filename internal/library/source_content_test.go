@@ -113,7 +113,7 @@ func TestSavedChallengeMakesZeroEmbeddingCalls(t *testing.T) {
 	if _, err := s.DB.Exec("UPDATE items SET title='Client Challenge' WHERE id=?", id); err != nil {
 		t.Fatal(err)
 	}
-	manual(t, s, id, "A required part of this site couldn’t load. Please check your connection.")
+	seedText(t, s, id, "A required part of this site couldn’t load. Please check your connection.")
 	if worked, err := sem.Step(context.Background()); err != nil || !worked {
 		t.Fatal(worked, err)
 	}
@@ -166,7 +166,7 @@ func TestCopyrightOnlyPreservedBeforeAnyAI(t *testing.T) {
 	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
-	manual(t, s, id, "A meaningful short announcement describes AI agents for defenders.")
+	seedText(t, s, id, "A meaningful short announcement describes AI agents for defenders.")
 	item, _ = s.Item(id)
 	if item.State != "enriching" {
 		t.Fatal(item)
@@ -206,7 +206,7 @@ func TestSavedCopyrightMakesZeroGenerationAndEmbeddingCalls(t *testing.T) {
 	}
 	s, sem, f := semanticFixture(t)
 	id := add(t, s, "https://example.com/saved-footer")
-	manual(t, s, id, footer.Text)
+	seedText(t, s, id, footer.Text)
 	if worked, err := sem.Step(context.Background()); err != nil || !worked || f.calls != 0 {
 		t.Fatal(worked, err, f.calls)
 	}

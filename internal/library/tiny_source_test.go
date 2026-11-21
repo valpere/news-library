@@ -28,9 +28,9 @@ func TestTinySourceGetsNoDigestJob(t *testing.T) {
 	s := testStore(t)
 	enableDigestsMin(t, s, 40)
 	tiny := add(t, s, "https://example.com/tiny")
-	manual(t, s, tiny, strings.Repeat("слово ", 39))
+	seedText(t, s, tiny, strings.Repeat("слово ", 39))
 	edge := add(t, s, "https://example.com/edge")
-	manual(t, s, edge, strings.Repeat("слово ", 40))
+	seedText(t, s, edge, strings.Repeat("слово ", 40))
 	if n := digestJobs(t, s, tiny); n != 0 {
 		t.Fatalf("tiny source must not queue a digest, got %d jobs", n)
 	}
@@ -46,7 +46,7 @@ func TestMinSourceWordsZeroKeepsEveryDigest(t *testing.T) {
 	s := testStore(t)
 	enableDigestsMin(t, s, 0)
 	id := add(t, s, "https://example.com/short")
-	manual(t, s, id, "Три слова тут")
+	seedText(t, s, id, "Три слова тут")
 	if n := digestJobs(t, s, id); n != 1 {
 		t.Fatalf("threshold 0 disables the cutoff, got %d jobs", n)
 	}
@@ -56,7 +56,7 @@ func TestTinySourcePageExplainsAndAllowsRating(t *testing.T) {
 	s, w := testWeb(t)
 	enableDigestsMin(t, s, 40)
 	id := add(t, s, "https://example.com/tiny")
-	manual(t, s, id, "Дуже короткий текст без потреби в дайджесті.")
+	seedText(t, s, id, "Дуже короткий текст без потреби в дайджесті.")
 	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
 	if !strings.Contains(body, "Дайджест не потрібен") {
 		t.Fatalf("missing explanation:\n%s", body)

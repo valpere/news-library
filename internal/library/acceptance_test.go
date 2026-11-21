@@ -39,15 +39,15 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	if err = s.DB.QueryRow("SELECT count(*) FROM digests").Scan(&artifacts); err != nil || artifacts != 0 || generationCalls != 0 || fetchCalls != 1 {
 		t.Fatal("missing text generated a digest", artifacts, generationCalls, fetchCalls, err)
 	}
-	manual(t, s, id, "User supplied source")
+	seedText(t, s, id, "User supplied source")
 	item, err = s.Item(id)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sourceID := item.ID
 	snap, err := s.SourceText(sourceID)
-	if err != nil || snap.Origin != "manual" || snap.Extractor != "manual-v1" || snap.Completeness != "unknown" {
-		t.Fatal("manual provenance", snap, err)
+	if err != nil || snap.Origin != "fetch" || snap.Extractor != "fixture-v1" || snap.Completeness != "unknown" {
+		t.Fatal("text provenance", snap, err)
 	}
 	if err = s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestRecoveryPreservesManualSourceAndHumanJudgment(t *testing.T) {
 	}
 	// A different later text replaces the first one: the rating, which described
 	// the old text, and everything derived from it are erased; human tags and read stay.
-	manual(t, s, id, "Newer source version")
+	seedText(t, s, id, "Newer source version")
 	after, err := s.Ratings(id)
 	if err != nil || len(after) != 0 {
 		t.Fatal("rating survived a text change", after, err)

@@ -19,7 +19,7 @@ func enablePredictions(t *testing.T, s *Store, profile string) {
 }
 func storePredicted(t *testing.T, s *Store, id int64, probability float64) *Digest {
 	t.Helper()
-	manual(t, s, id, "Source with data for interest prediction")
+	seedText(t, s, id, "Source with data for interest prediction")
 	j := claim(t, s)
 	if e := s.CompleteDigest(j, Digest{Markdown: fixtureDigest, ActualModel: j.Model, Provider: "fixture", Prediction: &InterestPrediction{Probability: probability, Reason: "Matches the configured fixture interests", Profile: j.Interests}}); e != nil {
 		t.Fatal(e)
@@ -42,7 +42,7 @@ func TestPredictionsSeparateFromJudgmentsAndSearch(t *testing.T) {
 	// A source with no profile has no prediction, not a prediction of zero.
 	enableDigests(t, s)
 	d := add(t, s, "https://example.com/d")
-	manual(t, s, d, "No current interests")
+	seedText(t, s, d, "No current interests")
 	completeFixtureDigest(t, s)
 	if e := s.Rate(b, 3, nil); e != nil {
 		t.Fatal(e)
@@ -152,7 +152,7 @@ func TestQueuedPredictionCapturesProfileAcrossRestart(t *testing.T) {
 	s := testStore(t)
 	enablePredictions(t, s, "Original fixture profile")
 	id := add(t, s, "https://example.com/profile-restart")
-	manual(t, s, id, "Original fixture text")
+	seedText(t, s, id, "Original fixture text")
 	path := filepath.Join(s.Files.Root, "library.db")
 	s.Close()
 	restarted, e := Open(path)

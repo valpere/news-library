@@ -37,7 +37,7 @@ func TestDigestQueueRecoveryAndRatingContext(t *testing.T) {
 	s := testStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/digest")
-	manual(t, s, id, "Persistent source text")
+	seedText(t, s, id, "Persistent source text")
 	j := claim(t, s)
 	if j.Stage != "digest" {
 		t.Fatal(j)
@@ -77,18 +77,18 @@ func TestDigestQueueRecoveryAndRatingContext(t *testing.T) {
 	if e = s.Rate(id, 3, nil); e != nil {
 		t.Fatal(e)
 	}
-	manual(t, s, id, "New source text")
+	seedText(t, s, id, "New source text")
 	completeFixtureDigest(t, s)
 	if r, _ := s.Ratings(id); len(r) != 0 {
 		t.Fatal("rating survived a text change", r)
 	}
 	other := add(t, s, "https://example.com/other")
-	manual(t, s, other, "Other text")
+	seedText(t, s, other, "Other text")
 	completeFixtureDigest(t, s)
 	// A digest job of a replaced text is gone: finishing it is refused.
-	manual(t, s, id, "Third text")
+	seedText(t, s, id, "Third text")
 	older := claim(t, s)
-	manual(t, s, id, "Fourth text")
+	seedText(t, s, id, "Fourth text")
 	if e = s.CompleteDigest(older, Digest{Markdown: fixtureDigest}); !errors.Is(e, ErrLeaseLost) {
 		t.Fatal("digest of a replaced text accepted", e)
 	}
@@ -101,7 +101,7 @@ func TestDigestPrimaryUIAndExports(t *testing.T) {
 	s, w := testWeb(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/digest")
-	manual(t, s, id, "Full source <script>alert(1)</script>")
+	seedText(t, s, id, "Full source <script>alert(1)</script>")
 	rw := webRequest(w, "GET", "/items/1", nil, nil)
 	if rw.Code != 200 || !strings.Contains(rw.Body.String(), `data-pending="true"`) || strings.Contains(rw.Body.String(), `action="/items/1/rating"`) {
 		t.Fatal("premature assessment", rw.Body.String())
@@ -211,7 +211,7 @@ func TestDigestWorkerRestartAndFailurePreservesSource(t *testing.T) {
 	s := testStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/restart-digest")
-	manual(t, s, id, "Offline text after generation failure")
+	seedText(t, s, id, "Offline text after generation failure")
 	path := filepath.Join(s.Files.Root, "library.db")
 	s.Close()
 	restarted, e := Open(path)
@@ -257,7 +257,7 @@ func TestDigestHeaderIsQuiet(t *testing.T) {
 	s, w := testWeb(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/quiet")
-	manual(t, s, id, "Full source text")
+	seedText(t, s, id, "Full source text")
 	completeFixtureDigest(t, s)
 	d, err := s.DigestOf(id)
 	if err != nil || d == nil || d.ActualModel == "" {

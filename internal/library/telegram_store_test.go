@@ -59,7 +59,7 @@ func TestTelegramPendingWaitsForProcessingAndSendsOnce(t *testing.T) {
 		t.Fatalf("pending after send %v", got)
 	}
 	// A replaced text recalculates the digest but never makes the item pending again.
-	manual(t, s, a, "new text of the first article")
+	seedText(t, s, a, "new text of the first article")
 	if flag := scalar[string](t, s, `SELECT telegram FROM items WHERE id=?`, a); flag != "sent" {
 		t.Fatalf("flag %q", flag)
 	}

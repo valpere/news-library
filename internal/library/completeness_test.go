@@ -23,7 +23,7 @@ func itemText(t *testing.T, s *Store, id int64) SourceText {
 func TestConfirmCompletenessOverlaysWithoutChangingTheStoredText(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/a")
-	manual(t, s, id, "Текст, який користувач вважає повним.")
+	seedText(t, s, id, "Текст, який користувач вважає повним.")
 	before := itemText(t, s, id)
 	if before.Completeness != "unknown" || before.UserConfirmed {
 		t.Fatalf("before: %+v", before)
@@ -51,7 +51,7 @@ func TestConfirmCompletenessOverlaysWithoutChangingTheStoredText(t *testing.T) {
 func TestWithdrawingConfirmationRestoresTheStoredValue(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/a")
-	manual(t, s, id, "Текст.")
+	seedText(t, s, id, "Текст.")
 	snap := itemText(t, s, id)
 	s.ConfirmCompleteness(snap.ItemID, true)
 	if err := s.ConfirmCompleteness(snap.ItemID, false); err != nil {
@@ -68,7 +68,7 @@ func TestConfirmCompletenessRejectsUnknownOrTrashedSnapshots(t *testing.T) {
 		t.Fatal("unknown snapshot accepted")
 	}
 	id := add(t, s, "https://example.com/a")
-	manual(t, s, id, "Текст.")
+	seedText(t, s, id, "Текст.")
 	snap := itemText(t, s, id)
 	if err := s.MarkJunk(id, ""); err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestConfirmCompletenessRejectsUnknownOrTrashedSnapshots(t *testing.T) {
 func TestWebConfirmCompletenessFlow(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/series")
-	manual(t, s, id, strings.Repeat("Вступ до серії. ", 12)+"\n\nExplore more articles")
+	seedText(t, s, id, strings.Repeat("Вступ до серії. ", 12)+"\n\nExplore more articles")
 	snap := itemText(t, s, id)
 	page := "/items/" + strconv.FormatInt(id, 10)
 	body := webRequest(w, "GET", page, nil, nil).Body.String()
@@ -105,7 +105,7 @@ func TestWebConfirmCompletenessFlow(t *testing.T) {
 func TestNoConfirmButtonForAFooterOnlyText(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/footer")
-	manual(t, s, id, "Copyright © 2014-2026 The Cucumber Open Source Project")
+	seedText(t, s, id, "Copyright © 2014-2026 The Cucumber Open Source Project")
 	if body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String(); strings.Contains(body, "Підтвердити повноту") {
 		t.Fatal("confirming completeness of a footer makes no sense")
 	}
@@ -117,7 +117,7 @@ func TestWebSoftSignsStayQuietInsideSavedText(t *testing.T) {
 	teaser := strings.Repeat("Вступ до серії. ", 12) + "\n\nExplore more articles"
 	for name, text := range map[string]string{"cut": cut, "teaser": teaser} {
 		id := add(t, s, "https://example.com/"+name)
-		manual(t, s, id, text)
+		seedText(t, s, id, text)
 		body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
 		for _, bad := range []string{`id="source-diagnosis"`, "заглушка", "Дотягнути решту тексту", "· unknown ·"} {
 			if strings.Contains(body, bad) {
@@ -149,7 +149,7 @@ func TestSameTextRefetchKeepsConfirmationChangedTextClearsIt(t *testing.T) {
 	if got := itemText(t, s, id); !got.UserConfirmed {
 		t.Fatal("the same text lost its confirmation")
 	}
-	manual(t, s, id, "Changed text")
+	seedText(t, s, id, "Changed text")
 	if got := itemText(t, s, id); got.UserConfirmed {
 		t.Fatal("changed text kept the confirmation")
 	}
@@ -158,7 +158,7 @@ func TestSameTextRefetchKeepsConfirmationChangedTextClearsIt(t *testing.T) {
 func TestPageNeverPrintsRawUnknownCompleteness(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/plain")
-	manual(t, s, id, strings.Repeat("Звичайний завершений абзац. ", 20)+"Кінець.")
+	seedText(t, s, id, strings.Repeat("Звичайний завершений абзац. ", 20)+"Кінець.")
 	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
 	for _, bad := range []string{"· unknown", "unknown ·", ">unknown<"} {
 		if strings.Contains(body, bad) {
@@ -170,9 +170,9 @@ func TestPageNeverPrintsRawUnknownCompleteness(t *testing.T) {
 func TestHardDiagnosisKeepsRecoveryActions(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/hardfooter")
-	manual(t, s, id, "Copyright © 2014-2026 The Cucumber Open Source Project")
+	seedText(t, s, id, "Copyright © 2014-2026 The Cucumber Open Source Project")
 	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
-	for _, want := range []string{`id="source-diagnosis"`, "Отримати текст повторно", `href="#manual-text"`, `href="#junk-action"`} {
+	for _, want := range []string{`id="source-diagnosis"`, "Отримати текст повторно", `href="#junk-action"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("hard diagnosis lost %q", want)
 		}

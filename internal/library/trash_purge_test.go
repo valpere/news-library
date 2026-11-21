@@ -14,7 +14,7 @@ import (
 func junked(t *testing.T, s *Store, u, text string) int64 {
 	t.Helper()
 	id := add(t, s, u)
-	manual(t, s, id, text)
+	seedText(t, s, id, text)
 	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func textPath(t *testing.T, s *Store, id int64) string {
 func TestPurgeErasesTheTrashedMaterialAndItsFile(t *testing.T) {
 	s := testStore(t)
 	keep := add(t, s, "https://example.com/keep")
-	manual(t, s, keep, "Текст матеріалу, який лишається.")
+	seedText(t, s, keep, "Текст матеріалу, який лишається.")
 	id := junked(t, s, "https://example.com/purge-me", "Унікальний текст для остаточного видалення.")
 	path := textPath(t, s, id)
 	if _, err := os.Stat(path); err != nil {
@@ -78,7 +78,7 @@ func TestPurgeErasesTheTrashedMaterialAndItsFile(t *testing.T) {
 func TestPurgeRefusesLiveMaterialsAndKeepsTheirImmutability(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/live")
-	manual(t, s, id, "Живий матеріал.")
+	seedText(t, s, id, "Живий матеріал.")
 	if err := s.Rate(id, 3, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestPurgeTakesMaterialOutOfConnectionNotes(t *testing.T) {
 func TestPurgeKeepsNoteWithTwoMaterialsLeft(t *testing.T) {
 	s, n := connectionFixture(t)
 	third := add(t, s, "https://example.com/third-member")
-	manual(t, s, third, "Third member text")
+	seedText(t, s, third, "Third member text")
 	n.Members = append(n.Members, ConnectionMember{ItemID: third, Role: "Третій"})
 	noteID, err := s.SaveConnection(n)
 	if err != nil {
@@ -211,7 +211,7 @@ func TestWebCardOffersPurgeForAConnectedMaterial(t *testing.T) {
 	s, w := testWeb(t)
 	id := junked(t, s, "https://example.com/linked", "Матеріал для нотатки.")
 	other := add(t, s, "https://example.com/linked-2")
-	manual(t, s, other, "Другий матеріал нотатки.")
+	seedText(t, s, other, "Другий матеріал нотатки.")
 	if _, err := s.SaveConnection(ConnectionNote{Title: "Нотатка для перевірки помийки", Category: "Тест", Tags: []string{"тест"}, Questions: []string{"Чому?"}, Body: "Зміст нотатки.",
 		Members: []ConnectionMember{{ItemID: id, Role: "Перший"}, {ItemID: other, Role: "Другий"}}}); err != nil {
 		t.Fatal(err)

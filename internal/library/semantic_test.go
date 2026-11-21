@@ -57,12 +57,12 @@ func drainIndex(t *testing.T, semantic *Semantic) {
 func TestSemanticSynonymFiltersHybridAndOfflineFTS(t *testing.T) {
 	s, semantic, f := semanticFixture(t)
 	id := add(t, s, "https://example.com/database")
-	if err := s.Manual(id, "database survives restart without losing data"); err != nil {
+	if err := s.seed(id, "database survives restart without losing data"); err != nil {
 		t.Fatal(err)
 	}
 	s.SetTags(id, []string{"systems"})
 	other := add(t, s, "https://example.com/weather")
-	s.Manual(other, "weather forecast")
+	s.seed(other, "weather forecast")
 	s.Rate(other, 0, nil)
 	drainIndex(t, semantic)
 	zero, e := semantic.Search(context.Background(), Filters{Query: "weather", Usefulness: "0"}, "vector")
@@ -107,7 +107,7 @@ func TestSemanticSynonymFiltersHybridAndOfflineFTS(t *testing.T) {
 		t.Fatal(got, err)
 	}
 	// A new primary snapshot must never match an older semantic index.
-	s.Manual(id, "weather changed source")
+	s.seed(id, "weather changed source")
 	got, err = semantic.Search(context.Background(), Filters{Query: "persistent storage"}, "vector")
 	if err != nil || len(got.Items) != 0 {
 		t.Fatal("stale snapshot index used", got, err)
@@ -122,7 +122,7 @@ func TestEmbeddingCheckpointRestartRejectAndLeaseFencing(t *testing.T) {
 	f := &fixtureEmbedder{revision: "v1"}
 	semantic := &Semantic{Store: s, Embedder: f, ChunkBytes: 1024, Dimensions: 2, Timeout: time.Second}
 	id := add(t, s, "https://example.com/long-index")
-	s.Manual(id, strings.Repeat("database ", 200))
+	s.seed(id, strings.Repeat("database ", 200))
 	if worked, e := semantic.Step(context.Background()); e != nil || !worked {
 		t.Fatal(worked, e)
 	}
@@ -145,7 +145,7 @@ func TestEmbeddingCheckpointRestartRejectAndLeaseFencing(t *testing.T) {
 	rules, _ := NewRuleSet(.8, `[{"id":"ad","reason":"ad","field":"text","contains":"advertisement","probability":1}]`)
 	s.ConfigureRules(rules)
 	rejected := add(t, s, "https://example.com/ad")
-	s.Manual(rejected, "advertisement database")
+	s.seed(rejected, "advertisement database")
 	calls = f.calls
 	drainIndex(t, semantic)
 	if f.calls != calls {
@@ -156,7 +156,7 @@ func TestEmbeddingCheckpointRestartRejectAndLeaseFencing(t *testing.T) {
 	if f.calls != calls+1 {
 		t.Fatal("explicit override not indexed")
 	}
-	s.Manual(id, "database new source")
+	s.seed(id, "database new source")
 	semantic.schedule("v1")
 	job, err := semantic.claim("v1")
 	if err != nil || job == nil {
@@ -173,7 +173,7 @@ func TestReadAPIAuthenticationContextAndNoMutations(t *testing.T) {
 	token := strings.Repeat("r", 32)
 	w.ReadToken = token
 	id := add(t, s, "https://example.com/read")
-	s.Manual(id, strings.Repeat("Український текст. ", 400))
+	s.seed(id, strings.Repeat("Український текст. ", 400))
 	s.Rate(id, 3, nil)
 	auth := map[string]string{"Authorization": "Bearer " + token}
 	for _, headers := range []map[string]string{nil, {"Authorization": "Bearer wrong"}} {
@@ -280,7 +280,7 @@ func TestBGEAdapterOnlyLocalEmbeddingAndValidatesVectors(t *testing.T) {
 func TestExplicitRebuildPreservesHumanHistoryAndMigratedFilterGuard(t *testing.T) {
 	s, semantic, _ := semanticFixture(t)
 	id := add(t, s, "https://example.com/rebuild")
-	manual(t, s, id, "database source")
+	seedText(t, s, id, "database source")
 	item, _ := s.Item(id)
 	sid := item.ID
 	if err := s.Rate(id, 4, nil); err != nil {
@@ -303,7 +303,7 @@ func TestReadContextUsesSavedDigestAndCorrectBounds(t *testing.T) {
 	w.ReadToken = strings.Repeat("r", 32)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/digest-context")
-	manual(t, s, id, strings.Repeat("Original source. ", 500))
+	seedText(t, s, id, strings.Repeat("Original source. ", 500))
 	completeFixtureDigest(t, s)
 	rw := webRequest(w, "GET", "/api/read/items/1/context", nil, map[string]string{"Authorization": "Bearer " + w.ReadToken})
 	if rw.Code != 200 {

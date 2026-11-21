@@ -60,7 +60,7 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 	if i.Score.Valid {
 		t.Fatal("GET mutated item")
 	}
-	post(t, w, base+"manual", url.Values{"text": {"offline useful knowledge <script>alert(1)</script>"}})
+	seedText(t, s, id, "offline useful knowledge <script>alert(1)</script>")
 	vs, _ := s.Texts(id)
 	sid := strconv.FormatInt(vs[0].ItemID, 10)
 	post(t, w, base+"rating", url.Values{"score": {"3"}, "source": {sid}, "reason": {"useful"}})
@@ -79,7 +79,7 @@ func TestWebWorkflowAndGETDoesNotRead(t *testing.T) {
 	if rw.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("missing CSP")
 	}
-	manual(t, s, id, "updated manual text")
+	seedText(t, s, id, "updated manual text")
 	post(t, w, base+"rating", url.Values{"score": {"0"}, "unknown_date": {"1"}})
 	ratings, _ := s.Ratings(id)
 	if len(ratings) != 1 || ratings[0].Score != 0 || ratings[0].AssessedAt.Valid {
@@ -156,10 +156,6 @@ func TestWebMutationBoundaries(t *testing.T) {
 	rw = webRequest(w, "POST", "/items/1/tags?csrf="+w.CSRF, url.Values{"tags": {"mutated"}}, nil)
 	if rw.Code != 403 {
 		t.Fatal("query CSRF accepted")
-	}
-	rw = webRequest(w, "POST", "/items/1/manual", url.Values{"csrf": {w.CSRF}, "text": {strings.Repeat("x", int(w.MaxText)+1)}}, nil)
-	if rw.Code != 400 {
-		t.Fatal("oversize manual accepted")
 	}
 	post(t, w, "/items/1/tags", url.Values{"tags": {"mutated"}})
 }
@@ -271,7 +267,7 @@ func TestWebShowsContentBeforeRating(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatal("invented text provenance for external reading")
 	}
-	manual(t, s, id, "Read this available text first")
+	seedText(t, s, id, "Read this available text first")
 	rw = webRequest(w, "GET", "/items/1", nil, nil)
 	html := rw.Body.String()
 	textPos, ratePos := strings.Index(html, "Read this available text first"), strings.Index(html, `action="/items/1/rating"`)
@@ -305,7 +301,7 @@ func TestProgressPageReadsDoNotChangeState(t *testing.T) {
 func TestThereIsNoSeparateReadFlag(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/a")
-	manual(t, s, id, "text of the article")
+	seedText(t, s, id, "text of the article")
 	if rw := webRequest(w, "POST", "/items/1/read", url.Values{"read": {"1"}}, nil); rw.Code != 404 {
 		t.Fatalf("the read action no longer exists: %d", rw.Code)
 	}
@@ -338,7 +334,7 @@ func TestStaleReadItemActionIsRefused(t *testing.T) {
 func TestRatingSelectShowsTheCurrentLevel(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/a")
-	manual(t, s, id, "text of the article")
+	seedText(t, s, id, "text of the article")
 	body := webRequest(w, "GET", "/items/1", nil, nil).Body.String()
 	if !strings.Contains(body, `<option value="" selected disabled>Оберіть рівень</option>`) || strings.Contains(body, `" selected>`) {
 		t.Fatal("an unrated material offers the placeholder and no preselected level")
@@ -358,5 +354,24 @@ func TestRatingSelectShowsTheCurrentLevel(t *testing.T) {
 	}
 	if body = webRequest(w, "GET", "/items/1", nil, nil).Body.String(); !strings.Contains(body, `<option value="0" selected>`) {
 		t.Fatal("level 0 is a rating too, not the placeholder")
+	}
+}
+
+func TestManualTextEntryIsGone(t *testing.T) {
+	s, w := testWeb(t)
+	id := add(t, s, "https://example.com/no-manual")
+	page := "/items/" + strconv.FormatInt(id, 10)
+	body := webRequest(w, "GET", page, nil, nil).Body.String()
+	for _, bad := range []string{"Вставити текст вручну", "/manual", "попередні залишаться в історії", "manual-text"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("page still offers manual text: %q", bad)
+		}
+	}
+	rw := webRequest(w, "POST", page+"/manual", url.Values{"csrf": {w.CSRF}, "text": {"pasted"}}, nil)
+	if rw.Code == 303 {
+		t.Errorf("POST /manual must not be accepted, got %d", rw.Code)
+	}
+	if got, _ := s.Item(id); got.HasText {
+		t.Error("pasted text was stored")
 	}
 }

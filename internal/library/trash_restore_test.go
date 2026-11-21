@@ -17,7 +17,7 @@ func junkItem(t *testing.T, w *Web, id int64) string {
 func TestTrashedItemHasACardWithRestore(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/junk-card")
-	manual(t, s, id, "Збережений текст матеріалу для картки помийки.")
+	seedText(t, s, id, "Збережений текст матеріалу для картки помийки.")
 	page := junkItem(t, w, id)
 	rw := webRequest(w, "GET", page, nil, nil)
 	body := rw.Body.String()
@@ -40,7 +40,7 @@ func TestTrashedItemHasACardWithRestore(t *testing.T) {
 func TestTrashListLinksToTheCard(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/junk-list")
-	manual(t, s, id, "Текст для списку.")
+	seedText(t, s, id, "Текст для списку.")
 	page := junkItem(t, w, id)
 	if body := webRequest(w, "GET", "/trash", nil, nil).Body.String(); !strings.Contains(body, `href="`+page+`"`) {
 		t.Fatalf("trash list does not link to the card:\n%s", body)
@@ -50,7 +50,7 @@ func TestTrashListLinksToTheCard(t *testing.T) {
 func TestRestoreFromTrashReturnsTheItemAndKeepsHistory(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/junk-restore")
-	manual(t, s, id, "Унікальнийсловоповернення у тексті.")
+	seedText(t, s, id, "Унікальнийсловоповернення у тексті.")
 	page := junkItem(t, w, id)
 	post(t, w, page+"/restore", url.Values{})
 	var n int

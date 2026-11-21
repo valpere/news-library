@@ -17,7 +17,7 @@ func failedDigestFixture(t *testing.T, s *Store, kind string) DigestRetryCandida
 		t.Fatal(err)
 	}
 	id := add(t, s, fmt.Sprintf("https://example.com/batch-%d", n))
-	manual(t, s, id, "Persistent source text")
+	seedText(t, s, id, "Persistent source text")
 	j := claim(t, s)
 	if j.Stage != "digest" || j.ItemID != id {
 		t.Fatal(j)
@@ -125,7 +125,7 @@ func TestBatchDigestRetrySkipsChangedAndMissingSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	// All fixture texts share a file: restore it for c with a distinct source.
-	manual(t, s, c.ItemID, "Distinct current source")
+	seedText(t, s, c.ItemID, "Distinct current source")
 	results, err := s.RetryFailedDigests([]DigestRetryCandidate{stale, b, c})
 	if err != nil || len(results) != 3 {
 		t.Fatal(results, err)

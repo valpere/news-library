@@ -3,7 +3,9 @@ package library
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,9 +36,64 @@ func claim(t *testing.T, s *Store) Job {
 	}
 	return *j
 }
-func manual(t *testing.T, s *Store, id int64, text string) {
+
+// seed installs fixture text for an item without going through the fetch queue (tests only).
+func (s *Store) seed(id int64, text string) error {
+	if strings.TrimSpace(text) == "" {
+		return errors.New("порожній текст")
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var title string
+	if err = tx.QueryRow("SELECT title FROM active_items WHERE id=?", id).Scan(&title); err != nil {
+		return err
+	}
+	changed, erased, err := s.installText(tx, id, SourceText{Text: text, Title: title, Origin: "fetch", Extractor: "fixture-v1", Completeness: "unknown"}, false)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+	if _, err = tx.Exec("UPDATE items SET state='ready',error='' WHERE id=?", id); err != nil {
+		return err
+	}
+	// The text is here, so the pending or failed fetch (and its failure) is no longer needed.
+	fetches, err := queryIDs(tx, "SELECT id FROM jobs WHERE item_id=? AND stage='fetch' AND state IN ('queued','retry_wait','failed')", id)
+	if err != nil {
+		return err
+	}
+	if erased == nil {
+		erased = map[string]bool{}
+	}
+	for _, job := range fetches {
+		finished, e := finishJob(tx, job)
+		if e != nil {
+			return e
+		}
+		for p := range finished {
+			erased[p] = true
+		}
+	}
+	if err = indexText(tx, id, title, text); err != nil {
+		return err
+	}
+	if err = s.processText(tx, id, SourceText{Text: text, Title: title}, false); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.removeUnusedFiles(erased)
+	return nil
+}
+
+func seedText(t *testing.T, s *Store, id int64, text string) {
 	t.Helper()
-	if e := s.Manual(id, text); e != nil {
+	if e := s.seed(id, text); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -157,7 +214,7 @@ func TestLeaseRestartRetryAndIdempotency(t *testing.T) {
 		t.Fatal("refresh lost text", e)
 	}
 }
-func TestNeedsInputAndManualWinsRace(t *testing.T) {
+func TestNeedsInputThenRetryAndRefresh(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/a")
 	j := claim(t, s)
@@ -172,18 +229,12 @@ func TestNeedsInputAndManualWinsRace(t *testing.T) {
 		t.Fatal(e)
 	}
 	j = claim(t, s)
-	manual(t, s, id, "manual preferred")
-	if e := s.Complete(j, SourceText{Text: "older fetch", Origin: "fetch", Extractor: "fixture", Completeness: "full"}); e != nil {
+	if e := s.Complete(j, SourceText{Text: "retried fetch preferred", Origin: "fetch", Extractor: "fixture", Completeness: "full"}); e != nil {
 		t.Fatal(e)
-	}
-	vs, _ := s.Texts(id)
-	i, _ = s.Item(id)
-	if len(vs) != 1 || i.ID != vs[0].ItemID || vs[0].Text != "manual preferred" {
-		t.Fatal("older fetch overwrote manual")
 	}
 	matches, e := s.Search(Filters{Query: "preferred"})
 	if e != nil || len(matches) != 1 {
-		t.Fatal("manual missing from FTS", e)
+		t.Fatal("retried text missing from FTS", e)
 	}
 	if e = s.Retry(id); e != nil {
 		t.Fatal(e)
@@ -192,9 +243,8 @@ func TestNeedsInputAndManualWinsRace(t *testing.T) {
 	if e = s.Complete(j, SourceText{Text: "explicit newer refresh", Origin: "fetch", Extractor: "fixture", Completeness: "full"}); e != nil {
 		t.Fatal(e)
 	}
-	i, _ = s.Item(id)
-	vs, _ = s.Texts(id)
-	if i.ID != vs[0].ItemID {
+	vs, _ := s.Texts(id)
+	if len(vs) != 1 || vs[0].Text != "explicit newer refresh" {
 		t.Fatal("explicit newer refresh not selected")
 	}
 }
@@ -202,7 +252,7 @@ func TestRatingReplacementAndIndependentActions(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/a")
 	other := add(t, s, "https://example.com/b")
-	manual(t, s, id, "first text")
+	seedText(t, s, id, "first text")
 	now := time.Now()
 	if e := s.Rate(id, 3, &now); e != nil {
 		t.Fatal(e)
@@ -210,7 +260,7 @@ func TestRatingReplacementAndIndependentActions(t *testing.T) {
 	if r, _ := s.Ratings(id); len(r) != 1 || r[0].Score != 3 || !r[0].AssessedAt.Valid {
 		t.Fatal("rating not stored", r)
 	}
-	manual(t, s, id, "second version")
+	seedText(t, s, id, "second version")
 	if e := s.Rate(id, 0, nil); e != nil {
 		t.Fatal(e)
 	}
@@ -244,7 +294,7 @@ func TestFTSFiltersAndStableOrder(t *testing.T) {
 	b := add(t, s, "https://example.com/b")
 	c := add(t, s, "https://example.com/c")
 	for _, id := range []int64{a, b, c} {
-		manual(t, s, id, "Ukraine knowledge store")
+		seedText(t, s, id, "Ukraine knowledge store")
 	}
 	s.Rate(a, 0, nil)
 	s.Rate(b, 0, nil)

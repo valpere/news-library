@@ -31,11 +31,11 @@ func TestTinyForeignSourceGetsTranslationJob(t *testing.T) {
 	s.KnowledgeEnabled = true
 	enableDigestsMin(t, s, 40)
 	en := add(t, s, "https://example.com/en")
-	manual(t, s, en, "AI agents help defenders detect threats.")
+	seedText(t, s, en, "AI agents help defenders detect threats.")
 	uk := add(t, s, "https://example.com/uk")
-	manual(t, s, uk, "Агенти допомагають захисникам виявляти загрози.")
+	seedText(t, s, uk, "Агенти допомагають захисникам виявляти загрози.")
 	long := add(t, s, "https://example.com/long")
-	manual(t, s, long, strings.Repeat("English words here. ", 30))
+	seedText(t, s, long, strings.Repeat("English words here. ", 30))
 	if n := digestJobs(t, s, uk); n != 0 {
 		t.Fatalf("Ukrainian tiny source needs nothing, got %d jobs", n)
 	}
@@ -59,7 +59,7 @@ func TestTranslationCompletesWithoutSectionsOrKnowledge(t *testing.T) {
 	s.KnowledgeEnabled = true
 	enableDigestsMin(t, s, 40)
 	id := add(t, s, "https://example.com/en")
-	manual(t, s, id, "AI agents help defenders detect threats.")
+	seedText(t, s, id, "AI agents help defenders detect threats.")
 	j := claim(t, s)
 	if err := s.CompleteDigest(j, Digest{Markdown: "ШІ-агенти допомагають захисникам виявляти загрози.", ActualModel: j.Model, Provider: "fixture"}); err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestTranslationPageShowsTranslationNotDigest(t *testing.T) {
 	s, w := testWeb(t)
 	enableDigestsMin(t, s, 40)
 	id := add(t, s, "https://example.com/en")
-	manual(t, s, id, "AI agents help defenders detect threats.")
+	seedText(t, s, id, "AI agents help defenders detect threats.")
 	j := claim(t, s)
 	if err := s.CompleteDigest(j, Digest{Markdown: "ШІ-агенти допомагають захисникам виявляти загрози.", ActualModel: j.Model, Provider: "fixture"}); err != nil {
 		t.Fatal(err)

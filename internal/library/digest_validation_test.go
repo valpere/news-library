@@ -50,7 +50,7 @@ func TestGenerationFailureKindsHistoryAndBackup(t *testing.T) {
 	s := backupStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/failure")
-	manual(t, s, id, "A saved source survives malformed model replies.")
+	seedText(t, s, id, "A saved source survives malformed model replies.")
 	calls := 0
 	worker := &Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 		calls++
@@ -127,7 +127,7 @@ func TestGenerationFailureAdviceAndTemporaryRetry(t *testing.T) {
 	s := backupStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/temporary")
-	manual(t, s, id, "Persisted source")
+	seedText(t, s, id, "Persisted source")
 	calls := 0
 	worker := &Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 		calls++
@@ -156,7 +156,7 @@ func TestDigestFailureUIAndNonRetryableCategories(t *testing.T) {
 			s := backupStore(t)
 			enableDigests(t, s)
 			id := add(t, s, "https://example.com/"+kind)
-			manual(t, s, id, "Primary source remains readable")
+			seedText(t, s, id, "Primary source remains readable")
 			worker := &Worker{Store: s, Generator: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) {
 				return Digest{}, &SourceError{Kind: kind, Message: "Fixture refusal", Diagnostic: "<script>untrusted()</script>", Retry: true}
 			}), Timeout: time.Second, Lease: time.Second, MaxAttempts: 3}

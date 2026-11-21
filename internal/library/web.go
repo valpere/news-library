@@ -504,13 +504,6 @@ func (w *Web) mutate(rw http.ResponseWriter, r *http.Request) {
 	switch r.PathValue("action") {
 	case "tags":
 		err = w.Store.SetTags(id, strings.Split(form.Get("tags"), ","))
-	case "manual":
-		text := form.Get("text")
-		if int64(len(text)) > w.MaxText {
-			err = errors.New("текст перевищує ліміт")
-		} else {
-			err = w.Store.Manual(id, text)
-		}
 	case "filter-override":
 		err = w.Store.OverrideFilter(id)
 	case "feedback":

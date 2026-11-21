@@ -51,7 +51,6 @@ type Job struct {
 	ID, ItemID                                 int64
 	URL, Token                                 string
 	Attempts                                   int
-	TextAtClaim                                string
 	Stage, ConfigVersion, Model, PromptVersion string
 	InputLimit                                 int
 	Refresh                                    bool
@@ -201,7 +200,7 @@ func (s *Store) Claim(ctx context.Context, now time.Time, lease time.Duration, m
 		}
 	}
 	var j Job
-	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,coalesce((SELECT hash FROM texts WHERE item_id=j.item_id),''),j.stage,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests,j.chunk_limit,j.chunk_max_parts FROM jobs j JOIN active_items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.TextAtClaim, &j.Stage, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests, &j.ChunkLimit, &j.ChunkMaxParts)
+	err = tx.QueryRowContext(ctx, `SELECT j.id,j.item_id,i.canonical_url,j.attempts,j.stage,j.config_version,j.model,j.prompt_version,j.input_limit,j.refresh,j.filter_override,j.interests,j.chunk_limit,j.chunk_max_parts FROM jobs j JOIN active_items i ON i.id=j.item_id WHERE ((j.state IN ('queued','retry_wait') AND j.next_attempt<=?) OR (j.state='running' AND j.lease_until<=?)) AND (j.stage='fetch' OR ?) ORDER BY j.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), s.DigestConfig != nil).Scan(&j.ID, &j.ItemID, &j.URL, &j.Attempts, &j.Stage, &j.ConfigVersion, &j.Model, &j.PromptVersion, &j.InputLimit, &j.Refresh, &j.FilterOverride, &j.Interests, &j.ChunkLimit, &j.ChunkMaxParts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
 	}
@@ -264,19 +263,15 @@ func (s *Store) Complete(j Job, snap SourceText) error {
 	if err = leaseValid(tx, j); err != nil {
 		return err
 	}
-	// Manual input wins over an already-running fetch.
-	var origin, currentHash string
-	hasText := false
-	if err = tx.QueryRow("SELECT origin,hash FROM texts WHERE item_id=?", j.ItemID).Scan(&origin, &currentHash); err == nil {
-		hasText = true
-	} else if err != sql.ErrNoRows {
+	var hasText bool
+	if err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM texts WHERE item_id=?)", j.ItemID).Scan(&hasText); err != nil {
 		return err
 	}
 	contentErr := ValidateSourceContent(snap)
 	var erased map[string]bool
 	// A fresh response that contains only a notice does not replace a prior source;
 	// the failure is recorded on the job, the notice itself is dropped.
-	if (contentErr == nil || !hasText) && (origin != "manual" || currentHash == j.TextAtClaim) {
+	if contentErr == nil || !hasText {
 		changed, paths, e := s.installText(tx, j.ItemID, snap, true)
 		if e != nil {
 			return e
@@ -429,58 +424,6 @@ func (s *Store) Retry(id int64) error {
 		return err
 	}
 	s.removeUnusedFiles(erased) // best effort
-	return nil
-}
-func (s *Store) Manual(id int64, text string) error {
-	if strings.TrimSpace(text) == "" {
-		return errors.New("порожній текст")
-	}
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var title string
-	if err = tx.QueryRow("SELECT title FROM active_items WHERE id=?", id).Scan(&title); err != nil {
-		return err
-	}
-	changed, erased, err := s.installText(tx, id, SourceText{Text: text, Title: title, Origin: "manual", Extractor: "manual-v1", Completeness: "unknown", Warning: "Повнота ручного тексту невідома"}, false)
-	if err != nil {
-		return err
-	}
-	if !changed {
-		return nil
-	}
-	if _, err = tx.Exec("UPDATE items SET state='ready',error='' WHERE id=?", id); err != nil {
-		return err
-	}
-	// The text is here, so the pending or failed fetch (and its failure) is no longer needed.
-	fetches, err := queryIDs(tx, "SELECT id FROM jobs WHERE item_id=? AND stage='fetch' AND state IN ('queued','retry_wait','failed')", id)
-	if err != nil {
-		return err
-	}
-	if erased == nil {
-		erased = map[string]bool{}
-	}
-	for _, job := range fetches {
-		finished, e := finishJob(tx, job)
-		if e != nil {
-			return e
-		}
-		for p := range finished {
-			erased[p] = true
-		}
-	}
-	if err = indexText(tx, id, title, text); err != nil {
-		return err
-	}
-	if err = s.processText(tx, id, SourceText{Text: text, Title: title}, false); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-	s.removeUnusedFiles(erased) // best effort: the rows are already gone
 	return nil
 }
 

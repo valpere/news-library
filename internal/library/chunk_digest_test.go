@@ -28,7 +28,7 @@ func TestLongDigestResumesSavedPartsAndPreservesSource(t *testing.T) {
 	}
 	id := add(t, s, "https://example.com/long")
 	source := strings.Repeat("довгий збережений матеріал ", 120)
-	manual(t, s, id, source)
+	seedText(t, s, id, source)
 	calls := 0
 	failed := false
 	leaf := generatorFunc(func(_ context.Context, j Job, snapshot SourceText) (Digest, error) {
@@ -87,7 +87,7 @@ func TestLongDigestBoundsAndFencing(t *testing.T) {
 	s := testStore(t)
 	s.EnableDigests(DigestConfig{Model: "fixture:cloud", PromptVersion: DigestPromptVersion, MaxInputBytes: 1024, ChunkLimit: 1024, ChunkMaxParts: 2})
 	id := add(t, s, "https://example.com/too-long")
-	manual(t, s, id, strings.Repeat("x", 4000))
+	seedText(t, s, id, strings.Repeat("x", 4000))
 	j := claim(t, s)
 	calls := 0
 	g := &ChunkGenerator{Store: s, Leaf: generatorFunc(func(context.Context, Job, SourceText) (Digest, error) { calls++; return Digest{}, nil })}
@@ -110,7 +110,7 @@ func TestLongDigestPredictsInterestOnlyAtFinalSynthesis(t *testing.T) {
 	profile := "Fixture interests"
 	s.EnableDigests(DigestConfig{Model: "fixture:cloud", PromptVersion: DigestPredictionPromptVersion, Interests: profile, MaxInputBytes: 2048, ChunkLimit: 2048, ChunkMaxParts: 64})
 	id := add(t, s, "https://example.com/long-predicted")
-	manual(t, s, id, strings.Repeat("Source data. ", 800))
+	seedText(t, s, id, strings.Repeat("Source data. ", 800))
 	j := claim(t, s)
 	snap, _ := s.SourceText(j.ItemID)
 	forecasts := 0

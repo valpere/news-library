@@ -40,7 +40,7 @@ func TestTrashMissingPageIsSeparateAndDeduplicated(t *testing.T) {
 	if err = s.Retry(id); err == nil {
 		t.Fatal("trash requeued")
 	}
-	if err = s.Manual(id, "manual source"); err == nil {
+	if err = s.seed(id, "manual source"); err == nil {
 		t.Fatal("trash accepted normal manual input")
 	}
 	if err = s.SetTags(id, []string{"x"}); err == nil {
@@ -93,7 +93,7 @@ func TestTrashPreservesRecoverableAndSavedSources(t *testing.T) {
 			id := add(t, s, tc.url)
 			j := claim(t, s)
 			if tc.saved {
-				manual(t, s, id, "original text remains")
+				seedText(t, s, id, "original text remains")
 			}
 			if err := s.Fail(j, tc.message, false, 3, time.Now(), 0); err != nil {
 				t.Fatal(err)

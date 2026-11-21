@@ -11,7 +11,7 @@ import (
 func TestDetailPageShowsDigestBeforeSecondarySections(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/layout")
-	if err := s.Manual(id, "Короткий текст для перевірки порядку блоків на сторінці."); err != nil {
+	if err := s.seed(id, "Короткий текст для перевірки порядку блоків на сторінці."); err != nil {
 		t.Fatal(err)
 	}
 	rw := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil)

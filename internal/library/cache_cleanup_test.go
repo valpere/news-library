@@ -13,7 +13,7 @@ import (
 func TestCacheEvictionRetainsPrimaryAndSharedBodies(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/primary")
-	manual(t, s, id, "Primary immutable text")
+	seedText(t, s, id, "Primary immutable text")
 	enableDigests(t, s)
 	completeFixtureDigest(t, s)
 	f := &Fetcher{MaxBytes: 4096, client: &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {

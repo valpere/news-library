@@ -61,23 +61,11 @@ func TestSuccessfulFetchDeletesJobAndFailure(t *testing.T) {
 	}
 }
 
-func TestManualTextDeletesFailedFetchAndItsFailure(t *testing.T) {
-	s := testStore(t)
-	id := add(t, s, "https://example.com/manual-after-failure")
-	failedFetch(t, s, id, "rejected reply")
-	manual(t, s, id, "Pasted text")
-	var n int
-	s.DB.QueryRow("SELECT count(*) FROM jobs WHERE item_id=? AND stage='fetch'", id).Scan(&n)
-	if n != 0 {
-		t.Fatal("failed fetch kept after manual text", n)
-	}
-}
-
 func TestRetryDigestRefusesWhenDigestExists(t *testing.T) {
 	s := testStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/ready")
-	manual(t, s, id, "Ready text")
+	seedText(t, s, id, "Ready text")
 	completeFixtureDigest(t, s)
 	if err := s.RetryDigest(id); err == nil {
 		t.Fatal("retry queued a second generation for a ready digest")

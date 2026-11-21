@@ -249,7 +249,7 @@ func TestKnowledgeBatchMissingFirstFileDoesNotStarveNext(t *testing.T) {
 	enableDigests(t, s)
 	for i := 0; i < 3; i++ {
 		id := add(t, s, fmt.Sprintf("https://example.com/file-%d", i))
-		manual(t, s, id, fmt.Sprintf("Distinct saved source %d", i))
+		seedText(t, s, id, fmt.Sprintf("Distinct saved source %d", i))
 		completeFixtureDigest(t, s)
 	}
 	s.KnowledgeEnabled = true

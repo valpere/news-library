@@ -12,9 +12,9 @@ import (
 func TestMarkJunkRatesZeroAndMovesToTrash(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/junk")
-	manual(t, s, id, "Переклад чужого тексту без посилання на оригінал.")
+	seedText(t, s, id, "Переклад чужого тексту без посилання на оригінал.")
 	other := add(t, s, "https://example.com/keep")
-	manual(t, s, other, "Корисний матеріал про переклад.")
+	seedText(t, s, other, "Корисний матеріал про переклад.")
 	if err := s.MarkJunk(id, "неоформлений переклад"); err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestMarkJunkCancelsQueuedWork(t *testing.T) {
 	s := testStore(t)
 	enableDigestsMin(t, s, 0)
 	id := add(t, s, "https://example.com/junk")
-	manual(t, s, id, "Текст, що чекає на дайджест.")
+	seedText(t, s, id, "Текст, що чекає на дайджест.")
 	if err := s.MarkJunk(id, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestMarkJunkCancelsQueuedWork(t *testing.T) {
 func TestReaddingJunkURLIsRecognisedAsTrashed(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/junk")
-	manual(t, s, id, "Сміття")
+	seedText(t, s, id, "Сміття")
 	if err := s.MarkJunk(id, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestReaddingJunkURLIsRecognisedAsTrashed(t *testing.T) {
 func TestWebJunkRequiresConfirmation(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/junk")
-	manual(t, s, id, "Неоформлений переклад.")
+	seedText(t, s, id, "Неоформлений переклад.")
 	path := "/items/" + strconv.FormatInt(id, 10) + "/junk"
 	rw := webRequest(w, "POST", path, url.Values{"csrf": {w.CSRF}}, nil)
 	if rw.Code != 400 {
@@ -112,7 +112,7 @@ func TestWebJunkRequiresConfirmation(t *testing.T) {
 func TestItemPageOffersJunkAction(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/a")
-	manual(t, s, id, "Звичайний матеріал.")
+	seedText(t, s, id, "Звичайний матеріал.")
 	if body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String(); !strings.Contains(body, "/junk") {
 		t.Fatal("junk action missing")
 	}

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"github.com/valpere/news-library/internal/library"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestArchiveCLIAndRestorePause(t *testing.T) {
@@ -20,7 +22,11 @@ func TestArchiveCLIAndRestorePause(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.Manual(id, "Archived source"); err != nil {
+	job, err := store.Claim(context.Background(), time.Now(), time.Minute, 3)
+	if err != nil || job == nil || job.ItemID != id {
+		t.Fatal(job, err)
+	}
+	if err = store.Complete(*job, library.SourceText{Title: "Archive", Text: "Archived source", Origin: "fetched", Extractor: "fixture", Completeness: "unknown"}); err != nil {
 		t.Fatal(err)
 	}
 	backup := filepath.Join(root, "backup")

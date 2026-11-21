@@ -273,7 +273,7 @@ func readConfig(args []string) (config, error) {
 	flags.DurationVar(&c.Backoff, "backoff", c.Backoff, "початкова затримка повтору")
 	flags.DurationVar(&c.CacheTTL, "cache-ttl", c.CacheTTL, "максимальний TTL HTTP-кешу; 0 = bypass")
 	flags.IntVar(&c.Attempts, "attempts", c.Attempts, "максимум спроб завдання")
-	flags.Int64Var(&c.MaxBytes, "max-bytes", c.MaxBytes, "ліміт джерела/ручного тексту")
+	flags.Int64Var(&c.MaxBytes, "max-bytes", c.MaxBytes, "ліміт джерела")
 	flags.IntVar(&c.InputLimit, "digest-max-bytes", c.InputLimit, "ліміт тексту одного дайджесту")
 	flags.StringVar(&c.SourceAdapters, "source-adapters", c.SourceAdapters, "адаптери джерел: all, none або список імен через кому")
 	flags.IntVar(&c.MinDigestWords, "digest-min-words", c.MinDigestWords, "джерела коротші за це число слів без дайджесту (0 вимикає)")

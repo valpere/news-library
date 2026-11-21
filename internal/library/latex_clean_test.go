@@ -31,7 +31,7 @@ func TestCompleteDigestStoresCleanedLatex(t *testing.T) {
 	s := testStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/latex")
-	manual(t, s, id, "Source text")
+	seedText(t, s, id, "Source text")
 	j := claim(t, s)
 	md := fixtureDigest + "\n$\\rightarrow$ ключовий перехід\n"
 	if err := s.CompleteDigest(j, Digest{Markdown: md, ActualModel: j.Model, Provider: "fixture"}); err != nil {

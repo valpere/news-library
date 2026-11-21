@@ -51,7 +51,11 @@ func run() error {
 		if e != nil {
 			return e
 		}
-		if e = store.Manual(id, text); e != nil {
+		job, e := store.Claim(context.Background(), time.Now(), time.Minute, 3)
+		if e != nil || job == nil || job.ItemID != id {
+			return fmt.Errorf("fixture %d: fetch job not claimed: %v", n+1, e)
+		}
+		if e = store.Complete(*job, library.SourceText{Text: text, Origin: "fetch", Extractor: "fixture", Completeness: "unknown"}); e != nil {
 			return e
 		}
 	}
