@@ -14,6 +14,15 @@ M1, основний цикл M2, M3, M4 та діалогова головна 
 Вони не запускають сайт, чергу, генерацію чи доставку. Наявні source/knowledge
 recovery використовуються лише в межах явно дорученої вибірки.
 
+- Браузерні смоки `scripts/smoke_m2_ui.py`, `smoke_m3_ui.py`, `smoke_m4_ui.py`,
+  `smoke_digest_ui.py`, `smoke_connections_ui.py`, `smoke_knowledge_ui.py`,
+  `smoke_knowledge_batch_ui.py`, `smoke_long_digest_ui.py`,
+  `smoke_digest_retry_batch_ui.py` досі натискають видалену форму «Вставити текст
+  вручну». Їх треба переробити: засівати текст `go run ./minions/seed-text` до
+  старту сервісу (fetch з loopback заборонено), а не вводити його в UI. Уже
+  переведені `smoke_ui.py`, `smoke_chat_ui.py`, `live_chat_smoke.py` і
+  `live_semantic_smoke.go`; жоден з них після змін не запускався (крім smoke_ui і
+  smoke_chat_ui, які почали проходити далі за вставку тексту).
 - Free-only OpenRouter пройшов один ізольований live digest test після
   simulated primary failure. Перевірити тривалу доступність free endpoints
   і quotas в реальній роботі; типові public defaults — disabled/models[].
@@ -30,7 +39,7 @@ recovery використовуються лише в межах явно дор
   не означають помилки; автоматичного видалення чи переоцінювання немає.
 
 FR-10/15/16 звірено: [offline приймання](ACCEPTANCE_AUDIT.md) підтверджує
-перезапуск, контекст оцінок і ручне доповнення тексту. Ця перевірка
+перезапуск, контекст оцінок і повторне отримання тексту. Ця перевірка
 не закриває оцінювання якості й живих інтеграцій вище.
 
 Імпорт замороженої Wiki відкладено користувачем. ANN для значно більших
