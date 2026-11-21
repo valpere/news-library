@@ -303,7 +303,7 @@ func (b *TelegramBot) deliver(ctx context.Context, id int64) error {
 	default:
 		reason := clip(item.Error, 500)
 		if reason == "" {
-			reason = "потрібен ручний текст або повторна спроба"
+			reason = "потрібна повторна спроба"
 		}
 		plain = fmt.Sprintf("Не вдалося обробити №%d: %s\n%s", id, title, reason)
 	}

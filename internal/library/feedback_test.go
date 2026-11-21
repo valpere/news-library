@@ -11,7 +11,7 @@ func TestFeedbackAndRegenerationPreserveExactContext(t *testing.T) {
 	s, w := testWeb(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/feedback")
-	manual(t, s, id, "Source text")
+	seedText(t, s, id, "Source text")
 	completeFixtureDigest(t, s)
 	snapshots, _ := s.Texts(id)
 	sid := snapshots[0].ItemID
@@ -85,7 +85,7 @@ func TestFeedbackCanBeClearedAndDiesWithTheText(t *testing.T) {
 	s, w := testWeb(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/flag")
-	manual(t, s, id, "Source text")
+	seedText(t, s, id, "Source text")
 	completeFixtureDigest(t, s)
 	if e := s.Feedback(id, "unclear"); e != nil {
 		t.Fatal(e)
@@ -103,7 +103,7 @@ func TestFeedbackCanBeClearedAndDiesWithTheText(t *testing.T) {
 	if e := s.Feedback(id, "good"); e != nil {
 		t.Fatal(e)
 	}
-	manual(t, s, id, "A different source text")
+	seedText(t, s, id, "A different source text")
 	if d, _ := s.DigestOf(id); d != nil {
 		t.Fatal("digest and its flag survived the text change", d.Feedback)
 	}

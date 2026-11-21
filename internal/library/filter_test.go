@@ -35,7 +35,7 @@ func TestRulesDeduplicateCausesAndStrictThreshold(t *testing.T) {
 	s := testStore(t)
 	configureRules(t, s, .6, rules[:1])
 	id := add(t, s, "https://example.com/threshold")
-	manual(t, s, id, "advertisement")
+	seedText(t, s, id, "advertisement")
 	i, _ := s.Item(id)
 	if i.FilterState != "passed" {
 		t.Fatal("non-strict threshold")
@@ -178,12 +178,12 @@ func TestReplacedTextIsCheckedAgainAndOverrideNotCarriedOver(t *testing.T) {
 	if reason, _ := s.FilterReason(id); !strings.Contains(reason, "повернено вручну") {
 		t.Fatal("override does not say it was manual", reason)
 	}
-	manual(t, s, id, "A different and clean text")
+	seedText(t, s, id, "A different and clean text")
 	i, _ := s.Item(id)
 	if reason, _ := s.FilterReason(id); i.FilterState != "passed" || reason != "" {
 		t.Fatal("verdict of the old text survived", i.FilterState, reason)
 	}
-	manual(t, s, id, "Another advertisement")
+	seedText(t, s, id, "Another advertisement")
 	if i, _ = s.Item(id); i.FilterState != "rejected" {
 		t.Fatal("new text not checked by the rules", i.FilterState)
 	}

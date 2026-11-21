@@ -153,7 +153,7 @@ func TestDigestFallbackPolicyPreservesHistoryAndRatings(t *testing.T) {
 	s := testStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/free-fallback")
-	manual(t, s, id, "source")
+	seedText(t, s, id, "source")
 	item, _ := s.Item(id)
 	sid := item.ID
 	if err := s.Rate(id, 3, nil); err != nil {
@@ -328,7 +328,7 @@ func TestFreeFallbackChunkCheckpointsKeepActualRoute(t *testing.T) {
 	}
 	id := add(t, s, "https://example.com/free-long")
 	source := strings.Repeat("Preserved long source paragraph. ", 100)
-	manual(t, s, id, source)
+	seedText(t, s, id, source)
 	r := testFreeRouter(t, func(w http.ResponseWriter, q *http.Request) {
 		if q.Method == "GET" {
 			json.NewEncoder(w).Encode(freeFixtureCatalog(freeFixture))

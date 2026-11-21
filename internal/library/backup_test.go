@@ -20,7 +20,7 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 	s := backupStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/backup")
-	manual(t, s, id, "Persistent searchable database source")
+	seedText(t, s, id, "Persistent searchable database source")
 	job := completeFixtureDigest(t, s)
 	item, _ := s.Item(id)
 	sid := item.ID
@@ -83,7 +83,7 @@ func TestLiveBackupRestoresPrimaryHistoryQueueAndCheckpoints(t *testing.T) {
 func TestBackupRejectsCorruptionSymlinksAndOverwrite(t *testing.T) {
 	s := backupStore(t)
 	id := add(t, s, "https://example.com/backup-guard")
-	manual(t, s, id, "keep primary source")
+	seedText(t, s, id, "keep primary source")
 	root := t.TempDir()
 	dest := filepath.Join(root, "copy")
 	manifest, err := Backup(context.Background(), s.Files.Root, dest)

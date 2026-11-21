@@ -12,7 +12,7 @@ func TestFailedFileWriteDoesNotPublishSnapshot(t *testing.T) {
 	s := testStore(t)
 	id := add(t, s, "https://example.com/write-failure")
 	os.WriteFile(filepath.Join(s.Files.Root, "texts"), []byte("blocks directory"), 0600)
-	if e := s.Manual(id, "keep this"); e == nil {
+	if e := s.seed(id, "keep this"); e == nil {
 		t.Fatal("failed write accepted")
 	}
 	i, _ := s.Item(id)

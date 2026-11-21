@@ -17,7 +17,7 @@ func connectionFixture(t *testing.T) (*Store, ConnectionNote) {
 	n := ConnectionNote{Title: "Узгоджене відновлення SQLite", Category: "Зберігання даних", Tags: []string{"sqlite", "backup", "SQLite"}, Questions: []string{"Як відновити базу без втрат?"}, Body: "Дві статті пояснюють узгодженість з різних боків."}
 	for _, name := range []string{"wal", "snapshot", "third"} {
 		id := add(t, s, "https://example.com/"+name)
-		manual(t, s, id, "Source "+name)
+		seedText(t, s, id, "Source "+name)
 		n.Members = append(n.Members, ConnectionMember{ItemID: id, Role: "Пояснює " + name})
 	}
 	n.Members = n.Members[:2]
@@ -82,18 +82,18 @@ func TestConnectionIsReplacedNotVersioned(t *testing.T) {
 func TestChangedTextTakesItsMaterialOutOfNotes(t *testing.T) {
 	s, n := connectionFixture(t)
 	third := add(t, s, "https://example.com/fourth")
-	manual(t, s, third, "Fourth text")
+	seedText(t, s, third, "Fourth text")
 	n.Members = append(n.Members, ConnectionMember{ItemID: third, Role: "Четвертий"})
 	id, err := s.SaveConnection(n)
 	if err != nil {
 		t.Fatal(err)
 	}
-	manual(t, s, third, "Fourth text, rewritten")
+	seedText(t, s, third, "Fourth text, rewritten")
 	note, err := s.Connection(id)
 	if err != nil || len(note.Members) != 2 || strings.Contains(note.Markdown, "Четвертий") {
 		t.Fatal("link of the old text survived", note, err)
 	}
-	manual(t, s, n.Members[0].ItemID, "First text, rewritten")
+	seedText(t, s, n.Members[0].ItemID, "First text, rewritten")
 	if _, err = s.Connection(id); err == nil {
 		t.Fatal("a note with one material left must be deleted")
 	}
@@ -230,7 +230,7 @@ func TestConnectionWebLastSaveWinsAndReadOnlyAPI(t *testing.T) {
 func TestDamagedNoteFileDoesNotBlockTextReplacementOrPurge(t *testing.T) {
 	s, n := connectionFixture(t)
 	third := add(t, s, "https://example.com/damaged-third")
-	manual(t, s, third, "Third text")
+	seedText(t, s, third, "Third text")
 	n.Members = append(n.Members, ConnectionMember{ItemID: third, Role: "Третій"})
 	id, err := s.SaveConnection(n)
 	if err != nil {
@@ -241,7 +241,7 @@ func TestDamagedNoteFileDoesNotBlockTextReplacementOrPurge(t *testing.T) {
 	if err = os.WriteFile(filepath.Join(s.Files.Root, path), []byte("damaged"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	manual(t, s, third, "Third text, rewritten")
+	seedText(t, s, third, "Third text, rewritten")
 	note, err := s.Connection(id)
 	if err != nil || len(note.Members) != 2 {
 		t.Fatal("note not rebuilt after a member left", note, err)

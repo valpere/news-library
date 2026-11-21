@@ -11,6 +11,9 @@ root=Path(__file__).resolve().parents[1]
 smoke_tmp=tempfile.TemporaryDirectory(dir=root/'tmp', prefix="news-library-smoke-")
 data=Path(smoke_tmp.name)
 data.mkdir(parents=True,exist_ok=True)
+def seed(data, url, text):
+    """Complete the fetch of a queued URL with synthetic text (no network): minions/seed-text."""
+    subprocess.run(['go','run','./minions/seed-text','-data',str(data),'-url',url,'-text',text],cwd=root,check=True,capture_output=True)
 def start(no_worker=False):
     command=[str(root/'build/news-library'),'-env-file','','-data',str(data),'-bind','127.0.0.1:0','-no-digests']
     if no_worker: command.append('-no-worker')
@@ -78,25 +81,13 @@ try:
             return page.url.removeprefix(origin),page.locator('input[name=csrf]').first.get_attribute('value')
         path,token=add_pending('https://example.com/pending-ui')
         page.screenshot(path=str(root/'tmp/smoke-pending.png'),full_page=True)
-        response=page.request.post(origin+path+'/manual',form={'csrf':token,'text':'Text now available after background processing'},max_redirects=0)
-        assert response.status==303
+        seed(data,'https://example.com/pending-ui','Text now available after background processing')
+        page.reload()
         page.get_by_role('heading',name='Дайджест недоступний',exact=True).wait_for(timeout=15000)
         assert 'Text now available' in page.locator('pre').text_content()
-        assert page.locator('select[name=score]').count()==1
-        path,token=add_pending('https://example.com/pending-ui-edits')
-        page.get_by_text('Вставити текст вручну',exact=True).click()
-        page.locator('textarea[name=text]').fill('Unsubmitted text must stay')
-        response=page.request.post(origin+path+'/manual',form={'csrf':token,'text':'Snapshot from background processing'},max_redirects=0)
-        assert response.status==303
-        page.locator('#processing-refresh').wait_for(state='visible',timeout=15000)
-        assert page.locator('textarea[name=text]').input_value()=='Unsubmitted text must stay'
-        assert page.locator('select[name=score]').count()==0
-        assert page.locator('pre').count()==0
-        page.locator('#processing-refresh').click()
-        assert 'Snapshot from background processing' in page.locator('pre').text_content()
         assert page.locator('select[name=score]').count()==1
         browser.close()
 finally:
     if p.poll() is None: stop(p)
     smoke_tmp.cleanup()
-print('PASS browser smoke: needs_input, manual text, estimative usefulness Помірна→Нульова, all items retained, tags/FTS, explicit read, escaped HTML, history, restart/duplicates, queued card without ratings, automatic result display and preserved unsent input. Screenshots: tmp/smoke-search.png, tmp/smoke-detail.png, tmp/smoke-pending.png')
+print('PASS browser smoke: needs_input, seeded text, estimative usefulness Помірна→Нульова, all items retained, tags/FTS, explicit read, escaped HTML, history, restart/duplicates, queued card without ratings, automatic result display. Screenshots: tmp/smoke-search.png, tmp/smoke-detail.png, tmp/smoke-pending.png')

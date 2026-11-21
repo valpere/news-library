@@ -37,7 +37,7 @@ func TestChatUsefulnessExplicitLabelsAndAllUnread(t *testing.T) {
 	s, w := testWeb(t)
 	for n := range 3 {
 		id := add(t, s, fmt.Sprintf("https://example.com/usefulness/%d", n))
-		manual(t, s, id, "Useful displayed source")
+		seedText(t, s, id, "Useful displayed source")
 	}
 	calls := 0
 	w.ChatPlanner = chatPlannerFunc(func(_ context.Context, _ string, _ ChatPlanInput) (ChatCommand, error) {
@@ -83,7 +83,7 @@ func TestChatUsefulnessExplicitLabelsAndAllUnread(t *testing.T) {
 func TestWebUsefulnessAndReadAPIScale(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/scale-ui")
-	manual(t, s, id, "Shown source")
+	seedText(t, s, id, "Shown source")
 	post(t, w, fmt.Sprintf("/items/%d/rating", id), url.Values{"score": {"4"}, "unknown_date": {"1"}})
 	rw := webRequest(w, "GET", fmt.Sprintf("/items/%d", id), nil, nil)
 	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "корисність: Висока") || strings.Contains(rw.Body.String(), "value=\"deferred\"") || strings.Contains(rw.Body.String(), ">Оцінити 2<") {

@@ -43,7 +43,7 @@ func (g *fixtureKnowledgeGenerator) Links(ctx context.Context, model string, c K
 func knowledgeArticle(t *testing.T, s *Store, name string) int64 {
 	t.Helper()
 	id := add(t, s, "https://example.com/"+name)
-	manual(t, s, id, "SQLite backup and consistent snapshots keep persistent sources.")
+	seedText(t, s, id, "SQLite backup and consistent snapshots keep persistent sources.")
 	completeFixtureDigest(t, s)
 	return id
 }
@@ -230,7 +230,7 @@ func TestKnowledgeStaleLeaseFilterAndInvalidEvidence(t *testing.T) {
 	if err = s.completeKnowledgeLinks(stale, c, candidates, links); !errors.Is(err, ErrLeaseLost) {
 		t.Fatal(err)
 	}
-	manual(t, s, second, "New selected version")
+	seedText(t, s, second, "New selected version")
 	if err = s.completeKnowledgeLinks(*j, c, candidates, links); !errors.Is(err, ErrLeaseLost) {
 		t.Fatal("stale source published", err)
 	}

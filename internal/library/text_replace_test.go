@@ -10,7 +10,7 @@ func TestChangedTextErasesEarlierTextAndItsDerivedData(t *testing.T) {
 	s := testStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/replace")
-	manual(t, s, id, "First text of the article.")
+	seedText(t, s, id, "First text of the article.")
 	completeFixtureDigest(t, s)
 	old, _ := s.Item(id)
 	var textPath, digestPath string
@@ -27,7 +27,7 @@ func TestChangedTextErasesEarlierTextAndItsDerivedData(t *testing.T) {
 	}
 	s.SetTags(id, []string{"mine"})
 
-	manual(t, s, id, "A different second text.")
+	seedText(t, s, id, "A different second text.")
 
 	item, _ := s.Item(id)
 	if item.Score.Valid || item.Tags != "mine" || item.State != "enriching" {
@@ -54,13 +54,13 @@ func TestSameTextChangesNothing(t *testing.T) {
 	s := testStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/same")
-	manual(t, s, id, "The same text.")
+	seedText(t, s, id, "The same text.")
 	completeFixtureDigest(t, s)
 	before, _ := s.Item(id)
 	if err := s.Rate(id, 5, nil); err != nil {
 		t.Fatal(err)
 	}
-	manual(t, s, id, "The same text.")
+	seedText(t, s, id, "The same text.")
 	after, _ := s.Item(id)
 	if after.HasText != before.HasText || !after.Score.Valid || after.Score.Int64 != 5 || after.State != "ready" {
 		t.Fatal("identical text invalidated something", before, after)
@@ -109,7 +109,7 @@ func TestRegeneratedDigestReplacesTheOldOneAndItsFile(t *testing.T) {
 	s := testStore(t)
 	enableDigests(t, s)
 	id := add(t, s, "https://example.com/regen")
-	manual(t, s, id, "Text that gets two digests in a row.")
+	seedText(t, s, id, "Text that gets two digests in a row.")
 	completeFixtureDigest(t, s)
 	var oldPath string
 	s.DB.QueryRow("SELECT markdown_path FROM digests WHERE item_id=?", id).Scan(&oldPath)

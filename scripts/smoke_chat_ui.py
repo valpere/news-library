@@ -46,6 +46,9 @@ class Gateway(BaseHTTPRequestHandler):
         self.respond({'done':True,'message':{'content':json.dumps(command)}})
 gateway=ThreadingHTTPServer(('127.0.0.1',0),Gateway)
 threading.Thread(target=gateway.serve_forever,daemon=True).start()
+def seed(data, url, text):
+    """Complete the fetch of a queued URL with synthetic text (no network): minions/seed-text."""
+    subprocess.run(['go','run','./minions/seed-text','-data',str(data),'-url',url,'-text',text],cwd=root,check=True,capture_output=True)
 def start(data):
     p=subprocess.Popen([str(root/'build/news-library'),'-env-file','','-data',str(data),'-bind','127.0.0.1:0','-no-worker','-no-digests','-chat-model','fixture:cloud','-ollama-url',f'http://127.0.0.1:{gateway.server_port}/api/chat'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     line=p.stdout.readline().strip()
@@ -99,11 +102,10 @@ with tempfile.TemporaryDirectory(dir=root/'tmp',prefix='chat-smoke-') as data:
             assert 'Додано: 8' in page.locator('.turn').last.inner_text()
             assert Gateway.calls==0
             assert page.locator('button[value^="rate:"]').count()==0
-            # Seed text through the same supported card endpoint, while workers remain paused.
             csrf=page.locator('#composer input[name=csrf]').input_value()
+            # Seed synthetic texts for the 8 queued URLs (in queue order), workers stay paused.
             for i in range(1,9):
-                response=page.request.post(f'{origin}/items/{i}/manual',form={'csrf':csrf,'text':f'SQLite backup: immutable text and queue {i}. <script>alert(1)</script>'},headers={'Origin':origin},max_redirects=0)
-                assert response.status==303,response.text()
+                seed(data,f'https://example.com/chat/{i-1}',f'SQLite backup: immutable text and queue {i}. <script>alert(1)</script>')
             response=page.request.post(f'{origin}/items/1/tags',form={'csrf':csrf,'tags':'sqlite, backup'},headers={'Origin':origin},max_redirects=0)
             assert response.status==303
             page.reload()

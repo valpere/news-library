@@ -72,7 +72,7 @@ func TestSearchJudgmentsDoNotChangeUsefulnessRatings(t *testing.T) {
 func TestWebSearchRecordsAndJudges(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/bloom")
-	if err := s.Manual(id, "Bloom filter is a probabilistic data structure for set membership."); err != nil {
+	if err := s.seed(id, "Bloom filter is a probabilistic data structure for set membership."); err != nil {
 		t.Fatal(err)
 	}
 	rw := webRequest(w, "GET", "/browse?q=bloom", nil, nil)

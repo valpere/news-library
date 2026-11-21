@@ -33,14 +33,14 @@ func TestDiagnoseSourceIgnoresRealText(t *testing.T) {
 func TestItemPageShowsSourceDiagnosisWithActions(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/index")
-	manual(t, s, id, "Copyright © 2014-2026 The Cucumber Open Source Project")
+	seedText(t, s, id, "Copyright © 2014-2026 The Cucumber Open Source Project")
 	enableDigestsMin(t, s, 0) // a digest made before the guard existed, like item 24
 	j := claim(t, s)
 	if err := s.CompleteDigest(j, Digest{Markdown: fixtureDigest, ActualModel: j.Model, Provider: "fixture"}); err != nil {
 		t.Fatal(err)
 	}
 	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
-	for _, want := range []string{`id="source-diagnosis"`, "підвал сторінки", "/retry", `href="#manual-text"`, `id="manual-text"`, `href="#saved-text"`, `id="saved-text"`, "/junk", "створено з цього самого тексту"} {
+	for _, want := range []string{`id="source-diagnosis"`, "підвал сторінки", "/retry", `href="#saved-text"`, `id="saved-text"`, "/junk", "створено з цього самого тексту"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %q", want)
 		}
@@ -50,7 +50,7 @@ func TestItemPageShowsSourceDiagnosisWithActions(t *testing.T) {
 func TestItemPageWithoutProblemHasNoDiagnosis(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/ok")
-	manual(t, s, id, strings.Repeat("Звичайний текст статті. ", 40))
+	seedText(t, s, id, strings.Repeat("Звичайний текст статті. ", 40))
 	if body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String(); strings.Contains(body, `id="source-diagnosis"`) {
 		t.Fatal("unexpected diagnosis")
 	}
@@ -87,7 +87,7 @@ func TestDiagnoseSourceStaysQuietForShortCompleteTexts(t *testing.T) {
 func TestSoftDiagnosisDoesNotClaimTheDigestIsUntrustworthy(t *testing.T) {
 	s, w := testWeb(t)
 	id := add(t, s, "https://example.com/series")
-	manual(t, s, id, strings.Repeat("Вступ до серії статей. ", 12)+"\n\nExplore more articles")
+	seedText(t, s, id, strings.Repeat("Вступ до серії статей. ", 12)+"\n\nExplore more articles")
 	body := webRequest(w, "GET", "/items/"+strconv.FormatInt(id, 10), nil, nil).Body.String()
 	if strings.Contains(body, `id="source-diagnosis"`) || strings.Contains(body, "не варто довіряти") {
 		t.Fatalf("soft diagnosis must not raise the hard-failure block")
