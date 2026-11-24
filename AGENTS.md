@@ -40,7 +40,8 @@ Long sources use persisted digest checkpoints; cache cleanup must preserve
 primary texts/digests and never follow cache-directory symlinks. See `docs/TRACEABILITY.md`
 for passed M1 tests and requirements still awaiting M2–M4. Preserve existing
 experiments; do not publish private corpus data automatically.
-The shared tool library is documented at `~/wrk/common_codex/ONBOARDING.md`.
+The shared tool library: Codex — `~/wrk/common_codex/ONBOARDING.md`; Claude —
+`~/wrk/common_claude/ONBOARDING.md`.
 
 Connection notes are single current records without revisions; current
 backlinks are derived, never added by rewriting article files. The existing
@@ -50,7 +51,9 @@ backlinks are derived, never added by rewriting article files. The existing
 
 Store temporary agent scripts, fixtures and review evidence under `./tmp/`.
 Keep recurring helper scripts in `./minions/`; promote reusable temporary
-scripts there. Project skills are in `minions/skills/`, with local discovery
+scripts there. Existing Python helpers in `minions/` and `scripts/` are a deliberate
+exception to the user-level no-Python rule; keep them, write new helpers in Go or Bash.
+Project skills are in `minions/skills/`, with local discovery
 links under `.agents/skills/`. Use `project_check.py` for local/public checks
 and `pr_gate.py` for read-only final remote gates. Live digest smoke is explicit
 and excluded from routine checks. See README for commands.
@@ -75,5 +78,6 @@ Describe concrete changes and validation in commits and pull requests; every cha
 goes through a branch and PR (see the user-level Git rules).
 Full-data rollback copies live in gitignored `snapshots/` (see `minions/snapshots.py`);
 live `data/` and snapshots are never modified or deleted without the user's explicit instruction.
-Keep secrets and runtime data out of source control. Do not publish or push
-local preparation changes without user instructions.
+Keep secrets and runtime data out of source control. Pushing a feature branch and
+opening its PR is the normal workflow; do not publish pilot/evaluation artifacts or
+private corpus data without user instructions.
