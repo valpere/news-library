@@ -212,8 +212,10 @@ YouTube-адаптер перебирає XML/JSON-доріжки, спочат�
 tracks порожні чи недоступні, optional `yt-dlp` отримує актуальні metadata;
 сам текст завантажується захищеним HTTP-клієнтом/кешем бібліотеки. Fallback
 не завантажує відео/аудіо й не генерує дайджест. `yt-dlp` має бути доступним
-у PATH; `NEWS_LIBRARY_YT_DLP` задає executable, порожнє значення вимикає
-fallback; `NEWS_LIBRARY_YOUTUBE_LANGUAGES=uk,en` задає порядок мов.
+у PATH сервісу (systemd user unit не бачить `~/.local/bin` — тоді вкажіть повний
+шлях); `NEWS_LIBRARY_YT_DLP` задає executable, порожнє значення вимикає
+fallback; помилка матеріалу називає причину невдачі резерву (не знайдено,
+timeout, код завершення, вимкнено); `NEWS_LIBRARY_YOUTUBE_LANGUAGES=uk,en` задає порядок мов.
 Інші доступні мови також пробуються, до 8 доріжок на кожен етап. Автоматичні
 субтитри/переклад явно позначені. Обидва шляхи блокують приватні адреси;
 metadata helper ігнорує сторонні config/plugins/cache, має deadline/output

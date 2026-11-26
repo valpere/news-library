@@ -648,7 +648,8 @@ Metadata helper теж використовує public-address guard: ephemeral 
 HTTP proxy із safeDial, CONNECT лише 80/443, HTTP лише GET/port 80; кожна нова
 адреса/redirect повторно проходить DNS/IP checks. Context/закриття завершує
 процесну групу, proxy та tunnels, output bounded. Резерв optional, відсутній
-executable дає діагностику й retry без втрати URL/тексту. Конфігурація
+executable дає діагностику (причина резерву — не знайдено/timeout/exit/вимкнено —
+входить у помилку матеріалу) й retry без втрати URL/тексту. Конфігурація
 NEWS_LIBRARY_YT_DLP (типово yt-dlp, empty disables) та NEWS_LIBRARY_YOUTUBE_LANGUAGES
 (типово uk,en), flag/environment/.env precedence як в інших settings.
 Офіційні параметри: [yt-dlp](https://github.com/yt-dlp/yt-dlp#usage-and-options).

@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -44,16 +47,16 @@ func (b *cappedOutput) Write(p []byte) (int, error) {
 func (f *Fetcher) youtubeMetadata(ctx context.Context, id string) (youtubeMetadata, error) {
 	var info youtubeMetadata
 	if f.YTDLP == "" {
-		return info, errors.New("yt-dlp disabled")
+		return info, errors.New("yt-dlp вимкнено")
 	}
 	if !videoIDPattern.MatchString(id) {
-		return info, errors.New("invalid video ID")
+		return info, errors.New("yt-dlp: некоректний ID відео")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	proxy, closeProxy, err := startMetadataProxy(ctx)
 	if err != nil {
-		return info, err
+		return info, fmt.Errorf("yt-dlp: не вдалося запустити захисний proxy: %v", err)
 	}
 	defer closeProxy()
 	cmd := exec.CommandContext(ctx, f.YTDLP, "--ignore-config", "--no-plugin-dirs", "--no-cache-dir", "--no-playlist", "--skip-download", "--dump-single-json", "--no-warnings", "--socket-timeout", "8", "--retries", "0", "--extractor-retries", "0", "--proxy", proxy, "--", "https://www.youtube.com/watch?v="+id)
@@ -64,12 +67,34 @@ func (f *Fetcher) youtubeMetadata(ctx context.Context, id string) (youtubeMetada
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = time.Second
 	if err = cmd.Run(); err != nil {
-		return info, errors.New("yt-dlp metadata unavailable")
+		var exit *exec.ExitError
+		switch {
+		case ctx.Err() != nil:
+			return info, errors.New("yt-dlp не відповів вчасно")
+		case errors.As(err, &exit):
+			return info, fmt.Errorf("yt-dlp завершився з помилкою: %v", err)
+		case errors.Is(err, exec.ErrNotFound) || (errors.Is(err, fs.ErrNotExist) && !executableExists(f.YTDLP)):
+			return info, fmt.Errorf("yt-dlp не знайдено (%s); вкажіть повний шлях у NEWS_LIBRARY_YT_DLP", f.YTDLP)
+		default:
+			// Present but not runnable: permissions, missing interpreter, output cap.
+			return info, fmt.Errorf("не вдалося запустити або прочитати yt-dlp: %v", err)
+		}
 	}
 	if err = json.Unmarshal(stdout.Bytes(), &info); err != nil {
-		return info, errors.New("yt-dlp returned invalid metadata")
+		return info, errors.New("yt-dlp повернув некоректні metadata")
 	}
 	return info, nil
+}
+
+// executableExists distinguishes a missing yt-dlp from one whose shebang
+// interpreter is missing: execve reports ENOENT for both.
+func executableExists(name string) bool {
+	path, err := exec.LookPath(name)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
 }
 func metadataTracks(info youtubeMetadata) []captionTrack {
 	out := []captionTrack{}
