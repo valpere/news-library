@@ -144,6 +144,26 @@ func TestYouTubeFailureNamesYTDLPCause(t *testing.T) {
 	if _, err := f.youtubeMetadata(context.Background(), "abcdefghijk"); err == nil || !strings.Contains(err.Error(), "не знайдено") || !strings.Contains(err.Error(), missing) {
 		t.Fatal("missing executable not named", err)
 	}
+	root := t.TempDir()
+	for name, c := range map[string]struct {
+		body string
+		mode os.FileMode
+		want string
+	}{
+		"not-executable": {"#!/bin/sh\n", 0600, "не вдалося запустити"},
+		"no-interpreter": {"#!" + filepath.Join(root, "missing-python") + "\n", 0700, "не вдалося запустити"},
+		"exit-code":      {"#!/bin/sh\nexit 3\n", 0700, "завершився з помилкою"},
+		"bad-json":       {"#!/bin/sh\nprintf banner\n", 0700, "некоректні metadata"},
+	} {
+		script := filepath.Join(root, name)
+		if err := os.WriteFile(script, []byte(c.body), c.mode); err != nil {
+			t.Fatal(err)
+		}
+		f.YTDLP = script
+		if _, err := f.youtubeMetadata(context.Background(), "abcdefghijk"); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
 	noCaptions := &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: ioBody("<html></html>"), Request: r}, nil
 	})}
