@@ -106,7 +106,7 @@ Browser fixture: `scripts/smoke_batch_ui.py` — пачка, виправлен�
 
 YouTube failover FR-03/04/16: `youtube_metadata_test.go` — мовний перебір,
 metadata fallback/ASR provenance, відмова від tlang-перекладів, зупинка на 429,
-partial для обрізаної доріжки, private targets denial у helper proxy,
+без claim full для підозріло короткої доріжки, private targets denial у helper proxy,
 output bounds/context termination і language validation; config precedence
 у `cmd/news-library/config_test.go`. Попередні source XML/srv3/json3 fixtures
 та pipeline tests лишаються чинними. Explicit live helper:

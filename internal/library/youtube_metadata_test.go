@@ -227,9 +227,9 @@ func TestYouTubeCaptionRateLimitStopsFailover(t *testing.T) {
 	}
 }
 
-func TestYouTubeShortTrackIsPartial(t *testing.T) {
+func TestYouTubeShortTrackIsNotClaimedFull(t *testing.T) {
 	caption := `{"events":[{"segs":[{"utf8":"лише кілька слів із довгого відео"}]}]}`
-	page := `{"lengthSeconds":"600","captionTracks":[{"baseUrl":"https://captions.example/uk","languageCode":"uk"}]}`
+	page := `{"lengthSeconds":"9999"},{"videoDetails":{"lengthSeconds":"600"},"captionTracks":[{"baseUrl":"https://captions.example/uk","languageCode":"uk"}]}`
 	f := &Fetcher{MaxBytes: 4096, YouTubeLanguages: []string{"uk"}, client: &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
 		body := caption
 		if r.URL.Host == "www.youtube.com" {
@@ -237,19 +237,53 @@ func TestYouTubeShortTrackIsPartial(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: ioBody(body), Request: r}, nil
 	})}}
+	// A heuristic suspicion is "no claim", never "known truncated": the user can still vouch for it.
 	s, err := f.Fetch(context.Background(), "https://youtu.be/abcdefghijk")
-	if err != nil || s.Completeness != "partial" || !strings.Contains(s.Warning, "неповна") {
-		t.Fatal("short page track not partial", s, err)
+	if err != nil || s.Completeness != "unknown" || !strings.Contains(s.Warning, "неповна") || !strings.Contains(s.Warning, "за 10 хв") {
+		t.Fatal("short page track claimed full or wrong duration", s, err)
 	}
 	page = `{"captionTracks":[]}`
 	f.metadataResolver = func(context.Context, string) (youtubeMetadata, error) {
 		return youtubeMetadata{Duration: 600, Automatic: map[string][]youtubeFormat{"uk": {{URL: "https://captions.example/m", Ext: "json3"}}}}, nil
 	}
-	if s, err = f.Fetch(context.Background(), "https://youtu.be/abcdefghijk"); err != nil || s.Completeness != "partial" || !strings.Contains(s.Warning, "неповна") {
-		t.Fatal("short metadata track not partial", s, err)
+	if s, err = f.Fetch(context.Background(), "https://youtu.be/abcdefghijk"); err != nil || s.Completeness != "unknown" || !strings.Contains(s.Warning, "неповна") {
+		t.Fatal("short metadata track claimed full", s, err)
 	}
-	page = `{"lengthSeconds":"90","captionTracks":[{"baseUrl":"https://captions.example/uk","languageCode":"uk"}]}`
+	f.YouTubeLanguages = []string{"ja"}
+	f.metadataResolver = func(context.Context, string) (youtubeMetadata, error) {
+		return youtubeMetadata{Duration: 600, Automatic: map[string][]youtubeFormat{"ja": {{URL: "https://captions.example/m", Ext: "json3"}}}}, nil
+	}
+	if s, err = f.Fetch(context.Background(), "https://youtu.be/abcdefghijk"); err != nil || s.Completeness != "full" {
+		t.Fatal("unspaced script judged by word count", s, err)
+	}
+	f.metadataResolver = nil
+	page = `{"videoDetails":{"lengthSeconds":"90"},"captionTracks":[{"baseUrl":"https://captions.example/uk","languageCode":"uk"}]}`
 	if s, err = f.Fetch(context.Background(), "https://youtu.be/abcdefghijk"); err != nil || s.Completeness != "full" {
 		t.Fatal("short video flagged", s, err)
+	}
+}
+
+func TestYouTubePageTranslationsAndPage429(t *testing.T) {
+	calls, resolverCalls := []string{}, 0
+	status := 200
+	f := &Fetcher{MaxBytes: 4096, YouTubeLanguages: []string{"uk", "en"}, client: &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "www.youtube.com" {
+			body := `{"captionTracks":[{"baseUrl":"https://captions.example/tr?tlang=uk","languageCode":"uk","kind":"asr"},{"baseUrl":"https://captions.example/en","languageCode":"en","kind":"asr"}]}`
+			return &http.Response{StatusCode: status, Header: http.Header{}, Body: ioBody(body), Request: r}, nil
+		}
+		calls = append(calls, r.URL.Path)
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: ioBody(`{"events":[{"segs":[{"utf8":"оригінал"}]}]}`), Request: r}, nil
+	})}, metadataResolver: func(context.Context, string) (youtubeMetadata, error) {
+		resolverCalls++
+		return youtubeMetadata{}, nil
+	}}
+	if s, err := f.Fetch(context.Background(), "https://youtu.be/abcdefghijk"); err != nil || strings.Join(calls, ",") != "/en" || !strings.Contains(s.Warning, "en") {
+		t.Fatal("page translation used", s, err, calls)
+	}
+	status = 429
+	_, err := f.Fetch(context.Background(), "https://youtu.be/abcdefghijk")
+	var se *SourceError
+	if !errors.As(err, &se) || !se.Retry || !strings.Contains(se.Message, "429") || resolverCalls != 0 {
+		t.Fatal("watch-page 429 still ran yt-dlp", err, resolverCalls)
 	}
 }
