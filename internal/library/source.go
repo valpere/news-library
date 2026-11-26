@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ type SourceError struct {
 
 	Message string
 	Retry   bool
+	Status  int // HTTP status of a rejected source response, 0 otherwise
 }
 
 func (e *SourceError) Error() string { return e.Message }
@@ -158,7 +160,7 @@ func (f *Fetcher) getNetwork(ctx context.Context, raw string, meta *NetworkMeta)
 		return nil, resp.Request.URL, "", false, nil
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-		return nil, nil, "", false, &SourceError{Message: fmt.Sprintf("джерело повернуло HTTP %d", resp.StatusCode), Retry: resp.StatusCode == 429 || resp.StatusCode >= 500}
+		return nil, nil, "", false, &SourceError{Message: fmt.Sprintf("джерело повернуло HTTP %d", resp.StatusCode), Retry: resp.StatusCode == 429 || resp.StatusCode >= 500, Status: resp.StatusCode}
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, f.MaxBytes+1))
 	partial := resp.StatusCode == http.StatusPartialContent || int64(len(data)) > f.MaxBytes
@@ -308,14 +310,51 @@ type captionTrack struct {
 	Kind         string `json:"kind"`
 }
 
+var lengthSecondsPattern = regexp.MustCompile(`"lengthSeconds":"(\d{1,7})"`)
+
+// pageDuration reads this video's length from the watch page's videoDetails
+// (other embedded players carry their own lengthSeconds); 0 when absent.
+func pageDuration(data []byte) float64 {
+	pos := bytes.Index(data, []byte(`"videoDetails":`))
+	if pos < 0 {
+		return 0
+	}
+	m := lengthSecondsPattern.FindSubmatch(data[pos:])
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(string(m[1]))
+	return float64(n)
+}
+
+func rateLimited() *SourceError {
+	return &SourceError{Message: "YouTube обмежує частоту запитів (HTTP 429); повторіть пізніше", Retry: true, Status: http.StatusTooManyRequests}
+}
+
+// Scripts written without spaces between words make a word count meaningless.
+func unspacedScript(language string) bool {
+	base, _, _ := strings.Cut(strings.ToLower(language), "-")
+	switch base {
+	case "zh", "ja", "th", "lo", "km", "my", "bo":
+		return true
+	}
+	return false
+}
+
 func captionTracks(data []byte) ([]captionTrack, error) {
 	marker := []byte(`"captionTracks":`)
 	pos := bytes.Index(data, marker)
 	if pos < 0 {
 		return nil, errors.New("no captions")
 	}
-	var tracks []captionTrack
-	err := json.NewDecoder(bytes.NewReader(data[pos+len(marker):])).Decode(&tracks)
+	var all []captionTrack
+	err := json.NewDecoder(bytes.NewReader(data[pos+len(marker):])).Decode(&all)
+	tracks := all[:0]
+	for _, track := range all {
+		if !machineTranslated(track.BaseURL) {
+			tracks = append(tracks, track)
+		}
+	}
 	return tracks, err
 }
 func (f *Fetcher) youtube(ctx context.Context, id string) (SourceText, error) {
@@ -326,7 +365,9 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (SourceText, error) {
 	if len(languages) == 0 {
 		languages = []string{"uk", "en"}
 	}
-	try := func(candidates []captionTrack, extractor string) (SourceText, bool) {
+	// try returns a non-nil error only for rate limiting: further caption or
+	// yt-dlp requests would make the 429 worse, so failover stops there.
+	try := func(candidates []captionTrack, extractor string, duration float64) (SourceText, bool, error) {
 		sort.SliceStable(candidates, func(i, j int) bool {
 			return subtitleRank(candidates[i], languages) > subtitleRank(candidates[j], languages)
 		})
@@ -336,6 +377,10 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (SourceText, error) {
 				break
 			}
 			body, _, _, partial, e := f.get(ctx, track.BaseURL)
+			var se *SourceError
+			if errors.As(e, &se) && se.Status == http.StatusTooManyRequests {
+				return SourceText{}, false, rateLimited()
+			}
 			if e != nil {
 				continue
 			}
@@ -347,12 +392,16 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (SourceText, error) {
 			if track.Kind == "asr" {
 				snap.Warning += "; автоматичні"
 			}
-			if u, e := url.Parse(track.BaseURL); e == nil && u.Query().Get("tlang") != "" {
-				snap.Warning += "; автоматичний переклад"
-			}
 			if partial || decodeErr != nil || (extractor == "youtube-timedtext-v1" && pagePartial) {
 				snap.Completeness = "partial"
 				snap.Warning += "; відповідь часткова або не повністю прочитана"
+			}
+			// Speech runs 100-180 words/min; under 60 the track is probably truncated.
+			// A suspicion, not proof (music, sparse speech): drop the "full" claim
+			// but leave it confirmable instead of marking it partial.
+			if words := len(strings.Fields(text)); duration >= 120 && float64(words) < duration && !unspacedScript(track.LanguageCode) && snap.Completeness == "full" {
+				snap.Completeness = "unknown"
+				snap.Warning += fmt.Sprintf("; доріжка, схоже, неповна: %d слів за %d хв", words, int(duration)/60)
 			}
 			if meta, ok := ctx.Value(cacheMetaKey{}).(*NetworkMeta); ok {
 				snap.RetrievedAt = meta.FetchedAt
@@ -360,15 +409,18 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (SourceText, error) {
 					snap.Warning += "; субтитри з кешу, отримано " + meta.FetchedAt
 				}
 			}
-			return snap, true
+			return snap, true, nil
 		}
-		return SourceText{}, false
+		return SourceText{}, false, nil
 	}
-	if snap, ok := try(tracks, "youtube-timedtext-v1"); ok {
-		return snap, nil
+	if snap, ok, err := try(tracks, "youtube-timedtext-v1", pageDuration(data)); ok || err != nil {
+		return snap, err
 	}
 	if pageErr != nil {
 		var se *SourceError
+		if errors.As(pageErr, &se) && se.Status == http.StatusTooManyRequests {
+			return SourceText{}, rateLimited()
+		}
 		if errors.As(pageErr, &se) && !se.Retry {
 			return SourceText{}, pageErr
 		}
@@ -387,8 +439,8 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (SourceText, error) {
 			if strings.TrimSpace(info.Title) != "" {
 				title = info.Title
 			}
-			if snap, ok := try(metadataTracks(info), "youtube-yt-dlp-metadata-v1"); ok {
-				return snap, nil
+			if snap, ok, err := try(metadataTracks(info), "youtube-yt-dlp-metadata-v1", info.Duration); ok || err != nil {
+				return snap, err
 			}
 		}
 	}
