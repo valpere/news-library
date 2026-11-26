@@ -635,6 +635,11 @@ RowsAffected INSERT і публікується лише після commit. Зб
 `source.go` ранжує configured languages перед іншими, manual перед ASR
 у межах мови, перебирає до 8 доріжок; порожня/непрочитана доріжка не доводить
 відсутність інших. Збережений доступний частковий текст лишається partial.
+Машинні переклади автоматичних субтитрів (URL з `tlang`) не пропонуються: вони
+обрізані, оригінальна ASR-доріжка точніша. HTTP 429 на доріжці зупиняє весь
+перебір, зокрема yt-dlp, і дає retry-помилку про обмеження частоти. Доріжка
+відео від 2 хв із менш ніж 60 слів/хв (тривалість — `lengthSeconds` сторінки
+або `duration` metadata) зберігається як partial з поясненням.
 `youtube_metadata.go` fallback викликає yt-dlp тільки з валідованим 11-символьним
 YouTube ID, фіксованим HTTPS watch URL і argument vector (без shell). JSON
 metadata до 4 MiB, без media/subtitle files на диску, без config/plugins/cache;

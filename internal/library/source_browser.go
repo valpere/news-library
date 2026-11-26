@@ -56,7 +56,7 @@ func (f *Fetcher) browserGet(ctx context.Context, raw string) ([]byte, *url.URL,
 	}
 	status := response.Status
 	if status != 200 && status != 206 {
-		return nil, nil, "", false, &SourceError{Message: fmt.Sprintf("джерело повернуло HTTP %d", status), Retry: status == 429 || status >= 500}
+		return nil, nil, "", false, &SourceError{Message: fmt.Sprintf("джерело повернуло HTTP %d", status), Retry: status == 429 || status >= 500, Status: status}
 	}
 	if _, err = CanonicalURL(response.URL); err != nil {
 		return nil, nil, "", false, err

@@ -23,6 +23,7 @@ import (
 
 type youtubeMetadata struct {
 	Title     string                     `json:"title"`
+	Duration  float64                    `json:"duration"`
 	Subtitles map[string][]youtubeFormat `json:"subtitles"`
 	Automatic map[string][]youtubeFormat `json:"automatic_captions"`
 }
@@ -116,7 +117,7 @@ func metadataTracks(info youtubeMetadata) []captionTrack {
 		formats:
 			for _, ext := range []string{"json3", "srv3", "srv1", "ttml"} {
 				for _, format := range group.values[lang] {
-					if format.Ext == ext && format.URL != "" {
+					if format.Ext == ext && format.URL != "" && !machineTranslated(format.URL) {
 						out = append(out, captionTrack{BaseURL: format.URL, LanguageCode: lang, Kind: group.kind})
 						break formats
 					}
@@ -248,11 +249,14 @@ func subtitleRank(t captionTrack, languages []string) int {
 	if t.Kind != "asr" {
 		rank += 10
 	}
-	u, _ := url.Parse(t.BaseURL)
-	if u != nil && u.Query().Get("tlang") != "" {
-		rank -= 1
-	}
 	return rank
+}
+
+// Auto captions translated by YouTube (tlang) come back truncated; only the
+// original-language track is a faithful transcript, so translations are never offered.
+func machineTranslated(raw string) bool {
+	u, err := url.Parse(raw)
+	return err != nil || u.Query().Get("tlang") != ""
 }
 
 var subtitleLanguagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,34}$`)

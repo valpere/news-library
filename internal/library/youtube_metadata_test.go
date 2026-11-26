@@ -191,3 +191,65 @@ func TestSourceErrorsDoNotOfferManualText(t *testing.T) {
 		}
 	}
 }
+
+func TestYouTubeMetadataSkipsMachineTranslations(t *testing.T) {
+	tracks := metadataTracks(youtubeMetadata{Automatic: map[string][]youtubeFormat{
+		"en":      {{URL: "https://captions.example/en?tlang=en", Ext: "json3"}, {URL: "https://captions.example/en", Ext: "json3"}},
+		"en-orig": {{URL: "https://captions.example/orig", Ext: "json3"}},
+		"uk":      {{URL: "https://captions.example/uk?tlang=uk", Ext: "json3"}},
+	}})
+	got := []string{}
+	for _, track := range tracks {
+		got = append(got, track.LanguageCode+"="+track.BaseURL)
+	}
+	if strings.Join(got, ",") != "en=https://captions.example/en,en-orig=https://captions.example/orig" {
+		t.Fatal("machine translation offered as a track", got)
+	}
+}
+
+func TestYouTubeCaptionRateLimitStopsFailover(t *testing.T) {
+	captionCalls, resolverCalls := 0, 0
+	f := &Fetcher{MaxBytes: 4096, YouTubeLanguages: []string{"uk", "en"}, client: &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "www.youtube.com" {
+			body := `{"captionTracks":[{"baseUrl":"https://captions.example/uk","languageCode":"uk"},{"baseUrl":"https://captions.example/en","languageCode":"en"}]}`
+			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: ioBody(body), Request: r}, nil
+		}
+		captionCalls++
+		return &http.Response{StatusCode: 429, Header: http.Header{}, Body: ioBody(""), Request: r}, nil
+	})}, metadataResolver: func(context.Context, string) (youtubeMetadata, error) {
+		resolverCalls++
+		return youtubeMetadata{}, nil
+	}}
+	_, err := f.Fetch(context.Background(), "https://youtu.be/abcdefghijk")
+	var se *SourceError
+	if !errors.As(err, &se) || !se.Retry || !strings.Contains(se.Message, "429") || captionCalls != 1 || resolverCalls != 0 {
+		t.Fatal("429 did not stop caption failover", err, captionCalls, resolverCalls)
+	}
+}
+
+func TestYouTubeShortTrackIsPartial(t *testing.T) {
+	caption := `{"events":[{"segs":[{"utf8":"лише кілька слів із довгого відео"}]}]}`
+	page := `{"lengthSeconds":"600","captionTracks":[{"baseUrl":"https://captions.example/uk","languageCode":"uk"}]}`
+	f := &Fetcher{MaxBytes: 4096, YouTubeLanguages: []string{"uk"}, client: &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+		body := caption
+		if r.URL.Host == "www.youtube.com" {
+			body = page
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: ioBody(body), Request: r}, nil
+	})}}
+	s, err := f.Fetch(context.Background(), "https://youtu.be/abcdefghijk")
+	if err != nil || s.Completeness != "partial" || !strings.Contains(s.Warning, "неповна") {
+		t.Fatal("short page track not partial", s, err)
+	}
+	page = `{"captionTracks":[]}`
+	f.metadataResolver = func(context.Context, string) (youtubeMetadata, error) {
+		return youtubeMetadata{Duration: 600, Automatic: map[string][]youtubeFormat{"uk": {{URL: "https://captions.example/m", Ext: "json3"}}}}, nil
+	}
+	if s, err = f.Fetch(context.Background(), "https://youtu.be/abcdefghijk"); err != nil || s.Completeness != "partial" || !strings.Contains(s.Warning, "неповна") {
+		t.Fatal("short metadata track not partial", s, err)
+	}
+	page = `{"lengthSeconds":"90","captionTracks":[{"baseUrl":"https://captions.example/uk","languageCode":"uk"}]}`
+	if s, err = f.Fetch(context.Background(), "https://youtu.be/abcdefghijk"); err != nil || s.Completeness != "full" {
+		t.Fatal("short video flagged", s, err)
+	}
+}
