@@ -136,3 +136,38 @@ func TestMetadataCommandBoundsAndCancellation(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 }
+
+func TestYouTubeFailureNamesYTDLPCause(t *testing.T) {
+	f := NewFetcher(time.Second, 4096)
+	missing := filepath.Join(t.TempDir(), "missing-yt-dlp")
+	f.YTDLP = missing
+	if _, err := f.youtubeMetadata(context.Background(), "abcdefghijk"); err == nil || !strings.Contains(err.Error(), "не знайдено") || !strings.Contains(err.Error(), missing) {
+		t.Fatal("missing executable not named", err)
+	}
+	noCaptions := &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: ioBody("<html></html>"), Request: r}, nil
+	})}
+	f = &Fetcher{MaxBytes: 4096, client: noCaptions, metadataResolver: func(context.Context, string) (youtubeMetadata, error) {
+		return youtubeMetadata{}, errors.New("yt-dlp не знайдено: fixture")
+	}}
+	_, err := f.Fetch(context.Background(), "https://youtu.be/abcdefghijk")
+	if err == nil || !strings.Contains(err.Error(), "yt-dlp не знайдено: fixture") {
+		t.Fatal("resolver cause dropped", err)
+	}
+	f = &Fetcher{MaxBytes: 4096, client: noCaptions}
+	if _, err = f.Fetch(context.Background(), "https://youtu.be/abcdefghijk"); err == nil || !strings.Contains(err.Error(), "yt-dlp вимкнено") {
+		t.Fatal("disabled fallback not stated", err)
+	}
+}
+
+func TestSourceErrorsDoNotOfferManualText(t *testing.T) {
+	for _, file := range []string{"source.go", "source_browser.go", "pages.html"} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "текст вручну") || strings.Contains(string(data), "вставити вручну") {
+			t.Errorf("%s still offers manual text", file)
+		}
+	}
+}

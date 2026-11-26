@@ -39,7 +39,7 @@ func (f *Fetcher) browserGet(ctx context.Context, raw string) ([]byte, *url.URL,
 	stderr := &cappedOutput{limit: 4096}
 	cmd.Stderr = stderr
 	if err = cmd.Run(); err != nil {
-		return nil, nil, "", false, &SourceError{Kind: "source", Message: "браузерний запит джерела не завершено; перевірте доступ або вставте текст вручну"}
+		return nil, nil, "", false, &SourceError{Kind: "source", Message: "браузерний запит джерела не завершено; перевірте доступ до джерела"}
 	}
 	marker := []byte("\nNEWS_LIBRARY_HTTP:")
 	pos := bytes.LastIndex(out.Bytes(), marker)

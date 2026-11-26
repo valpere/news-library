@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -64,7 +66,14 @@ func (f *Fetcher) youtubeMetadata(ctx context.Context, id string) (youtubeMetada
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = time.Second
 	if err = cmd.Run(); err != nil {
-		return info, errors.New("yt-dlp metadata unavailable")
+		switch {
+		case errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist):
+			return info, fmt.Errorf("yt-dlp не знайдено (%s); вкажіть повний шлях у NEWS_LIBRARY_YT_DLP", f.YTDLP)
+		case ctx.Err() != nil:
+			return info, errors.New("yt-dlp не відповів вчасно")
+		default:
+			return info, fmt.Errorf("yt-dlp завершився з помилкою: %v", err)
+		}
 	}
 	if err = json.Unmarshal(stdout.Bytes(), &info); err != nil {
 		return info, errors.New("yt-dlp returned invalid metadata")

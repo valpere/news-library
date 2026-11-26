@@ -293,7 +293,7 @@ func decodeArticle(data []byte, final *url.URL, kind string, partial bool, meta 
 	}
 	snap.Text = strings.TrimSpace(snap.Text)
 	if snap.Text == "" {
-		return SourceText{}, &SourceError{Message: "доступного тексту немає; можна вставити вручну"}
+		return SourceText{}, &SourceError{Message: "доступного тексту немає"}
 	}
 	if partial {
 		snap.Completeness = "partial"
@@ -377,9 +377,13 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (SourceText, error) {
 	if resolver == nil && f.YTDLP != "" {
 		resolver = f.youtubeMetadata
 	}
+	fallback := "резерв yt-dlp вимкнено"
 	if resolver != nil {
 		info, e := resolver(ctx, id)
-		if e == nil {
+		if e != nil {
+			fallback = "резерв " + e.Error()
+		} else {
+			fallback = "доріжки від yt-dlp теж недоступні"
 			if strings.TrimSpace(info.Title) != "" {
 				title = info.Title
 			}
@@ -391,7 +395,7 @@ func (f *Fetcher) youtube(ctx context.Context, id string) (SourceText, error) {
 	if ctx.Err() != nil {
 		return SourceText{}, &SourceError{Message: "час отримання YouTube-субтитрів вичерпано; спробуйте повторити", Retry: true}
 	}
-	return SourceText{}, &SourceError{Message: "не вдалося отримати доступні субтитри у вибраних чи інших мовах; перевірте yt-dlp або вставте текст вручну"}
+	return SourceText{}, &SourceError{Message: "не вдалося отримати доступні субтитри у вибраних чи інших мовах; " + fallback}
 }
 func decodeCaptions(data []byte) (string, error) {
 	if bytes.HasPrefix(bytes.TrimSpace(data), []byte("{")) {
